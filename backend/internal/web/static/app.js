@@ -4,7 +4,10 @@
 
 import { needsYou as needsYouScreen, packed, simulate, SPOTS } from './attention.js';
 
+import { followThemeChanges } from './theme.js';
+
 const $ = (id) => document.getElementById(id);
+followThemeChanges(); // Settings is another page: pick its theme change up live
 const params = new URLSearchParams(location.search);
 const FIXTURE = location.protocol === 'file:' || params.has('fixture');
 

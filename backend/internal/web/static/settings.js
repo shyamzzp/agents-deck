@@ -2,7 +2,9 @@
 // (/admin/v1, docs/protocol.md): the same calls the CLI makes. Plain DOM, no
 // innerHTML: names and messages from the service are always text.
 
-const PAGES = ['general', 'agents', 'boards', 'network', 'updates', 'troubleshoot', 'about'];
+import { buildPicker, themes, followThemeChanges } from './theme.js';
+
+const PAGES = ['general', 'agents', 'appearance', 'boards', 'network', 'updates', 'troubleshoot', 'about'];
 const SCOPES = [
   { value: 'view', text: 'look only' },
   { value: 'act', text: 'can answer' },
@@ -292,6 +294,7 @@ function needs(page) {
   return {
     general: ['settings'], agents: ['agents', 'live', 'settings'], boards: ['devices', 'ports', 'settings'], network: ['settings', 'devices'],
     updates: ['update', 'devices'], troubleshoot: ['diag', 'system'], about: ['system', 'update'],
+    appearance: [],
     newboard: ['ports', 'devices'], flash: ['devices', 'ports'],
   }[page] || [];
 }
@@ -1709,10 +1712,24 @@ function drawAbout() {
 
 // ---- pages and routing ------------------------------------------------------------------------
 
+// Appearance: the themes are a static file, not service state, so they are
+// fetched once and the page is redrawn when they land.
+let themeList = null, themeErr = null;
+function drawAppearance() {
+  if (themeErr) return errorBox(`Themes could not be loaded: ${themeErr.message}`, () => { themeErr = null; draw(); });
+  if (!themeList) {
+    themes().then((t) => { themeList = t; if (S.page === 'appearance') draw(); })
+      .catch((e) => { themeErr = e; if (S.page === 'appearance') draw(); });
+    return h('p', { class: 'm' }, 'loading themes…');
+  }
+  return buildPicker(themeList, { h, row });
+}
+
 const DRAW = {
   general: ['general-body', drawGeneral], agents: ['agents-body', drawAgents], boards: ['boards-body', drawBoards],
   newboard: ['newboard-body', drawNewBoard], flash: ['newboard-body', drawFlash], network: ['network-body', drawNetwork],
   updates: ['updates-body', drawUpdates], troubleshoot: ['troubleshoot-body', drawTroubleshoot], about: ['about-body', drawAbout],
+  appearance: ['appearance-body', drawAppearance],
 };
 
 // draw redraws the open page. The timer's redraw (force false) leaves a page
@@ -1775,7 +1792,7 @@ async function refresh(force) {
   }
   showSystem(sys);
   const busyUI = S.open.more || S.open.wifi || S.pairing || S.confirmLoginOff;
-  if (!force && (busyUI || ['general', 'about'].includes(page))) return;
+  if (!force && (busyUI || ['general', 'about', 'appearance'].includes(page))) return;
   await loadAll(...needs(page), ...extras(page));
   if (page === S.page) draw(false);
 }
