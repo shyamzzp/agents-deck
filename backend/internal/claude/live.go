@@ -87,7 +87,38 @@ func ActiveSessions(claudeBin, configDir string, projects []string, skipTTYs map
 		l.Transcript = findTranscript(projects, a.Cwd, a.SessionID)
 		out = append(out, l)
 	}
-	return out, true
+	return dedupe(out), true
+}
+
+// dedupe keeps one Live per session id. Claude Code can report the same
+// session twice: a background record left over from a fork or a headless run,
+// and the interactive one it is attached to now. They hash to the same agent
+// id, so whichever survives decides what the deck shows, and a stale blocked
+// record makes a live session look like it needs you. An attached session
+// wins, and between two of a kind the one that started last does.
+func dedupe(in []Live) []Live {
+	best := make(map[string]int, len(in))
+	out := make([]Live, 0, len(in))
+	for _, l := range in {
+		i, seen := best[l.SessionID]
+		if !seen {
+			best[l.SessionID] = len(out)
+			out = append(out, l)
+			continue
+		}
+		if better(l, out[i]) {
+			out[i] = l
+		}
+	}
+	return out
+}
+
+// better reports whether a beats b as the record for their shared session id.
+func better(a, b Live) bool {
+	if a.Background != b.Background {
+		return !a.Background // interactive: it has a terminal to answer in
+	}
+	return a.Started.After(b.Started)
 }
 
 // ttysOf maps the interactive sessions' processes to their terminals.

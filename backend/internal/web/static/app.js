@@ -1521,7 +1521,7 @@ function renderDetail() {
   if (!det || det.key !== key) {
     const hadFocus = panel.contains(document.activeElement);
     det = { key, id: a.id };
-    det.update = a.status === 'waiting' && a.waiting ? buildPrompt(a) : buildInfo(a);
+    det.update = a.status === 'waiting' && a.waiting?.options?.length ? buildPrompt(a) : buildInfo(a);
     if (hadFocus) $('d-title')?.focus({ preventScroll: true });
   }
   det.update(a);
