@@ -558,6 +558,13 @@ function makeTile(a, wire = wireDrag) {
   const el = h('button', { type: 'button', class: 'tile', 'data-id': a.id },
     chip, subs, spr, name, meta, ring.svg, bar);
   el.addEventListener('click', () => openDetail(a.id));
+  el.addEventListener('contextmenu', (e) => { e.preventDefault(); openTileMenu(a.id, e.clientX, e.clientY); });
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'ContextMenu' && !(e.key === 'F10' && e.shiftKey)) return;
+    e.preventDefault();
+    const r = el.getBoundingClientRect();
+    openTileMenu(a.id, r.left + 10, r.bottom - 6);
+  });
   wire(el, a.id);
   return { el, spr, name, meta, subs, chip, bar, subsKey: '', acctKey: '', ring: ring.fill, dash: '', cls: '', label: '' };
 }
@@ -1689,6 +1696,85 @@ if (document.fullscreenEnabled) {
   document.addEventListener('fullscreenchange', showFsState);
   showFsState();
 }
+
+// ------------------------------------------------------------- the tile menu
+// A right-click on a tile (or Shift+F10, or the Menu key, when it has focus).
+// One item: take the agent off the deck whatever state it is in. The detail
+// panel will not do that for a running one — it offers "interrupt" instead —
+// so a tile a dead session left reading "running" has no way off the deck but
+// `agentctl rm` in a terminal. It is the same /dismiss the panel calls; the
+// force is in offering it where the panel does not.
+const MENU_LABEL = 'force remove from deck';
+let menuFor = null, menuArmed = null;
+
+function closeTileMenu(toTile) {
+  const m = $('tilemenu');
+  if (m.hidden) return;
+  clearTimeout(menuArmed); menuArmed = null;
+  m.hidden = true;
+  const id = menuFor;
+  menuFor = null;
+  if (toTile && id) document.querySelector(`.tile[data-id="${CSS.escape(id)}"]`)?.focus();
+}
+
+function openTileMenu(id, x, y) {
+  const a = state?.agents.find((v) => v.id === id);
+  if (!a) return;
+  closeTileMenu(false);
+  menuFor = id;
+  // dismiss means different things: a session we only watch keeps running and
+  // just loses its tile, one agentctl owns is stopped along with its tmux.
+  const owned = !a.external && !a.app && a.status !== 'exited';
+  const label = h('span', { class: 'mi-t', text: MENU_LABEL });
+  const why = h('small', {
+    class: 'mi-why',
+    text: owned ? 'stops the agent and its tmux session' : 'the session itself keeps running',
+  });
+  const item = h('button', { type: 'button', class: 'mi', role: 'menuitem' }, label, why);
+  item.addEventListener('click', async () => {
+    if (!menuArmed) { // the same two-step the panel's stop button uses
+      setText(label, owned ? 'click again to stop and remove' : 'click again to remove');
+      item.classList.add('armed');
+      menuArmed = setTimeout(() => {
+        menuArmed = null;
+        setText(label, MENU_LABEL);
+        item.classList.remove('armed');
+      }, 3000);
+      return;
+    }
+    clearTimeout(menuArmed); menuArmed = null;
+    item.disabled = true;
+    setText(label, 'removing…');
+    const r = await api(`/v1/agents/${encodeURIComponent(id)}/dismiss`);
+    if (r.ok) { closeTileMenu(false); return; }
+    item.disabled = false;
+    item.classList.remove('armed');
+    item.classList.add('bad');
+    setText(label, `failed · ${r.error}`);
+    setText(why, 'press Esc to close');
+  });
+  const m = $('tilemenu');
+  m.replaceChildren(item);
+  m.style.left = m.style.top = '0px'; // measure where it cannot be clipped
+  m.hidden = false;
+  const box = m.getBoundingClientRect();
+  m.style.left = `${Math.max(8, Math.min(x, innerWidth - box.width - 8))}px`;
+  m.style.top = `${Math.max(8, Math.min(y, innerHeight - box.height - 8))}px`;
+  item.focus();
+}
+
+// Capture, so Esc closes the menu before the detail panel reads the same key.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || $('tilemenu').hidden) return;
+  e.preventDefault();
+  e.stopPropagation();
+  closeTileMenu(true);
+}, true);
+document.addEventListener('pointerdown', (e) => {
+  if (!$('tilemenu').hidden && !$('tilemenu').contains(e.target)) closeTileMenu(false);
+}, true);
+addEventListener('resize', () => closeTileMenu(false));
+document.querySelector('.main').addEventListener('scroll', () => closeTileMenu(false), true);
 
 // ---------------------------------------------------------------- network
 async function api(path, body) {

@@ -716,6 +716,25 @@ body.panel-mode .grid {
 body.panel-mode .tile { aspect-ratio: auto; width: 100%; height: 100%; min-height: 0; padding: 4% 5%; }
 body.panel-mode .tile .name { font-size: clamp(9px, 2.2cqi, 16px); }
 body.panel-mode .tile .meta { font-size: clamp(8px, 1.75cqi, 12.5px); }
+/* ---------- the menu a right-click on a tile opens ---------- */
+.tilemenu {
+  position: fixed; z-index: 40; min-width: 216px; padding: 4px;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--panel); border: 1px solid var(--line-2);
+}
+.tilemenu[hidden] { display: none; }
+.tilemenu .mi {
+  background: transparent; border: 0; border-radius: 0; color: var(--ink);
+  padding: 8px 10px; font-size: 13px; text-align: left; cursor: pointer;
+}
+.tilemenu .mi:hover, .tilemenu .mi:focus-visible { background: var(--ink); color: var(--bg); outline: none; }
+.tilemenu .mi.armed, .tilemenu .mi.armed:hover { background: var(--accent); color: var(--bg); }
+.tilemenu .mi:disabled { opacity: 0.5; cursor: default; }
+/* what the item will actually do to this agent, which is not the same for a
+   session we only watch as for one agentctl started */
+.tilemenu .mi-why { display: block; margin-top: 3px; font-size: 11.5px; opacity: 0.72; }
+.tilemenu .mi.bad { color: var(--accent); }
+
 .tile-empty { background: #0B0B0B; border: 1px solid #262622; border-radius: var(--r-tile); }
 body:not(.panel-mode) .tile-empty { aspect-ratio: 1 / 1; background: transparent; border: 1px dashed #22221F; }
 .tile-empty[data-drop="swap"] { box-shadow: inset 0 0 0 3px var(--ink); }
