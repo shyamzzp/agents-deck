@@ -1449,6 +1449,31 @@ function applyState(s) {
   render();
 }
 
+// ------------------------------------------------------------- tab cycle
+// With "tab: agent tiles" on, Tab walks the agents instead of the whole page:
+// the first press lands on the first agent, then it cycles, and Shift+Tab goes
+// back. Esc lets go and puts focus on the switch, so the header, the settings
+// link and the rest of the page stay reachable without a mouse. Typing fields
+// and the open dialogs keep their own Tab.
+let tabCycle = true;
+
+const typingIn = (t) =>
+  t instanceof HTMLElement && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName));
+const dialogIn = (t) => t instanceof HTMLElement && !!t.closest('#picker, #detail, #expired');
+
+// The tiles on screen, in reading order, from whichever grid is showing.
+const cycleTiles = () =>
+  [...document.querySelectorAll('#grid > .tile, #attn-grid > .tile')].filter((el) => el.offsetParent);
+
+// Returns false when there is nothing to walk, so Tab stays the browser's.
+function stepTile(back) {
+  const els = cycleTiles();
+  if (!els.length) return false;
+  const i = els.indexOf(document.activeElement);
+  els[i < 0 ? (back ? els.length - 1 : 0) : (i + (back ? -1 : 1) + els.length) % els.length].focus();
+  return true;
+}
+
 // ---------------------------------------------------------------- keyboard
 document.addEventListener('keydown', (e) => {
   const t = e.target;
@@ -1463,6 +1488,12 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.metaKey || e.ctrlKey || e.altKey || expired) return;
   if (e.key === 'Escape' && selectedId) { e.preventDefault(); closeDetail(); return; }
+  if (e.key === 'Tab' && tabCycle && !typingIn(t) && !dialogIn(t) && stepTile(e.shiftKey)) {
+    e.preventDefault(); return;
+  }
+  if (e.key === 'Escape' && tabCycle && t instanceof HTMLElement && t.classList.contains('tile')) {
+    e.preventDefault(); $('tab-toggle').focus(); return;
+  }
   if (/^[1-9]$/.test(e.key) && det?.answer && !(t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement)) {
     e.preventDefault(); det.answer(e.key); return;
   }
@@ -1513,6 +1544,18 @@ $('sort-toggle').addEventListener('click', (e) => {
 });
 try { needsFirst = localStorage.getItem('agents.needsFirst') === '1'; } catch { needsFirst = false; }
 showSortState();
+
+function showTabState() {
+  $('tab-toggle').setAttribute('aria-pressed', String(tabCycle));
+  setText($('tab-state'), tabCycle ? 'agent tiles' : 'whole page');
+}
+$('tab-toggle').addEventListener('click', () => {
+  tabCycle = !tabCycle;
+  showTabState();
+  try { localStorage.setItem('agents.tabCycle', tabCycle ? '1' : '0'); } catch { /* storage unavailable */ }
+});
+try { tabCycle = localStorage.getItem('agents.tabCycle') !== '0'; } catch { tabCycle = true; }
+showTabState();
 
 // ---------------------------------------------------------------- network
 async function api(path, body) {
