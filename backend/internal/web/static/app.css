@@ -485,6 +485,16 @@ body.offline .main { opacity: 0.4; }
 .d-mini svg { width: 100%; height: auto; overflow: visible; }
 .d-crew-n { font-family: var(--f-label); font-size: 12px; color: var(--d-dim); margin-left: 6px; white-space: nowrap; }
 .d-title:focus { outline: none; }
+
+/* the word next to a forked session's name, so the ⑂ glyph isn't a riddle */
+.d-fork {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-left: 8px; padding: 2px 7px;
+  border: 1px solid var(--line); border-radius: var(--r-btn);
+  font-family: var(--f-label); font-size: 11px; font-weight: 400;
+  letter-spacing: 0.4px; color: var(--dim); white-space: nowrap;
+  vertical-align: middle;
+}
 .d-title {
   margin: 0; font-family: var(--f-head); font-weight: 700; font-size: 28px; letter-spacing: -0.3px;
   overflow-wrap: anywhere;

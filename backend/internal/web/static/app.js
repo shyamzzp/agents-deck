@@ -104,6 +104,16 @@ function subsOnly(a) {
   return `${n} subagent${n === 1 ? '' : 's'}`;
 }
 
+// Claude marks a forked session by ending its name with this. On its own the
+// glyph says nothing, so the panel spells it out next to the title.
+const FORK_MARK = '\u2442';
+const titleParts = (a) => {
+  const t = a.title || '';
+  return t.endsWith(FORK_MARK)
+    ? { name: t.slice(0, -FORK_MARK.length).trimEnd(), fork: true }
+    : { name: t, fork: false };
+};
+
 function tileMeta(a) {
   if (hungry(a)) return 'hungry · feed me';
   switch (a.status) {
@@ -115,6 +125,9 @@ function tileMeta(a) {
         return what ? `allow ${what}?` : 'allow?';
       }
       if (w.kind === 'question') return `pick 1 of ${(w.options || []).length}`;
+      // Nothing to answer from here: the deck only has options for sessions it
+      // launched. Don't ask for input the panel can't take.
+      if (!w.options?.length) return titleParts(a).fork ? 'parked fork' : 'answer in its terminal';
       return 'needs input';
     }
     case 'idle': return ageMin(a.statusSince) < 120 ? `done · ${rel(a.statusSince)} ago` : `idle · ${rel(a.statusSince)}`;
@@ -129,7 +142,11 @@ function pillText(a) {
   const since = rel(a.statusSince);
   switch (a.status) {
     case 'running': return `running · ${since}`;
-    case 'waiting': return a.waiting?.kind === 'question' && a.waiting.context ? a.waiting.context : `needs you · ${since}`;
+    case 'waiting': {
+      if (a.waiting?.kind === 'question' && a.waiting.context) return a.waiting.context;
+      if (!a.waiting?.options?.length) return titleParts(a).fork ? `parked fork · ${since}` : `answer in its terminal · ${since}`;
+      return `needs you · ${since}`;
+    }
     case 'idle': return a.unseen ? `hungry · ${since}` : `idle · ${since}`;
     case 'error': return `error · ${since}`;
     case 'exited': return a.lost ? `lost with tmux · ${since}` : `exited · ${since}`;
@@ -1289,7 +1306,11 @@ function header(a) {
   const chip = h('span', { class: 'chip', title: a.tool, 'aria-label': `tool: ${a.tool}`, role: 'img' });
   const acct = acctLabel(chip);
   const el = h('div', { class: 'd-top' },
-    h('div', { class: 'd-id' }, h('div', { class: 'd-mascots' }, spr, crew), h('h2', { class: 'd-title', id: 'd-title', tabindex: '-1', text: a.title }), ai),
+    h('div', { class: 'd-id' }, h('div', { class: 'd-mascots' }, spr, crew), h('h2', { class: 'd-title', id: 'd-title', tabindex: '-1' },
+        h('span', { text: titleParts(a).name }),
+        titleParts(a).fork
+          ? h('span', { class: 'd-fork', title: 'a fork of another session: it carries that session\u2019s history', text: `${FORK_MARK} fork` })
+          : null), ai),
     h('div', { class: 'd-right' },
       h('button', { type: 'button', class: 'd-close', 'aria-label': 'close panel (esc)', onclick: closeDetail }, closeIcon()),
       h('div', { class: `d-pillrow tool-${a.tool}` }, chip, pill),
