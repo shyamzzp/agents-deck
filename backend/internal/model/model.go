@@ -17,6 +17,9 @@ const (
 type State struct {
 	Server Server  `json:"server"`
 	Agents []Agent `json:"agents"`
+	// Groups are the deck's group dividers, by slot (absent: no groups).
+	// Only the grid view draws them; the panel and the boards ignore them.
+	Groups []Group `json:"groups,omitempty"`
 	// Magic is this screen's part in the magic trick (absent: none, or the
 	// trick is off). Only the giver and the receiver get it.
 	Magic *Magic `json:"magic,omitempty"`
@@ -31,6 +34,14 @@ type Magic struct {
 	Taken  bool   `json:"taken"`
 	Arrive string `json:"arrive"`
 	Leave  string `json:"leave"`
+}
+
+// Group is a named line across the grid, anchored at Slot (a multiple of the
+// deck's width). The agents from one divider up to the next belong to it; the
+// agents before the first divider belong to no group.
+type Group struct {
+	Slot int    `json:"slot"`
+	Name string `json:"name"`
 }
 
 type Server struct {

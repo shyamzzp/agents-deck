@@ -661,6 +661,8 @@ function renderGrid() {
     updateTile(t, a);
   }
   for (const [id, t] of tiles) if (!seen.has(id)) { t.el.remove(); tiles.delete(id); }
+  const lines = new Set(groupLines().map((g) => g.slot));
+  for (const slot of dividers.keys()) if (!lines.has(slot)) dividers.delete(slot);
   const want = panelOn() ? panelCells(list) : needsFirst || onPhone() ? list.map((a) => tiles.get(a.id).el) : boardCells(list);
   // Reconcile in place so running animations aren't restarted needlessly.
   reconcile(grid, want);
@@ -685,16 +687,104 @@ function emptyCell(slot) {
 }
 
 // The free-form board: a cell per slot up to the last agent, the row filled out
-// with free cells so there's always somewhere to drop.
+// with free cells so there's always somewhere to drop, with a group's line
+// across the grid wherever one is anchored (groupLines below).
 function boardCells(list) {
   if (!list.length) return [];
   const bySlot = new Map(list.map((a) => [a.slot, a]));
   const cols = Math.max(1, getComputedStyle($('grid')).gridTemplateColumns.split(' ').length);
+  const lines = groupLines();
   const last = Math.max(...bySlot.keys());
-  const n = Math.min(MAX_SLOT + 1, Math.ceil((last + 1) / cols) * cols);
+  // A line is drawn even where no agent has reached it yet, so a new group has
+  // free cells under it to drop into.
+  const lastLine = lines.length ? lines[lines.length - 1].slot + GROUP_ROW - 1 : 0;
+  const n = Math.min(MAX_SLOT + 1, Math.ceil((Math.max(last, lastLine) + 1) / cols) * cols);
+  const byLine = new Map(lines.map((g) => [g.slot, g]));
   const cells = [];
-  for (let s = 0; s < n; s++) cells.push(bySlot.has(s) ? tiles.get(bySlot.get(s).id).el : emptyCell(s));
+  for (let s = 0; s < n; s++) {
+    const g = byLine.get(s);
+    if (g) cells.push(dividerCell(g));
+    cells.push(bySlot.has(s) ? tiles.get(bySlot.get(s).id).el : emptyCell(s));
+  }
   return cells;
+}
+
+// ------------------------------------------------------------------- groups
+// A group is a named line across the grid, anchored at a slot that starts a
+// row (model.Group, config.json "groups"). Agents aren't tagged: an agent
+// belongs to the group whose line is the last one at or before its slot, so
+// dragging a tile under a line already moves it into that group and the panel
+// view, the boards and page = slot/16 never have to know about any of this.
+const GROUP_ROW = 4; // groups.Row: a line sits at a multiple of the deck's width
+const MAX_GROUP_NAME = 24; // groups.MaxName
+
+const groupLines = () => [...(state?.groups || [])].sort((a, b) => a.slot - b.slot);
+
+// Lines are pooled by slot, like free cells, so typing in a name isn't
+// interrupted by a redraw.
+const dividers = new Map();
+function dividerCell(g) {
+  let d = dividers.get(g.slot);
+  if (!d) { d = makeDivider(g.slot); dividers.set(g.slot, d); }
+  if (document.activeElement !== d.name && d.name.value !== g.name) d.name.value = g.name;
+  return d.el;
+}
+
+function makeDivider(slot) {
+  const name = h('input', {
+    class: 'group-name', type: 'text', maxlength: String(MAX_GROUP_NAME), spellcheck: 'false',
+    'aria-label': `group name, from tile ${slot + 1}`, title: 'rename this group',
+  });
+  const revert = () => { name.value = groupLines().find((g) => g.slot === slot)?.name ?? ''; };
+  name.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); name.blur(); }
+    if (e.key === 'Escape') { e.preventDefault(); revert(); name.blur(); }
+  });
+  // An empty name would remove the line, which the × is for: put the old one
+  // back instead, so a cleared field can't delete a group by accident.
+  name.addEventListener('change', async () => {
+    if (!name.value.trim()) { revert(); return; }
+    if (!(await setGroup(slot, name.value, dividers.get(slot)?.note)).ok) revert();
+  });
+  const note = h('span', { class: 'group-note', role: 'status' });
+  const del = h('button', {
+    type: 'button', class: 'group-del', text: '×', title: 'remove this line (the agents stay where they are)',
+    'aria-label': `remove the group line above tile ${slot + 1}`,
+    onclick: () => setGroup(slot, '', note),
+  });
+  const el = h('div', { class: 'group-line', role: 'separator' }, name, note, del);
+  return { el, name, note };
+}
+
+async function setGroup(slot, name, note) {
+  const r = await api('/v1/groups', { slot, name });
+  if (note) setText(note, r.ok ? '' : `not saved · ${r.error}`);
+  return r;
+}
+
+// The next row that can take a line: the first one after the last agent that
+// hasn't got one already.
+function nextGroupSlot() {
+  const last = Math.max(0, ...(state?.agents || []).map((a) => a.slot));
+  const taken = new Set(groupLines().map((g) => g.slot));
+  let s = Math.max(GROUP_ROW, Math.ceil((last + 1) / GROUP_ROW) * GROUP_ROW);
+  while (s <= MAX_SLOT && taken.has(s)) s += GROUP_ROW;
+  return s > MAX_SLOT ? 0 : s;
+}
+
+async function addGroup(btn) {
+  const said = (msg) => {
+    if (!btn) return;
+    const was = btn.textContent;
+    btn.textContent = msg;
+    setTimeout(() => { btn.textContent = was; }, 2500);
+  };
+  const slot = nextGroupSlot();
+  if (!slot) { said('no room for a group'); return; }
+  const r = await setGroup(slot, 'new group');
+  if (!r.ok) { said(`failed · ${r.error}`); return; }
+  // Wait for the line to be drawn, then put the cursor in its name.
+  setTimeout(() => { const d = dividers.get(slot); d?.name.focus(); d?.name.select(); }, 60);
 }
 
 // Panel view: 16 cells like the device. While every agent sits in slots 0..15
@@ -975,6 +1065,7 @@ async function refreshPicker() {
 }
 
 $('add-session').addEventListener('click', () => openPicker(-1));
+$('add-group').addEventListener('click', (e) => addGroup(e.currentTarget));
 $('picker-close').addEventListener('click', closePicker);
 $('picker').addEventListener('click', (e) => { if (e.target === e.currentTarget) closePicker(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('picker').hidden) { e.stopPropagation(); closePicker(); } }, true);
@@ -1461,9 +1552,13 @@ const typingIn = (t) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName));
 const dialogIn = (t) => t instanceof HTMLElement && !!t.closest('#picker, #detail, #expired');
 
-// The tiles on screen, in reading order, from whichever grid is showing.
+// The tiles on screen, in reading order, from whichever grid is showing. A
+// group line's name and × are in the walk too: they sit between the tiles and
+// are the only way to rename or remove a group without a mouse.
 const cycleTiles = () =>
-  [...document.querySelectorAll('#grid > .tile, #attn-grid > .tile')].filter((el) => el.offsetParent);
+  [...document.querySelectorAll(
+    '#grid > .tile, #grid > .group-line .group-name, #grid > .group-line .group-del, #attn-grid > .tile',
+  )].filter((el) => el.offsetParent);
 
 // Returns false when there is nothing to walk, so Tab stays the browser's.
 function stepTile(back) {
@@ -1513,10 +1608,19 @@ document.addEventListener('keydown', (e) => {
 function showPanelState() {
   $('panel-toggle').setAttribute('aria-pressed', String(panelMode));
   setText($('panel-state'), panelMode ? 'desk panel' : 'fit window');
+  showGroupButton();
 }
 function showSortState() {
   $('sort-toggle').setAttribute('aria-pressed', String(needsFirst));
   setText($('sort-state'), needsFirst ? 'needs you first' : 'your order');
+  showGroupButton();
+}
+
+// Group lines belong to the grid view: the desk panel draws the device's own
+// pages, and "needs you first" takes the tiles out of slot order, so neither
+// can show them.
+function showGroupButton() {
+  $('add-group').hidden = panelOn() || needsFirst;
 }
 
 function setPanelMode(on) {
@@ -1755,6 +1859,13 @@ async function fixtureAction(path, body) {
     for (const a of fx.agents) if (a.lost) Object.assign(a, { status: 'starting', lost: false, resumable: false });
     fxEmit();
     return { ok: true, status: 200 };
+  }
+  if (path === '/v1/groups') {
+    fx.groups = (fx.groups || []).filter((g) => g.slot !== body.slot);
+    if (body.name.trim()) fx.groups.push({ slot: body.slot, name: body.name.trim() });
+    fx.groups.sort((a, b) => a.slot - b.slot);
+    fxEmit();
+    return { ok: true, status: 204 };
   }
   if (path === '/v1/order') {
     body.ids.forEach((id, i) => { const a = fx.agents.find((x) => x.id === id); if (a) a.slot = i; });

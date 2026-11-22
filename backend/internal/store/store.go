@@ -179,6 +179,9 @@ type Store struct {
 	// Account gives each agent its Claude account, from the account it was
 	// started in or its transcript's folder (nil: accounts aren't shown).
 	Account func(name, transcript string) *model.Account
+	// Groups gives the deck's group dividers (nil: no groups). They are an
+	// overlay on the slots, so the store itself never places by them.
+	Groups func() []model.Group
 
 	// The "Needs you" grid (attention.go): the clock and the random free
 	// spot (tests set both), how long an agent stays after it stops needing
@@ -462,7 +465,7 @@ func (s *Store) Snapshot() model.State {
 		agents = append(agents, e.A)
 		places = append(places, where{e.Account, e.Transcript})
 	}
-	hat, account := s.Hat, s.Account
+	hat, account, groups := s.Hat, s.Account, s.Groups
 	s.mu.Unlock()
 	for i := range agents {
 		if hat != nil {
@@ -473,9 +476,14 @@ func (s *Store) Snapshot() model.State {
 		}
 	}
 	sort.Slice(agents, func(i, j int) bool { return agents[i].Slot < agents[j].Slot })
+	var lines []model.Group
+	if groups != nil {
+		lines = groups()
+	}
 	return model.State{
 		Server: model.Server{Name: s.Name, Version: s.Version, Time: time.Now().UTC()},
 		Agents: agents,
+		Groups: lines,
 	}
 }
 

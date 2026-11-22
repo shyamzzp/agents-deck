@@ -119,4 +119,10 @@ From reviewing other tools (e.g. herdr). Not planned, but kept in mind:
 - Screen-reading status for agents without hooks (Codex CLI, Gemini…), and as a safety net for Claude states hooks miss.
 - Agent automation: `agentctl prompt --wait`, `agentctl wait --until blocked`, `agentctl read`, plus a skill file.
 - `agentctl explain <agent>`: why the deck shows an agent's current state.
-- Grouping agents by project on the board.
+- Grouping agents by project on the board. Half done: the browser's grid view
+  has group lines (docs/features.md, "Groups"), kept in `config.json` under
+  `"groups"` and served in the state. A line is anchored at a slot that starts
+  a row, so slots keep their meaning and no board needs new firmware. What is
+  left is drawing them on the boards and in the desk panel, which needs a way
+  to show a line on a 4x4 page (or a group per page) and a Deck Link field for
+  it, and `agentctl groups` from the terminal.

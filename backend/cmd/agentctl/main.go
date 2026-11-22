@@ -30,6 +30,7 @@ import (
 	"github.com/brushknight/agents-deck/backend/internal/daemon"
 	"github.com/brushknight/agents-deck/backend/internal/demo"
 	"github.com/brushknight/agents-deck/backend/internal/devices"
+	"github.com/brushknight/agents-deck/backend/internal/groups"
 	"github.com/brushknight/agents-deck/backend/internal/hats"
 	"github.com/brushknight/agents-deck/backend/internal/link"
 	"github.com/brushknight/agents-deck/backend/internal/model"
@@ -1179,8 +1180,10 @@ func serve(args []string) error {
 		st.Hat = demoHats(fleet, book)
 	}
 	st.Account = accounts.Of
+	lines := &groups.Book{Path: paths.Config()}
+	st.Groups = lines.All
 	srv := &server.Server{Store: st, Ctl: ctl, Static: web.Static(),
-		WebSession: webSession, LocalAddr: cfg.LocalAddr, Hats: book,
+		WebSession: webSession, LocalAddr: cfg.LocalAddr, Hats: book, Groups: lines,
 		Devices: &devices.Registry{Path: paths.Devices()}, Audit: &devices.Audit{Path: paths.Audit()}}
 	errc := make(chan error, 4)
 	// The default Wi-Fi network for boards plugged in over USB: its password in

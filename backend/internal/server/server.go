@@ -21,6 +21,7 @@ import (
 
 	"github.com/brushknight/agents-deck/backend/internal/accounts"
 	"github.com/brushknight/agents-deck/backend/internal/devices"
+	"github.com/brushknight/agents-deck/backend/internal/groups"
 	"github.com/brushknight/agents-deck/backend/internal/hats"
 	"github.com/brushknight/agents-deck/backend/internal/model"
 	"github.com/brushknight/agents-deck/backend/internal/pki"
@@ -89,6 +90,8 @@ type Server struct {
 	LocalAddr  string // e.g. 127.0.0.1:7340
 	// Hats holds the per-folder hat overrides (nil: hats can't be changed).
 	Hats *hats.Book
+	// Groups holds the deck's group dividers (nil: groups can't be changed).
+	Groups *groups.Book
 	// Devices and CA: paired devices and the authority that signs their
 	// certificates (nil: no network listener). Audit records their actions.
 	Devices *devices.Registry
@@ -220,6 +223,33 @@ func (s *Server) api() *http.ServeMux {
 		default:
 			w.WriteHeader(http.StatusNoContent)
 		}
+	})
+	mux.HandleFunc("GET /v1/groups", func(w http.ResponseWriter, r *http.Request) {
+		list := []model.Group{}
+		if s.Groups != nil {
+			list = s.Groups.All()
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"groups": list, "row": groups.Row, "maxName": groups.MaxName})
+	})
+	mux.HandleFunc("POST /v1/groups", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Slot *int   `json:"slot"`
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body); err != nil || body.Slot == nil {
+			writeErr(w, http.StatusBadRequest, `body must be {"slot", "name"} (an empty name removes the divider)`)
+			return
+		}
+		if s.Groups == nil {
+			writeErr(w, http.StatusServiceUnavailable, "groups can't be changed")
+			return
+		}
+		if err := s.Groups.Set(*body.Slot, body.Name); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		s.Store.Touch() // every screen redraws with the new divider
+		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("GET /v1/hats", func(w http.ResponseWriter, r *http.Request) {
 		over := map[string]hats.Override{}
