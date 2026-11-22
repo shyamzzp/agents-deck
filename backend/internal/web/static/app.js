@@ -1552,9 +1552,13 @@ const typingIn = (t) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName));
 const dialogIn = (t) => t instanceof HTMLElement && !!t.closest('#picker, #detail, #expired');
 
-// The tiles on screen, in reading order, from whichever grid is showing.
+// The tiles on screen, in reading order, from whichever grid is showing. A
+// group line's name and × are in the walk too: they sit between the tiles and
+// are the only way to rename or remove a group without a mouse.
 const cycleTiles = () =>
-  [...document.querySelectorAll('#grid > .tile, #attn-grid > .tile')].filter((el) => el.offsetParent);
+  [...document.querySelectorAll(
+    '#grid > .tile, #grid > .group-line .group-name, #grid > .group-line .group-del, #attn-grid > .tile',
+  )].filter((el) => el.offsetParent);
 
 // Returns false when there is nothing to walk, so Tab stays the browser's.
 function stepTile(back) {
