@@ -29,7 +29,7 @@
   --track: #2A2925;
   --f-label: "Share Tech Mono", ui-monospace, Menlo, monospace;
   --f-head: "Roboto Mono", ui-monospace, Menlo, monospace;
-  color-scheme: dark;
+  color-scheme: light dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -155,17 +155,17 @@ button, a.b {
 button:hover:not(:disabled), a.b:hover { border-color: var(--ink); color: var(--ink); }
 button:disabled { opacity: 0.45; cursor: default; }
 button.p, a.b.p { background: var(--ink); border-color: var(--ink); color: var(--bg); }
-button.p:hover:not(:disabled) { background: #fff; color: var(--bg); }
+button.p:hover:not(:disabled) { background: var(--ink); color: var(--bg); }
 button.a { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 button.a:hover:not(:disabled) { border-color: var(--ink); color: var(--bg); }
 .hot button { border-color: var(--bg); color: var(--bg); }
 .hot button:hover:not(:disabled) { background: var(--bg); color: var(--ink); border-color: var(--bg); }
 .hot button.k { background: var(--bg); border-color: var(--bg); color: var(--ink); }
-.hot button.k:hover:not(:disabled) { background: #222; color: var(--ink); }
+.hot button.k:hover:not(:disabled) { background: var(--panel-on); color: var(--ink); }
 button.more { min-width: 44px; padding: 0 12px; letter-spacing: 1px; }
 button[aria-busy="true"] { cursor: progress; }
 
-button.tg { min-width: 0; width: 44px; height: 24px; border-radius: 12px; background: #262622; border: 0; padding: 0; position: relative; flex: none; }
+button.tg { min-width: 0; width: 44px; height: 24px; border-radius: 12px; background: var(--line); border: 0; padding: 0; position: relative; flex: none; }
 button.tg::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--dim); transition: left 100ms steps(2); }
 button.tg[aria-checked="true"] { background: var(--ink); }
 button.tg[aria-checked="true"]::after { left: 23px; background: var(--bg); }
@@ -178,11 +178,11 @@ button.tg:hover:not(:disabled) { box-shadow: 0 0 0 2px var(--edge); }
 .seg button:focus-visible { outline-offset: -3px; }
 
 label { color: var(--meta); font-size: 12px; display: block; margin-bottom: 6px; }
-input[type="text"], input[type="password"] {
+input[type="text"], input[type="password"], input[type="search"] {
   font: inherit; font-size: 14px; height: 40px; width: 100%; padding: 0 12px; border-radius: 4px;
   border: 2px solid var(--edge); background: var(--bg); color: var(--ink);
 }
-input[type="text"]:focus-visible, input[type="password"]:focus-visible { border-color: var(--ink); outline: none; }
+input[type="text"]:focus-visible, input[type="password"]:focus-visible, input[type="search"]:focus-visible { border-color: var(--ink); outline: none; }
 select.pick {
   font: inherit; font-size: 14px; height: 36px; min-width: 200px; max-width: 100%; padding: 0 10px; border-radius: 4px;
   border: 2px solid var(--edge); background: var(--bg); color: var(--ink);
@@ -367,3 +367,25 @@ pre.report { background: var(--panel); border-radius: 12px; padding: 14px 16px; 
   .uplinks .pref { margin-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) { button.tg::after { transition: none; } }
+
+/* ---------- Appearance: the theme picker ---------- */
+.theme-ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.theme-ctl input[type="search"] { min-width: 210px; flex: 1 1 210px; }
+.theme-list {
+  margin-top: 10px; display: grid; gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  max-height: 60vh; overflow-y: auto; overscroll-behavior: contain;
+}
+/* Each row is drawn in its own theme, so the list is the preview. */
+.theme-row {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  padding: 8px 10px; cursor: pointer; text-align: left;
+  background: var(--rbg); color: var(--rink);
+  border: 2px solid var(--rline); border-radius: 0;
+}
+.theme-row:hover, .theme-row:focus-visible { border-color: var(--rink); outline: none; }
+.theme-row.on { border-color: var(--accent); }
+.theme-name { flex: 1 1 auto; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.theme-kind { flex: none; font-size: 11px; opacity: 0.6; }
+.theme-chips { display: flex; flex: none; gap: 2px; }
+.theme-chips i { display: block; width: 9px; height: 18px; }
