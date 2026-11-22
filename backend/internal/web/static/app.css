@@ -127,6 +127,11 @@ code, .code { font-family: var(--f-head); }
 .toggle[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .toggle:active { background: var(--ink); color: var(--bg); }
 a.toggle { display: inline-block; text-decoration: none; }
+/* A switch that says what it does with a shape instead of a word: the tooltip
+   and the aria-label carry the wording. Square, so it sits level with the
+   lettered switches either side of it. */
+.toggle.icon { display: inline-flex; align-items: center; justify-content: center; padding: 4px; width: 25px; height: 25px; }
+.toggle.icon .fs-i { width: 13px; height: 13px; flex: none; }
 .toggle .k { opacity: 0.7; }
 .toggle[aria-pressed="true"] .k { opacity: 0.8; }
 .deck-ctl { display: flex; flex-wrap: wrap; gap: 8px; }
