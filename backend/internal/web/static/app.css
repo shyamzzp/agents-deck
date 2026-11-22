@@ -160,6 +160,53 @@ a.toggle { display: inline-block; text-decoration: none; }
 .picker-empty { color: var(--dim); font-size: 14px; display: block !important; border-style: dashed !important; }
 .tile-empty { cursor: pointer; }
 .tile-empty:hover { border-color: var(--dim); }
+
+/* ---------- group lines ----------
+   A named line across the grid. It spans every column, so the group under it
+   always starts a fresh row whatever the window's width. */
+.group-line {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 2px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line-2);
+}
+.group-line:first-child { margin-top: 0; }
+.group-name {
+  flex: 0 1 auto;
+  min-width: 2ch;
+  width: 24ch;
+  max-width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-tile);
+  padding: 2px 6px;
+  color: var(--ink);
+  font: 12px/1.4 var(--f-head);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.group-name:hover { border-color: var(--line); }
+.group-name:focus { outline: none; border-color: var(--accent); background: var(--panel); }
+.group-note { flex: 1 1 auto; color: var(--accent); font: 11px/1.4 var(--f-head); }
+.group-note:empty { display: none; }
+.group-del {
+  flex: 0 0 auto;
+  margin-left: auto;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-tile);
+  padding: 0 6px;
+  color: var(--dim);
+  font: 14px/1.4 var(--f-head);
+  cursor: pointer;
+}
+.group-del:hover { color: var(--accent); border-color: var(--line); }
+.group-del:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+/* The desk panel draws the device's own pages, so lines never belong there. */
+body.panel-mode .group-line { display: none; }
 .lost-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .lost-bar[hidden] { display: none; }
 .lost-bar .toggle { border-color: var(--accent); color: var(--accent); }
