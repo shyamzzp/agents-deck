@@ -1661,6 +1661,35 @@ $('tab-toggle').addEventListener('click', () => {
 try { tabCycle = localStorage.getItem('agents.tabCycle') !== '0'; } catch { tabCycle = true; }
 showTabState();
 
+// Full screen: the deck fills the display with nothing around it, for a mac
+// left on a desk as the panel. Nothing is remembered between visits — a
+// browser only grants it inside a click — and Esc, F11 and the window buttons
+// all leave it without telling us, so the icon follows fullscreenchange rather
+// than what we last asked for.
+const fsOn = () => document.fullscreenElement != null;
+function showFsState() {
+  const on = fsOn();
+  const b = $('fs-toggle');
+  b.setAttribute('aria-pressed', String(on));
+  b.setAttribute('aria-label', on ? 'leave full screen' : 'full screen');
+  b.title = on
+    ? 'Leave full screen and give the browser its chrome back. Esc does the same.'
+    : 'Full screen: the deck fills the display, with no browser chrome around it. Click again (or press Esc) to come back.';
+  $('fs-in').hidden = on;
+  $('fs-out').hidden = !on;
+}
+if (document.fullscreenEnabled) {
+  $('fs-toggle').hidden = false;
+  $('fs-toggle').addEventListener('click', async () => {
+    try {
+      if (fsOn()) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch { /* refused: a permissions policy, or the click was not trusted */ }
+  });
+  document.addEventListener('fullscreenchange', showFsState);
+  showFsState();
+}
+
 // ---------------------------------------------------------------- network
 async function api(path, body) {
   if (FIXTURE) return fixtureAction(path, body);
