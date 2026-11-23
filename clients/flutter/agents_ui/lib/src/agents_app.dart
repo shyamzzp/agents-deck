@@ -38,6 +38,7 @@ class AgentsApp extends StatefulWidget {
     this.visible,
     this.backButton = false,
     this.pageShapes = const [DeckShape.panel],
+    this.attentionShape,
     this.leadingPage,
   }) : assert(pageShapes.length > 0, 'the deck needs a shape'),
        assert(
@@ -55,6 +56,12 @@ class AgentsApp extends StatefulWidget {
 
   /// A back button on agent cards, for hosts without an edge swipe.
   final bool backButton;
+
+  /// The shape the "Needs you" screen is drawn in; null follows the first
+  /// page. It holds the sixteen spots the service gives it whatever the shape
+  /// (docs/protocol.md), so a larger grid leaves the rest free and a smaller
+  /// one packs them.
+  final DeckShape? attentionShape;
 
   /// A page of the host's own, before the "Needs you" screen: somewhere to
   /// put settings on a device that has no menu bar to hang them off. Null
@@ -402,8 +409,8 @@ class _AgentsAppState extends State<AgentsApp> {
                     : v == _lead
                     ? AttentionScreen(
                         needsYou: needsYou,
-                        columns: _shape(0).columns,
-                        rows: _shape(0).rows,
+                        columns: (widget.attentionShape ?? _shape(0)).columns,
+                        rows: (widget.attentionShape ?? _shape(0)).rows,
                         tile: (a) => AgentTile(
                           key: ValueKey('attention-tile-${a.id}'),
                           agent: a,

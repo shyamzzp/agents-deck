@@ -58,7 +58,11 @@ const defaultShape = DeckShape(5, 5);
 /// "page 1" is also every other page, so setting it sets them all. Here a page
 /// is either its own or the default, and nothing else moves.
 class DeckLayout {
-  const DeckLayout({this.fallback = defaultShape, this.perPage = const {}});
+  const DeckLayout({
+    this.fallback = defaultShape,
+    this.perPage = const {},
+    this.attention,
+  });
 
   /// Every page that has not been given its own shape.
   final DeckShape fallback;
@@ -68,7 +72,20 @@ class DeckLayout {
   /// pinned behind later changes to the default.
   final Map<int, DeckShape> perPage;
 
+  /// The "Needs you" screen's own shape, or null to follow [fallback].
+  final DeckShape? attention;
+
   DeckShape shapeOf(int page) => perPage[page] ?? fallback;
+
+  /// The "Needs you" screen, which is a page you swipe to like any other even
+  /// though the deck does not number it.
+  DeckShape get attentionShape => attention ?? fallback;
+
+  DeckLayout withAttention(DeckShape shape) => DeckLayout(
+    fallback: fallback,
+    perPage: perPage,
+    attention: shape == fallback ? null : shape,
+  );
 
   /// With a page set to [shape], or back to the default when they are equal.
   DeckLayout withPage(int page, DeckShape shape) {
@@ -78,7 +95,7 @@ class DeckLayout {
     } else {
       next[page] = shape;
     }
-    return DeckLayout(fallback: fallback, perPage: next);
+    return DeckLayout(fallback: fallback, perPage: next, attention: attention);
   }
 
   /// With the default set to [shape]; any page that was overridden to exactly
@@ -89,6 +106,7 @@ class DeckLayout {
       for (final e in perPage.entries)
         if (e.value != shape) e.key: e.value,
     },
+    attention: attention == shape ? null : attention,
   );
 
   /// The shapes [AgentsApp] wants: one per page, the last repeating. The
@@ -101,6 +119,7 @@ class DeckLayout {
 
   Map<String, Object?> toJson() => {
     'default': [fallback.columns, fallback.rows],
+    if (attention case final a?) 'needsYou': [a.columns, a.rows],
     'pages': {
       for (final e in perPage.entries)
         '${e.key}': [e.value.columns, e.value.rows],
@@ -129,7 +148,12 @@ class DeckLayout {
         }
       }
     }
-    return DeckLayout(fallback: fallback, perPage: pages);
+    final att = _shape(j['needsYou']);
+    return DeckLayout(
+      fallback: fallback,
+      perPage: pages,
+      attention: att == fallback ? null : att,
+    );
   }
 }
 
@@ -197,6 +221,10 @@ class _DeckAppState extends State<DeckApp> {
   Future<void> _setFallback(DeckShape shape) =>
       _store(_layout.withFallback(shape));
 
+  /// Sets the "Needs you" screen's shape.
+  Future<void> _setAttention(DeckShape shape) =>
+      _store(_layout.withAttention(shape));
+
   Future<void> _store(DeckLayout layout) async {
     final docs = _docs;
     if (docs == null) return;
@@ -234,12 +262,14 @@ class _DeckAppState extends State<DeckApp> {
               source: s,
               backButton: true,
               pageShapes: _layout.pageShapes,
+              attentionShape: _layout.attentionShape,
               // A phone has no menu bar to hang settings off, so they get a
               // page of their own at the far left. The deck still opens.
               leadingPage: ConfigPage(
                 layout: _layout,
                 onPage: _setPage,
                 onFallback: _setFallback,
+                onAttention: _setAttention,
                 deck: _deckName(),
                 source: s,
               ),
@@ -457,6 +487,7 @@ class ConfigPage extends StatelessWidget {
     required this.layout,
     required this.onPage,
     required this.onFallback,
+    required this.onAttention,
     required this.source,
     this.deck,
   });
@@ -464,6 +495,7 @@ class ConfigPage extends StatelessWidget {
   final DeckLayout layout;
   final void Function(int page, DeckShape shape) onPage;
   final void Function(DeckShape shape) onFallback;
+  final void Function(DeckShape shape) onAttention;
 
   /// Watched for how many pages the deck currently has.
   final AgentsSource source;
@@ -509,15 +541,28 @@ class ConfigPage extends StatelessWidget {
             ),
             const SizedBox(height: 22),
             Text(
-              pages == 1 ? 'this page' : 'these $pages pages',
+              'the pages you can swipe to',
               style: DeckHud.mono(size: 14, color: DeckHud.ink),
             ),
             const SizedBox(height: 6),
             Text(
-              'A page can be given a grid of its own. The rest stay as above.',
+              pages == 1
+                  ? 'Needs you, then one page of the deck. Each can be given a '
+                        'grid of its own; the rest stay as above. The deck '
+                        'gains a page when the ones it has are full.'
+                  : 'Needs you, then $pages pages of the deck. Each can be '
+                        'given a grid of its own; the rest stay as above.',
               style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
             const SizedBox(height: 12),
+            _ShapeRow(
+              key: const Key('shape-row-attention'),
+              title: 'needs you',
+              note: layout.attention == null ? 'as above' : 'its own',
+              shape: layout.attentionShape,
+              onShape: onAttention,
+            ),
+            const SizedBox(height: 8),
             for (var i = 0; i < pages; i++) ...[
               if (i > 0) const SizedBox(height: 8),
               _ShapeRow(
