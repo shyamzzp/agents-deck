@@ -690,6 +690,58 @@ String agentPillLabel(Agent a, AgentsState state, [DateTime? localNow]) {
   };
 }
 
+/// A line to type into a session, from the card's quick list.
+///
+/// These are the things asked of a coding agent again and again, so they are
+/// worth a tap rather than a keyboard: the text is what the local dashboard's
+/// message box would send.
+class AgentAsk {
+  const AgentAsk(this.label, this.text);
+
+  /// What the card shows.
+  final String label;
+
+  /// What the agent is told.
+  final String text;
+}
+
+/// The quick list, in the order it is swiped through.
+const agentAsks = [
+  AgentAsk(
+    'verify changes',
+    'Verify the changes you have made: re-read them, check they do what was '
+        'asked, and say plainly what you checked and what you did not.',
+  ),
+  AgentAsk(
+    'run the tests',
+    'Run the test suite and report the result verbatim, including any failures.',
+  ),
+  AgentAsk(
+    'commit',
+    'Commit the current changes with a message that says why, not just what.',
+  ),
+  AgentAsk(
+    'push to GitHub',
+    'Push the committed changes to the remote on GitHub. Do not push to any '
+        'upstream remote.',
+  ),
+  AgentAsk(
+    'open a PR',
+    'Open a pull request for this branch against the default branch, with a '
+        'description of what changed and how it was checked.',
+  ),
+  AgentAsk(
+    'what changed?',
+    'Summarise what you have changed so far, file by file, and what is left.',
+  ),
+  AgentAsk(
+    'fix the failures',
+    'Find out why the failing tests fail and fix the cause, not the test.',
+  ),
+  AgentAsk('carry on', 'Carry on with what you were doing.'),
+];
+
+
 /// A Claude session started by hand in another terminal (`GET /v1/live`),
 /// which can be added to the deck (watched).
 class LiveSession {

@@ -100,6 +100,11 @@ abstract class AgentsSource {
   /// (free or not; an agent already there swaps into the old position).
   Future<AgentsResult> move(String agentId, int slot);
 
+  /// `POST /v1/agents/{id}/prompt` — sends the agent something to do. It
+  /// goes on its queue by default, so asking while it works does not cut the
+  /// turn short.
+  Future<AgentsResult> prompt(String agentId, String text, {String mode});
+
   /// `GET /v1/live` — Claude sessions started by hand in other terminals.
   Future<List<LiveSession>> liveSessions();
 
@@ -566,6 +571,10 @@ class HttpAgentsClient implements AgentsSource {
   @override
   Future<AgentsResult> move(String agentId, int slot) =>
       _postPath(['v1', 'agents', agentId, 'move'], {'slot': slot});
+
+  @override
+  Future<AgentsResult> prompt(String agentId, String text, {String mode = 'queue'}) =>
+      _post(agentId, 'prompt', {'text': text, 'mode': mode});
 
   @override
   Future<AgentsResult> magicView(List<String> ids) =>
