@@ -302,3 +302,25 @@ on this computer only, never on the network.
 | `sessions` | `pick` (default), `auto`: Claude sessions started elsewhere join the deck when you add them, or by themselves |
 | `web` | `local` (default), `lan`: also serve the dashboard on your local network |
 | `hat` | `agentctl set hat <agent|folder> <shape> [colour]`, `none` or `auto`: the hat of a working folder (stored in `config.json` `"hats"`) |
+
+### Monitor Codex on an SSH host
+
+In the browser, open Settings → Agents and enter an SSH alias or user@host
+under **Codex SSH host**. The Codebox section on the dashboard shows recent
+sessions, their titles and their status. A dropped connection marks the last
+snapshot offline. The open dashboard retries automatically. Clear the host
+in Settings to stop monitoring.
+
+Install the read-only helper at
+`~/.local/bin/agents-deck-codex-reader` on the remote machine. Build it from
+`backend/` for the host's OS and CPU. For example, for 64-bit Intel Linux:
+
+```sh
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./cmd/agents-deck-codex-reader
+```
+
+The service opens a separate noninteractive SSH connection. It needs working
+key or agent authentication and a trusted key in the usual known_hosts file.
+The helper uses the remote account's Codex data directory and the same
+six-hour activity window as the default local deck. Only session IDs, titles
+and statuses travel back. The helper exits when its SSH connection closes.

@@ -10,6 +10,7 @@
 <script src="./theme-boot.js"></script>
 <link rel="stylesheet" href="./app.css">
 <script type="module" src="./app.js"></script>
+<script type="module" src="/ssh-codex.js"></script>
 </head>
 <body>
 <a class="skip" href="#grid">skip to agents</a>
@@ -62,6 +63,7 @@
       <span class="empty-art" id="empty-art" aria-hidden="true"></span>
       <p>no agents running · start one with <code>agentctl new</code></p>
     </div>
+    <section id="ssh-deck" hidden aria-label="Remote Codex sessions"><h2>Codebox</h2><p id="ssh-status"></p><ul id="ssh-sessions"></ul></section>
     <nav id="pagebar" class="pagebar" aria-label="pages" hidden></nav>
   </main>
   <aside id="detail" class="detail" aria-label="agent detail" hidden></aside>

@@ -10,6 +10,7 @@
 <script src="./theme-boot.js"></script>
 <link rel="stylesheet" href="./settings.css">
 <script type="module" src="./settings.js"></script>
+<script type="module" src="/ssh-codex.js"></script>
 </head>
 <body>
 <a class="skip" href="#main">skip to the settings</a>
@@ -46,6 +47,13 @@
     <section id="page-agents" data-page="agents" aria-labelledby="h-agents" hidden>
       <h1 id="h-agents">Agents</h1>
       <p class="sub">Where the deck looks for agents on this computer.</p>
+      <form id="ssh-form">
+        <label for="ssh-host">Codex SSH host</label>
+        <input id="ssh-host" autocomplete="off" placeholder="user@host" maxlength="253">
+        <button type="submit">Save host</button>
+        <p>Enter the host where the Deck reader is installed. Clear to disconnect.</p>
+        <p id="ssh-feedback" role="status"></p>
+      </form>
       <div class="body" id="agents-body" aria-busy="true"></div>
     </section>
 

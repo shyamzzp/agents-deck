@@ -128,6 +128,7 @@ type Admin struct {
 	// (default 2 minutes); CheckEvery is the time between checks (a day).
 	FirstCheck, CheckEvery time.Duration
 
+	ssh     sshWatch
 	cfgMu   sync.Mutex
 	jobs    jobs
 	ports   portHolds
@@ -156,6 +157,8 @@ func (a *Admin) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/v1/cli", a.cli)
 	mux.HandleFunc("POST /admin/v1/open-data-folder", a.openData)
 
+	mux.HandleFunc("GET /admin/v1/ssh-codex", a.sshDashboard)
+	mux.HandleFunc("POST /admin/v1/ssh-codex", a.sshDashboard)
 	mux.HandleFunc("GET /admin/v1/agents", a.agents)
 	mux.HandleFunc("POST /admin/v1/accounts/{name}/color", a.accountColor)
 
