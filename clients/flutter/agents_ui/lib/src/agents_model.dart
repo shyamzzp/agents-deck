@@ -588,6 +588,15 @@ class AgentsState {
     return 'last active ${d.inDays}d ago';
   }
 
+  /// "3h" since [a] was started, or "" while the deck doesn't know. The card
+  /// says how long the session has been up beside what it is doing.
+  String upText(Agent a, [DateTime? localNow]) {
+    final at = a.startedAt;
+    if (at == null) return '';
+    final d = serverNow(localNow).difference(at);
+    return d.isNegative ? '' : shortDuration(d);
+  }
+
   /// How long [a] has been in its current status (zero when unknown).
   Duration inStatus(Agent a, [DateTime? localNow]) {
     final since = a.statusSince;
