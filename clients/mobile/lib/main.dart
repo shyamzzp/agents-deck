@@ -50,6 +50,12 @@ const gridRange = [2, 3, 4, 5, 6];
 /// A tablet has the room for 25 agents at once.
 const defaultShape = DeckShape(5, 5);
 
+/// How thick the border around an agent card may be, in points. The browser
+/// deck offers the same steps (agents.tileBorderWidth) and, like it, this
+/// belongs to the device showing the deck rather than to the service.
+const borderWidths = [0.0, 0.5, 1.0, 2.0, 3.0];
+const defaultBorderWidth = 0.5;
+
 /// The deck's shape: one shape for every page, and any page that wants its
 /// own.
 ///
@@ -62,6 +68,7 @@ class DeckLayout {
     this.fallback = defaultShape,
     this.perPage = const {},
     this.attention,
+    this.border = defaultBorderWidth,
   });
 
   /// Every page that has not been given its own shape.
@@ -75,6 +82,9 @@ class DeckLayout {
   /// The "Needs you" screen's own shape, or null to follow [fallback].
   final DeckShape? attention;
 
+  /// The border around each agent card, in points; 0 draws none.
+  final double border;
+
   DeckShape shapeOf(int page) => perPage[page] ?? fallback;
 
   /// The "Needs you" screen, which is a page you swipe to like any other even
@@ -85,6 +95,14 @@ class DeckLayout {
     fallback: fallback,
     perPage: perPage,
     attention: shape == fallback ? null : shape,
+    border: border,
+  );
+
+  DeckLayout withBorder(double width) => DeckLayout(
+    fallback: fallback,
+    perPage: perPage,
+    attention: attention,
+    border: borderWidths.contains(width) ? width : border,
   );
 
   /// With a page set to [shape], or back to the default when they are equal.
@@ -95,7 +113,12 @@ class DeckLayout {
     } else {
       next[page] = shape;
     }
-    return DeckLayout(fallback: fallback, perPage: next, attention: attention);
+    return DeckLayout(
+      fallback: fallback,
+      perPage: next,
+      attention: attention,
+      border: border,
+    );
   }
 
   /// With the default set to [shape]; any page that was overridden to exactly
@@ -107,6 +130,7 @@ class DeckLayout {
         if (e.value != shape) e.key: e.value,
     },
     attention: attention == shape ? null : attention,
+    border: border,
   );
 
   /// The shapes [AgentsApp] wants: one per page, the last repeating. The
@@ -120,6 +144,7 @@ class DeckLayout {
   Map<String, Object?> toJson() => {
     'default': [fallback.columns, fallback.rows],
     if (attention case final a?) 'needsYou': [a.columns, a.rows],
+    'border': border,
     'pages': {
       for (final e in perPage.entries)
         '${e.key}': [e.value.columns, e.value.rows],
@@ -149,10 +174,14 @@ class DeckLayout {
       }
     }
     final att = _shape(j['needsYou']);
+    final b = j['border'];
     return DeckLayout(
       fallback: fallback,
       perPage: pages,
       attention: att == fallback ? null : att,
+      border: b is num && borderWidths.contains(b.toDouble())
+          ? b.toDouble()
+          : defaultBorderWidth,
     );
   }
 }
@@ -225,6 +254,9 @@ class _DeckAppState extends State<DeckApp> {
   Future<void> _setAttention(DeckShape shape) =>
       _store(_layout.withAttention(shape));
 
+  /// Sets the border drawn around every agent card.
+  Future<void> _setBorder(double width) => _store(_layout.withBorder(width));
+
   Future<void> _store(DeckLayout layout) async {
     final docs = _docs;
     if (docs == null) return;
@@ -263,6 +295,7 @@ class _DeckAppState extends State<DeckApp> {
               backButton: true,
               pageShapes: _layout.pageShapes,
               attentionShape: _layout.attentionShape,
+              cardBorderWidth: _layout.border,
               // A phone has no menu bar to hang settings off, so they get a
               // page of their own at the far left. The deck still opens.
               leadingPage: ConfigPage(
@@ -270,6 +303,7 @@ class _DeckAppState extends State<DeckApp> {
                 onPage: _setPage,
                 onFallback: _setFallback,
                 onAttention: _setAttention,
+                onBorder: _setBorder,
                 deck: _deckName(),
                 source: s,
               ),
@@ -488,6 +522,7 @@ class ConfigPage extends StatelessWidget {
     required this.onPage,
     required this.onFallback,
     required this.onAttention,
+    required this.onBorder,
     required this.source,
     this.deck,
   });
@@ -496,6 +531,7 @@ class ConfigPage extends StatelessWidget {
   final void Function(int page, DeckShape shape) onPage;
   final void Function(DeckShape shape) onFallback;
   final void Function(DeckShape shape) onAttention;
+  final void Function(double width) onBorder;
 
   /// Watched for how many pages the deck currently has.
   final AgentsSource source;
@@ -581,6 +617,20 @@ class ConfigPage extends StatelessWidget {
               shape: layout.attentionShape,
               onShape: onAttention,
             ),
+            const SizedBox(height: 22),
+            Text(
+              'card border',
+              style: DeckHud.mono(size: 14, color: DeckHud.ink),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'A line around each agent card. The browser deck has the same '
+              'setting; both belong to the screen showing the deck, not to '
+              'the service.',
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
+            ),
+            const SizedBox(height: 12),
+            _BorderRow(width: layout.border, onWidth: onBorder),
             const SizedBox(height: 22),
             Text(
               'Swipe right for the deck.',
@@ -722,6 +772,79 @@ class _Tap extends StatelessWidget {
           glyph,
           style: DeckHud.rm(16, on ? DeckHud.ink : DeckHud.dim),
         ),
+      ),
+    );
+  }
+}
+
+
+/// The card border: the same steps the browser deck offers.
+class _BorderRow extends StatelessWidget {
+  const _BorderRow({required this.width, required this.onWidth});
+
+  final double width;
+  final void Function(double) onWidth;
+
+  static String _label(double w) =>
+      w == 0 ? 'none' : (w % 1 == 0 ? '${w.toInt()} pt' : '$w pt');
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      color: DeckHud.panel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'thickness',
+                  style: DeckHud.mono(size: 13, color: DeckHud.ink),
+                ),
+              ),
+              Text(
+                _label(width),
+                style: DeckHud.mono(size: 12, color: DeckHud.accent),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              for (final w in borderWidths) ...[
+                if (w != borderWidths.first) const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    key: Key('border-$w'),
+                    onTap: () => onWidth(w),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      decoration: BoxDecoration(
+                        color: w == width ? DeckHud.ink : null,
+                        border: Border.all(
+                          color: w == width ? DeckHud.ink : DeckHud.dim,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          _label(w),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: DeckHud.mono(
+                            size: 12,
+                            color: w == width ? DeckHud.bg : DeckHud.ink,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }

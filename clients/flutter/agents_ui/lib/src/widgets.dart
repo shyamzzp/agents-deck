@@ -199,6 +199,54 @@ int deckPageOf(List<DeckShape> shapes, int slot) {
 int deckPageCount(List<DeckShape> shapes, Iterable<int> slots) =>
     slots.isEmpty ? 1 : deckPageOf(shapes, slots.reduce(math.max)) + 1;
 
+/// Marks a subtree as drawn in little space -- a phone in portrait -- so the
+/// house controls can draw shorter without every one of them measuring.
+class DeckCompact extends InheritedWidget {
+  const DeckCompact({super.key, required this.compact, required super.child});
+
+  final bool compact;
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<DeckCompact>()?.compact ??
+      false;
+
+  @override
+  bool updateShouldNotify(DeckCompact old) => old.compact != compact;
+}
+
+/// Rebuilds once a second, so a label holding elapsed time counts up without
+/// the whole deck being rebuilt for it.
+class Ticking extends StatefulWidget {
+  const Ticking({super.key, required this.builder, this.every = const Duration(seconds: 1)});
+
+  final WidgetBuilder builder;
+  final Duration every;
+
+  @override
+  State<Ticking> createState() => _TickingState();
+}
+
+class _TickingState extends State<Ticking> {
+  Timer? _t;
+
+  @override
+  void initState() {
+    super.initState();
+    _t = Timer.periodic(widget.every, (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _t?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context);
+}
+
 class DeckGrid extends StatelessWidget {
   const DeckGrid({
     super.key,

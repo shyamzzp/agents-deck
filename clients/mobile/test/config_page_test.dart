@@ -22,6 +22,7 @@ void main() {
             onPage: (p, sh) => log.add('page $p -> $sh'),
             onFallback: (sh) => log.add('all -> $sh'),
             onAttention: (sh) => log.add('needs you -> $sh'),
+            onBorder: (w) => log.add('border -> $w'),
           ),
         ),
       ),

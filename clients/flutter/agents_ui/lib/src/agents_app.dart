@@ -41,6 +41,7 @@ class AgentsApp extends StatefulWidget {
     this.backButton = false,
     this.pageShapes = const [DeckShape.panel],
     this.attentionShape,
+    this.cardBorderWidth = 0,
     this.leadingPage,
   }) : assert(pageShapes.length > 0, 'the deck needs a shape'),
        assert(
@@ -58,6 +59,12 @@ class AgentsApp extends StatefulWidget {
 
   /// A back button on agent cards, for hosts without an edge swipe.
   final bool backButton;
+
+  /// A border around each agent card, in points. 0 draws none, which is what
+  /// the desk panel and the boards do. The browser deck has the same knob
+  /// (agents.tileBorderWidth), and like that one it belongs to the display
+  /// showing the deck rather than to the service.
+  final double cardBorderWidth;
 
   /// The shape the "Needs you" screen is drawn in; null follows the first
   /// page. It holds the sixteen spots the service gives it whatever the shape
@@ -536,6 +543,7 @@ class _AgentsAppState extends State<AgentsApp> {
                           agent: a,
                           state: state,
                           onOpen: _open,
+                          borderWidth: widget.cardBorderWidth,
                         ),
                       )
                     : DeckGrid(
@@ -656,6 +664,7 @@ class _AgentsAppState extends State<AgentsApp> {
                       agent: a,
                       state: state,
                       onOpen: _open,
+                      borderWidth: widget.cardBorderWidth,
                     ),
                     leave: false,
                   )
@@ -664,6 +673,7 @@ class _AgentsAppState extends State<AgentsApp> {
                     agent: a,
                     state: state,
                     onOpen: _open,
+                    borderWidth: widget.cardBorderWidth,
                   ),
           )
         else
@@ -701,6 +711,7 @@ class AgentTile extends StatefulWidget {
     super.key,
     required this.agent,
     required this.state,
+    this.borderWidth = 0,
     required this.onOpen,
   });
 
@@ -708,6 +719,9 @@ class AgentTile extends StatefulWidget {
   final AgentsState state;
   final void Function(BuildContext tileContext, GlobalKey tileKey, Agent a)
   onOpen;
+
+  /// A border around the card, in points; 0 draws none.
+  final double borderWidth;
 
   @override
   State<AgentTile> createState() => _AgentTileState();
@@ -740,7 +754,15 @@ class _AgentTileState extends State<AgentTile> {
                     track: look.ringTrack,
                   ),
             child: Container(
-              color: fill,
+              decoration: BoxDecoration(
+                color: fill,
+                border: widget.borderWidth <= 0
+                    ? null
+                    : Border.all(
+                        color: pressed ? DeckHud.bg : look.meta,
+                        width: widget.borderWidth,
+                      ),
+              ),
               child: Stack(
                 children: [
                   if (look.stripes && !pressed)

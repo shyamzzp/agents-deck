@@ -382,9 +382,15 @@ void main() {
         s.inStatus(a, DateTime.utc(2030).add(const Duration(minutes: 38))),
         const Duration(minutes: 38),
       );
+      // Working carries its seconds: a number that moves says the link is
+      // alive.
       expect(
         agentPillLabel(a, s, DateTime.utc(2030, 1, 1, 0, 38)),
-        'running · 38m',
+        'running · 38m 0s',
+      );
+      expect(
+        agentPillLabel(a, s, DateTime.utc(2030, 1, 1, 0, 38, 7)),
+        'running · 38m 7s',
       );
     });
 
