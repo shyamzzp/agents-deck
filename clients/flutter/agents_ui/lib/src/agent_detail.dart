@@ -250,22 +250,30 @@ class _AgentDetailState extends State<AgentDetail> {
     _run('dismiss', () => widget.source.dismiss(a.id), closeOnOk: true);
   }
 
+  /// What the second action is called, which is also how wide it is drawn:
+  /// "hide" needs a quarter of what "tap again to stop" does.
+  String _removeLabel(Agent a) {
+    final exited = a.status == AgentStatus.exited;
+    final armed = _confirmStop && !exited;
+    return _flashKey == 'dismiss' && _flash == _Flash.sent
+        ? 'removed'
+        : a.codexThread || a.inApp
+        ? 'hide'
+        : a.watched
+        ? 'remove from deck'
+        : exited
+        ? 'remove'
+        : armed
+        ? 'tap again to stop'
+        : 'stop';
+  }
+
   Widget _removeButton(Agent a, (Color, Color)? flash) {
     final exited = a.status == AgentStatus.exited;
     final armed = _confirmStop && !exited;
     return AgentButton(
       key: const Key('agent-remove'),
-      label: _flashKey == 'dismiss' && _flash == _Flash.sent
-          ? 'removed'
-          : a.codexThread || a.inApp
-          ? 'hide'
-          : a.watched
-          ? 'remove from deck'
-          : exited
-          ? 'remove'
-          : armed
-          ? 'tap again to stop'
-          : 'stop',
+      label: _removeLabel(a),
       onTap: _busy ? null : () => _dismiss(a),
       // Sized by its label on a phone, so the points it does not spend on air
       // go to "focus terminal" beside it.
@@ -897,6 +905,31 @@ class _AgentDetailState extends State<AgentDetail> {
     ],
   ];
 
+  /// A button in the card's bottom row, given room in proportion to the text
+  /// it holds: "review in terminal" is eighteen characters and "stop" four,
+  /// so the row is divided 18 to 4 rather than by a number picked in advance.
+  /// Where the card is not compact (the desk panel) the old widths stand: a
+  /// main action that fills the row and 200 points for the one beside it.
+  ///
+  /// [context] has to come from inside the card, where DeckCompact is.
+  Widget _share(
+    BuildContext context,
+    String label,
+    Widget button, {
+    bool main = false,
+  }) {
+    if (!DeckCompact.of(context)) {
+      return main
+          ? Expanded(child: button)
+          : SizedBox(width: 200, child: button);
+    }
+    return Flexible(
+      flex: label.length.clamp(4, 40),
+      fit: FlexFit.tight,
+      child: button,
+    );
+  }
+
   /// The table's hairlines: the dim ink at a third, so the rules hold the
   /// figures apart without drawing the eye themselves.
   Color get _rule => DeckHud.dim.withValues(alpha: 0.35);
@@ -955,18 +988,21 @@ class _AgentDetailState extends State<AgentDetail> {
     final resumeFlash = _flashColors('resume', onAccent: false);
     final others = _otherAccounts(a);
     final armed = others.where((x) => x.name == _confirmHandoff).firstOrNull;
-    // On a phone the row's fixed widths do not fit: 68 for the back button,
-    // 200 for the second action and two 14pt gaps leave the main action about
-    // 60 points, most of which is its own padding. There the row is divided
-    // by share instead, three parts to two.
-    final tight = DeckCompact.of(context);
-    // On a phone the second action is as wide as its own label and no wider,
-    // and the main action takes everything that leaves. Flexible rather than
-    // a bare child so a long label ("tap again to stop") still shrinks rather
-    // than running the row off the card.
-    Widget second(Widget button) => tight
-        ? Flexible(fit: FlexFit.loose, child: button)
-        : SizedBox(width: 200, child: button);
+    final focusLabel = _flashKey == 'focus' && _flash == _Flash.sent
+        ? 'focused'
+        : a.codexThread
+        ? 'open in codex'
+        : a.inApp
+        ? 'open in ${a.app}'
+        : a.hungry
+        ? 'review in terminal'
+        : 'focus terminal';
+    final interruptLabel = _flashKey == 'interrupt' && _flash == _Flash.sent
+        ? 'sent'
+        : 'interrupt';
+    final resumeLabel = _flashKey == 'resume' && _flash == _Flash.sent
+        ? 'resuming'
+        : 'resume';
     return _card(
       fill: DeckHud.bg,
       child: Column(
@@ -1176,84 +1212,92 @@ class _AgentDetailState extends State<AgentDetail> {
                 ),
                 for (final to in others) ...[
                   const SizedBox(width: 14),
-                  if (tight)
-                    Expanded(child: _handoffButton(a, to))
-                  else
-                    SizedBox(width: 240, child: _handoffButton(a, to)),
+                  Builder(
+                    builder: (context) => DeckCompact.of(context)
+                        ? Expanded(child: _handoffButton(a, to))
+                        : SizedBox(width: 240, child: _handoffButton(a, to)),
+                  ),
                 ],
               ],
             ),
           ],
           const SizedBox(height: 14),
-          Row(
-            children: [
-              ..._back(
-                ink: DeckHud.ink,
-                outline: DeckHud.dim,
-                pressedFill: DeckHud.ink,
-                pressedInk: DeckHud.bg,
-              ),
-              if (!exited)
-                Expanded(
-                  child: AgentButton(
-                    key: const Key('agent-focus'),
-                    label: _flashKey == 'focus' && _flash == _Flash.sent
-                        ? 'focused'
-                        : a.codexThread
-                        ? 'open in codex'
-                        : a.inApp
-                        ? 'open in ${a.app}'
-                        : a.hungry
-                        ? 'review in terminal'
-                        : 'focus terminal',
-                    onTap: _busy ? null : () => _focus(a),
-                    fill: focusFlash?.$1 ?? DeckHud.ink,
-                    ink: focusFlash?.$2 ?? DeckHud.bg,
-                    outline: focusFlash?.$1 ?? DeckHud.ink,
-                    pressedFill: DeckHud.accent,
-                    pressedInk: DeckHud.bg,
-                  ),
+          // Built here, not above: DeckCompact is put in the tree by _card,
+          // which is below this method, so a flag read in _overview itself is
+          // always false -- which is how this row kept the desk panel's fixed
+          // widths on a phone.
+          Builder(
+            builder: (context) => Row(
+              children: [
+                ..._back(
+                  ink: DeckHud.ink,
+                  outline: DeckHud.dim,
+                  pressedFill: DeckHud.ink,
+                  pressedInk: DeckHud.bg,
                 ),
-              if (running && (!a.external || a.inApp)) ...[
-                const SizedBox(width: 14),
-                second(
-                  AgentButton(
-                    key: const Key('agent-interrupt'),
-                    label: _flashKey == 'interrupt' && _flash == _Flash.sent
-                        ? 'sent'
-                        : 'interrupt',
-                    onTap: _busy ? null : () => _interrupt(a),
-                    fill: intFlash?.$1 ?? const Color(0x00000000),
-                    ink: intFlash?.$2 ?? DeckHud.ink,
-                    outline: intFlash?.$1 ?? DeckHud.dim,
-                    pressedFill: DeckHud.ink,
-                    pressedInk: DeckHud.bg,
+                if (!exited)
+                  _share(
+                    context,
+                    focusLabel,
+                    main: true,
+                    AgentButton(
+                      key: const Key('agent-focus'),
+                      label: focusLabel,
+                      onTap: _busy ? null : () => _focus(a),
+                      fill: focusFlash?.$1 ?? DeckHud.ink,
+                      ink: focusFlash?.$2 ?? DeckHud.bg,
+                      outline: focusFlash?.$1 ?? DeckHud.ink,
+                      pressedFill: DeckHud.accent,
+                      pressedInk: DeckHud.bg,
+                    ),
                   ),
-                ),
-              ] else if (exited && a.resumable) ...[
-                Expanded(
-                  child: AgentButton(
-                    key: const Key('agent-resume'),
-                    label: _flashKey == 'resume' && _flash == _Flash.sent
-                        ? 'resuming'
-                        : 'resume',
-                    onTap: _busy ? null : () => _resume(a),
-                    fill: resumeFlash?.$1 ?? DeckHud.ink,
-                    ink: resumeFlash?.$2 ?? DeckHud.bg,
-                    outline: resumeFlash?.$1 ?? DeckHud.ink,
-                    pressedFill: DeckHud.accent,
-                    pressedInk: DeckHud.bg,
+                if (running && (!a.external || a.inApp)) ...[
+                  const SizedBox(width: 14),
+                  _share(
+                    context,
+                    interruptLabel,
+                    AgentButton(
+                      key: const Key('agent-interrupt'),
+                      label: interruptLabel,
+                      onTap: _busy ? null : () => _interrupt(a),
+                      fill: intFlash?.$1 ?? const Color(0x00000000),
+                      ink: intFlash?.$2 ?? DeckHud.ink,
+                      outline: intFlash?.$1 ?? DeckHud.dim,
+                      pressedFill: DeckHud.ink,
+                      pressedInk: DeckHud.bg,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 14),
-                second(_removeButton(a, rmFlash)),
-              ] else if (exited)
-                Expanded(child: _removeButton(a, rmFlash))
-              else ...[
-                const SizedBox(width: 14),
-                second(_removeButton(a, rmFlash)),
+                ] else if (exited && a.resumable) ...[
+                  _share(
+                    context,
+                    resumeLabel,
+                    main: true,
+                    AgentButton(
+                      key: const Key('agent-resume'),
+                      label: resumeLabel,
+                      onTap: _busy ? null : () => _resume(a),
+                      fill: resumeFlash?.$1 ?? DeckHud.ink,
+                      ink: resumeFlash?.$2 ?? DeckHud.bg,
+                      outline: resumeFlash?.$1 ?? DeckHud.ink,
+                      pressedFill: DeckHud.accent,
+                      pressedInk: DeckHud.bg,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  _share(context, _removeLabel(a), _removeButton(a, rmFlash)),
+                ] else if (exited)
+                  _share(
+                    context,
+                    _removeLabel(a),
+                    main: true,
+                    _removeButton(a, rmFlash),
+                  )
+                else ...[
+                  const SizedBox(width: 14),
+                  _share(context, _removeLabel(a), _removeButton(a, rmFlash)),
+                ],
               ],
-            ],
+            ),
           ),
         ],
       ),
