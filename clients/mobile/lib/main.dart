@@ -541,28 +541,16 @@ class ConfigPage extends StatelessWidget {
             ),
             const SizedBox(height: 22),
             Text(
-              'the pages you can swipe to',
+              pages == 1 ? 'the deck: one page' : 'the deck: $pages pages',
               style: DeckHud.mono(size: 14, color: DeckHud.ink),
             ),
             const SizedBox(height: 6),
             Text(
-              pages == 1
-                  ? 'Needs you, then one page of the deck. Each can be given a '
-                        'grid of its own; the rest stay as above. The deck '
-                        'gains a page when the ones it has are full.'
-                  : 'Needs you, then $pages pages of the deck. Each can be '
-                        'given a grid of its own; the rest stay as above.',
+              'Each page can be given a grid of its own; the rest stay as '
+              'above. The deck gains a page when the ones it has are full.',
               style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
             const SizedBox(height: 12),
-            _ShapeRow(
-              key: const Key('shape-row-attention'),
-              title: 'needs you',
-              note: layout.attention == null ? 'as above' : 'its own',
-              shape: layout.attentionShape,
-              onShape: onAttention,
-            ),
-            const SizedBox(height: 8),
             for (var i = 0; i < pages; i++) ...[
               if (i > 0) const SizedBox(height: 8),
               _ShapeRow(
@@ -575,8 +563,27 @@ class ConfigPage extends StatelessWidget {
             ],
             const SizedBox(height: 22),
             Text(
-              'Swipe right for the deck. The page before its first one holds '
-              'the agents that need you.',
+              'needs you',
+              style: DeckHud.mono(size: 14, color: DeckHud.ink),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'The screen before the deck, holding the agents waiting on you. '
+              'It is not one of the deck\u2019s pages and holds sixteen spots '
+              'whatever grid it is drawn in.',
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
+            ),
+            const SizedBox(height: 12),
+            _ShapeRow(
+              key: const Key('shape-row-attention'),
+              title: 'needs you',
+              note: layout.attention == null ? 'as above' : 'its own',
+              shape: layout.attentionShape,
+              onShape: onAttention,
+            ),
+            const SizedBox(height: 22),
+            Text(
+              'Swipe right for the deck.',
               style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
           ],
