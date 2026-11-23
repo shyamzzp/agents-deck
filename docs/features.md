@@ -303,7 +303,7 @@ on this computer only, never on the network.
 | `web` | `local` (default), `lan`: also serve the dashboard on your local network |
 | `hat` | `agentctl set hat <agent|folder> <shape> [colour]`, `none` or `auto`: the hat of a working folder (stored in `config.json` `"hats"`) |
 
-### Monitor Codex on an SSH host
+### Use Codex on an SSH host
 
 In the browser, open Settings → Agents and enter an SSH alias or user@host
 under **Codex SSH host**. The Codebox section on the dashboard shows recent
@@ -311,7 +311,7 @@ sessions, their titles and their status. A dropped connection marks the last
 snapshot offline. The open dashboard retries automatically. Clear the host
 in Settings to stop monitoring.
 
-Install the read-only helper at
+Install the helper at
 `~/.local/bin/agents-deck-codex-reader` on the remote machine. Build it from
 `backend/` for the host's OS and CPU. For example, for 64-bit Intel Linux:
 
@@ -322,5 +322,23 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./cmd/agents-deck-codex-reader
 The service opens a separate noninteractive SSH connection. It needs working
 key or agent authentication and a trusted key in the usual known_hosts file.
 The helper uses the remote account's Codex data directory and the same
-six-hour activity window as the default local deck. Only session IDs, titles
-and statuses travel back. The helper exits when its SSH connection closes.
+six-hour activity window as the default local deck. The dashboard receives thread details including the last prompt, working
+folder, model, activity and usage when Codex records them. The helper exits when its SSH connection closes.
+
+Use the same SSH configuration from the terminal:
+
+```sh
+agentctl config --ssh             # show the configured host
+agentctl config --ssh user@host   # save an SSH destination or alias
+agentctl ls --ssh                 # all unarchived sessions, newest first
+agentctl ls --ssh ID              # details for a full or unique partial ID
+agentctl attach --ssh ID          # interactive remote Codex TUI
+agentctl config --ssh --clear     # remove the saved host
+```
+
+The full listing requires the remote Codex state database and sqlite3. Older
+threads appear as saved. Inspect a thread to read its rollout details, or use
+`ls --ssh --json` to consume the list in a script. Expand a recent tile in the
+browser to see its details. On macOS, **Open in Terminal** opens the same
+interactive SSH session. Attach runs the remote installation of
+`codex resume` with the exact thread ID from its recorded working directory.

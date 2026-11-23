@@ -6,23 +6,21 @@ import (
 	"encoding/json"
 	"net/http"
 	"os/exec"
-	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/brushknight/agents-deck/backend/internal/sshdeck"
 )
 
-type sshSession struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
-}
-
 type sshState struct {
-	Host       string       `json:"host"`
-	Connection string       `json:"connection"`
-	Sessions   []sshSession `json:"sessions"`
-	LastSeen   time.Time    `json:"lastSeen"`
+	Terminal   bool          `json:"terminal"`
+	Host       string        `json:"host"`
+	Connection string        `json:"connection"`
+	Sessions   []model.Agent `json:"sessions"`
+	LastSeen   time.Time     `json:"lastSeen"`
 }
 
 type sshWatch struct {
@@ -32,8 +30,6 @@ type sshWatch struct {
 	retry      time.Time
 	generation uint64
 }
-
-var sshTarget = regexp.MustCompile(`^([A-Za-z0-9_][A-Za-z0-9_.-]*@)?[A-Za-z0-9][A-Za-z0-9.-]*$`)
 
 func (a *Admin) sshDashboard(w http.ResponseWriter, r *http.Request) {
 	m := &a.ssh
@@ -48,7 +44,7 @@ func (a *Admin) sshDashboard(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		host := strings.TrimSpace(*body.Host)
-		if len(host) > 253 || host != "" && !sshTarget.MatchString(host) {
+		if len(host) > 253 || host != "" && !sshdeck.ValidHost(host) {
 			writeErr(w, 400, "use an SSH alias or user@hostname")
 			return
 		}
@@ -67,7 +63,7 @@ func (a *Admin) sshDashboard(w http.ResponseWriter, r *http.Request) {
 		m.retry = time.Time{}
 		m.state = sshState{Host: host}
 	}
-	if host != "" && sshTarget.MatchString(host) && m.cancel == nil && !time.Now().Before(m.retry) && !a.Demo {
+	if host != "" && sshdeck.ValidHost(host) && m.cancel == nil && !time.Now().Before(m.retry) && !a.Demo {
 		ctx, cancel := context.WithCancel(context.Background())
 		m.cancel = cancel
 		if m.state.Connection == "" {
@@ -76,6 +72,7 @@ func (a *Admin) sshDashboard(w http.ResponseWriter, r *http.Request) {
 		go m.run(ctx, host, m.generation)
 	}
 	state := m.state
+	state.Terminal = runtime.GOOS == "darwin"
 	if state.Connection == "online" && time.Since(state.LastSeen) > 30*time.Second {
 		state.Connection = "offline"
 	}
@@ -84,12 +81,7 @@ func (a *Admin) sshDashboard(w http.ResponseWriter, r *http.Request) {
 
 func (m *sshWatch) run(ctx context.Context, host string, generation uint64) {
 	// No inherited tunnels, agent forwarding or interactive prompts.
-	cmd := exec.CommandContext(ctx, "ssh", "-T", "-n", "-oBatchMode=yes",
-		"-oStrictHostKeyChecking=yes", "-oUserKnownHostsFile=~/.ssh/known_hosts",
-		"-oClearAllForwardings=yes", "-oForwardAgent=no", "-oForwardX11=no",
-		"-oControlPath=none", "-oPermitLocalCommand=no", "-oConnectTimeout=8",
-		"-oServerAliveInterval=10", "-oServerAliveCountMax=2", "--", host,
-		"exec \"$HOME/.local/bin/agents-deck-codex-reader\"")
+	cmd, cmdErr := sshdeck.Command(ctx, host, "watch", "")
 	defer func() {
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -100,6 +92,9 @@ func (m *sshWatch) run(ctx context.Context, host string, generation uint64) {
 			m.retry = time.Now().Add(8 * time.Second)
 		}
 	}()
+	if cmdErr != nil {
+		return
+	}
 	out, err := cmd.StdoutPipe()
 	if err != nil || cmd.Start() != nil {
 		return
@@ -109,9 +104,9 @@ func (m *sshWatch) run(ctx context.Context, host string, generation uint64) {
 	timer := time.AfterFunc(40*time.Second, func() { _ = cmd.Process.Kill() })
 	defer timer.Stop()
 	scanner := bufio.NewScanner(out)
-	scanner.Buffer(make([]byte, 4096), 128<<10)
+	scanner.Buffer(make([]byte, 4096), 2<<20)
 	for scanner.Scan() {
-		var sessions []sshSession
+		var sessions []model.Agent
 		if err := json.Unmarshal(scanner.Bytes(), &sessions); err != nil || len(sessions) > 32 {
 			break
 		}
@@ -127,4 +122,55 @@ func (m *sshWatch) run(ctx context.Context, host string, generation uint64) {
 		m.mu.Unlock()
 	}
 	_ = cmd.Process.Kill()
+}
+
+// Only the signed-in local dashboard can request a Terminal window.
+// Pass each SSH argument as a separate AppleScript parameter.
+func (a *Admin) sshAttach(w http.ResponseWriter, r *http.Request) {
+	if runtime.GOOS != "darwin" {
+		writeErr(w, 400, "use agentctl attach --ssh from a terminal")
+		return
+	}
+	var req struct{ Host, ID string }
+	if readBody(r, 1024, &req) != nil {
+		writeErr(w, 400, "invalid session")
+		return
+	}
+	a.ssh.mu.Lock()
+	snapshot := a.ssh.state
+	a.ssh.mu.Unlock()
+	found := false
+	for _, s := range snapshot.Sessions {
+		if s.ID == req.ID {
+			found = true
+			break
+		}
+	}
+	if !found || snapshot.Host != req.Host || snapshot.Connection != "online" || time.Since(snapshot.LastSeen) > 30*time.Second {
+		writeErr(w, 409, "refresh the deck and select an online session")
+		return
+	}
+	cmd, err := sshdeck.Command(r.Context(), req.Host, "attach", req.ID)
+	if err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	const script = `on run args
+ set commandText to ""
+ repeat with arg in args
+  set commandText to commandText & " " & quoted form of (contents of arg)
+ end repeat
+ tell application "Terminal"
+  do script commandText
+  activate
+ end tell
+end run`
+	args := append([]string{"-e", script, "--", cmd.Path}, cmd.Args[1:]...)
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	if err := exec.CommandContext(ctx, "/usr/bin/osascript", args...).Run(); err != nil {
+		writeErr(w, 500, "could not open Terminal; run agentctl attach --ssh "+req.ID)
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"opened": true})
 }

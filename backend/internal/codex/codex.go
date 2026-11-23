@@ -14,6 +14,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -65,14 +66,30 @@ func RecentThreads(window time.Duration) ([]Thread, error) {
 		return nil, nil
 	}
 	since := time.Now().Add(-window).UnixMilli()
-	q := "select id, rollout_path, cwd, coalesce(title,'') as title, coalesce(name,'') as name, " +
-		"coalesce(git_branch,'') as git_branch, coalesce(model,'') as model, coalesce(updated_at_ms,0) as updated_at_ms " +
-		"from threads where coalesce(archived,0)=0 and coalesce(updated_at_ms,0) >= " + itoa(since) +
-		" order by updated_at_ms desc limit 32"
 	bin := sqlite3()
 	if bin == "" { // no sqlite3 (Windows, a minimal Linux): the rollout logs alone
 		return rolloutThreads(filepath.Join(Home(), "sessions"), window, time.Now())
 	}
+	return queryThreads(bin, db, " and coalesce(updated_at_ms,0) >= "+itoa(since)+" order by updated_at_ms desc limit 32")
+}
+
+// AllThreads reads the unarchived history, including sessions outside the live window.
+func AllThreads() ([]Thread, error) {
+	db := stateDB()
+	if db == "" {
+		return nil, fmt.Errorf("Codex session database is missing")
+	}
+	bin := sqlite3()
+	if bin == "" {
+		return nil, fmt.Errorf("sqlite3 is required to list saved Codex sessions")
+	}
+	return queryThreads(bin, db, " order by updated_at_ms desc, id")
+}
+
+func queryThreads(bin, db, tail string) ([]Thread, error) {
+	q := "select id, rollout_path, cwd, coalesce(title,'') as title, coalesce(name,'') as name, " +
+		"coalesce(git_branch,'') as git_branch, coalesce(model,'') as model, coalesce(updated_at_ms,0) as updated_at_ms " +
+		"from threads where coalesce(archived,0)=0" + tail
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, "-readonly", "-json", db, q)

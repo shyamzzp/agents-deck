@@ -70,6 +70,9 @@ const usage = `agentctl: runs and controls agents deck
                                  lists it first, asks before more than 5
   agentctl attach <agent>        show an agent in this terminal (detach: ctrl-q); one that isn't
                                  running is brought back first (it asks)
+  agentctl config --ssh [user@host|--clear]   show, set or clear the SSH host
+  agentctl ls --ssh [--json] [ID]   list unarchived remote Codex threads, or inspect one
+  agentctl attach --ssh ID        open the selected thread in Codex on the SSH host
   agentctl ls [--sort active]    list agents (ACTIVE: its latest message sent or received);
                                  --sort active: most recently active first
   agentctl rm <agent>            stop and forget an agent
@@ -195,6 +198,8 @@ func main() {
 		err = completionCmd(args)
 	case "set":
 		err = setCmd(args)
+	case "config":
+		err = sshConfig(args)
 	case "get":
 		err = getCmd(args)
 	case "__complete":
@@ -387,6 +392,13 @@ func reorder(args []string, takesValue map[string]bool) []string {
 }
 
 func attach(args []string) error {
+	if len(args) > 0 && args[0] == "--ssh" {
+		if len(args) != 2 {
+			return errors.New("usage: agentctl attach --ssh ID")
+		}
+		return runSSH(context.Background(), "attach", args[1], nil)
+	}
+
 	if len(args) != 1 {
 		return errors.New("usage: agentctl attach <agent>   (an id, or its name or part of it)")
 	}
@@ -617,9 +629,17 @@ func reopen() error {
 
 func list(args []string) error {
 	fs := flag.NewFlagSet("ls", flag.ContinueOnError)
+	remote := fs.Bool("ssh", false, "list remote Codex sessions")
+	asJSON := fs.Bool("json", false, "print remote sessions as JSON")
 	sortBy := fs.String("sort", "position", "order: position (as on the deck) or active (most recently active first)")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *remote {
+		return listSSH(fs.Args(), *sortBy, *asJSON)
+	}
+	if *asJSON {
+		return errors.New("--json requires --ssh")
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("agentctl ls takes no names: %q (try agentctl ls --sort active)", fs.Arg(0))
@@ -628,12 +648,16 @@ func list(args []string) error {
 	if err != nil {
 		return err
 	}
-	switch *sortBy {
+	return printList(s, *sortBy)
+}
+
+func printList(s model.State, sortBy string) error {
+	switch sortBy {
 	case "position", "slot":
 	case "active":
 		sort.SliceStable(s.Agents, func(i, j int) bool { return s.Agents[i].LastActive.After(s.Agents[j].LastActive) })
 	default:
-		return fmt.Errorf("--sort %s: use position or active", *sortBy)
+		return fmt.Errorf("--sort %s: use position or active", sortBy)
 	}
 	if len(s.Agents) == 0 {
 		fmt.Println("no agents — start one with `agentctl new`")

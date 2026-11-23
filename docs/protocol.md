@@ -382,7 +382,8 @@ admin package checks this table against its own routes (`TestDocsListEveryCall`)
 | POST | `/admin/v1/restart` | – | `202`: restarts the service through what starts it at login |
 | POST | `/admin/v1/cli` | `{"installed": true\|false}` | adds or removes `~/.local/bin/agentctl` (a link to this agentctl; never a file it didn't make) |
 | POST | `/admin/v1/open-data-folder` | – | `204`: shows the data folder in the file manager on this computer |
-| GET | `/admin/v1/ssh-codex` | SSH host, connection status and recent read-only remote Codex session summaries. |
+| POST | `/admin/v1/ssh-codex/attach` | Open a recent remote session in macOS Terminal using its host and exact thread ID. |
+| GET | `/admin/v1/ssh-codex` | SSH host, connection status and recent Codex session details. |
 | POST | `/admin/v1/ssh-codex` | Set the SSH destination with `host`, or clear it with an empty string. |
 | GET | `/admin/v1/agents` | – | `{"tools": [{"id", "name", "found", "on", "agents", "state", "detail", "note"}], "accounts": [{"name", "color", "default", "agents", "costUsd"}], "colors"}` |
 | POST | `/admin/v1/accounts/{name}/color` | `{"color"}` | `204` |
