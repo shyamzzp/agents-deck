@@ -4,7 +4,9 @@
 
 import { buildPicker, themes, followThemeChanges } from './theme.js';
 
-const PAGES = ['general', 'agents', 'appearance', 'boards', 'network', 'updates', 'troubleshoot', 'about'];
+import { titleWidth, titleWidthKey, titleWidths } from './layout.js';
+
+const PAGES = ['general', 'agents', 'appearance', 'layout', 'boards', 'network', 'updates', 'troubleshoot', 'about'];
 const SCOPES = [
   { value: 'view', text: 'look only' },
   { value: 'act', text: 'can answer' },
@@ -1725,11 +1727,24 @@ function drawAppearance() {
   return buildPicker(themeList, { h, row });
 }
 
+function drawLayout() {
+  const width = titleWidth();
+  const select = h('select', {
+    id: 'drawer-title-width',
+    onchange: e => {
+      try { localStorage.setItem(titleWidthKey, e.target.value); }
+      catch { e.target.value = String(width); toast('Could not save the title width in this browser.', true); }
+    },
+  }, titleWidths.map(n => h('option', { value: n, selected: n === width }, n + '%')));
+  return row(h('label', { for: 'drawer-title-width' }, 'Session title width'),
+    'Percentage of the session drawer available to the title in this browser.', [select]);
+}
+
 const DRAW = {
   general: ['general-body', drawGeneral], agents: ['agents-body', drawAgents], boards: ['boards-body', drawBoards],
   newboard: ['newboard-body', drawNewBoard], flash: ['newboard-body', drawFlash], network: ['network-body', drawNetwork],
   updates: ['updates-body', drawUpdates], troubleshoot: ['troubleshoot-body', drawTroubleshoot], about: ['about-body', drawAbout],
-  appearance: ['appearance-body', drawAppearance],
+  appearance: ['appearance-body', drawAppearance], layout: ['layout-body', drawLayout],
 };
 
 // draw redraws the open page. The timer's redraw (force false) leaves a page
@@ -1792,7 +1807,7 @@ async function refresh(force) {
   }
   showSystem(sys);
   const busyUI = S.open.more || S.open.wifi || S.pairing || S.confirmLoginOff;
-  if (!force && (busyUI || ['general', 'about', 'appearance'].includes(page))) return;
+  if (!force && (busyUI || ['general', 'about', 'appearance', 'layout'].includes(page))) return;
   await loadAll(...needs(page), ...extras(page));
   if (page === S.page) draw(false);
 }

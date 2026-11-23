@@ -5,6 +5,16 @@
 import { needsYou as needsYouScreen, packed, simulate, SPOTS } from './attention.js';
 
 import { followThemeChanges } from './theme.js';
+import { titleWidth, titleWidthKey } from './layout.js';
+
+function applyTitleWidth() {
+  document.documentElement.style.setProperty('--drawer-title-width', titleWidth() + '%');
+}
+applyTitleWidth();
+addEventListener('pageshow', applyTitleWidth);
+addEventListener('storage', e => {
+  if (e.key === titleWidthKey || e.key === null) applyTitleWidth();
+});
 
 const $ = (id) => document.getElementById(id);
 followThemeChanges(); // Settings is another page: pick its theme change up live
@@ -1437,11 +1447,12 @@ function header(a) {
   const ai = h('span', { class: 'd-ai' });
   const chip = h('span', { class: 'chip', title: a.tool, 'aria-label': `tool: ${a.tool}`, role: 'img' });
   const acct = acctLabel(chip);
+  const title = h('h2', { class: 'd-title', id: 'd-title', tabindex: '-1', text: a.title });
   const el = h('div', { class: 'd-top' },
-    h('div', { class: 'd-id' }, h('div', { class: 'd-mascots' }, spr, crew), h('h2', { class: 'd-title', id: 'd-title', tabindex: '-1', text: a.title }), ai),
+    h('div', { class: 'd-mascots' }, spr, crew),
     h('div', { class: 'd-right' },
-      h('button', { type: 'button', class: 'd-close', 'aria-label': 'close panel (esc)', onclick: closeDetail }, closeIcon()),
-      h('div', { class: `d-pillrow tool-${a.tool}` }, chip, pill),
+      h('div', { class: `d-pillrow tool-${a.tool}` }, chip, pill,
+        h('button', { type: 'button', class: 'd-close', 'aria-label': 'close panel (esc)', onclick: closeDetail }, closeIcon())),
       acct.el));
   setSprite(spr, poseOf(a), a.tool, a.hat);
   crewUpdate(crew, a);
@@ -1457,7 +1468,7 @@ function header(a) {
     spr.addEventListener('click', toggle);
     spr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
   }
-  return { el: h('div', { class: 'd-head' }, el, hats?.el), update: (x) => { setText(el.querySelector('.d-title'), x.title); acct.update(x); setText(pill, pillText(x)); setText(ai, x.aiTitle || ''); ai.hidden = !x.aiTitle; crewUpdate(crew, x); setSprite(spr, poseOf(x), x.tool, x.hat); hats?.update(x); } };
+  return { el: h('div', { class: 'd-head' }, el, h('div', { class: 'd-id' }, title, ai), hats?.el), update: (x) => { setText(title, x.title); acct.update(x); setText(pill, pillText(x)); setText(ai, x.aiTitle || ''); ai.hidden = !x.aiTitle; crewUpdate(crew, x); setSprite(spr, poseOf(x), x.tool, x.hat); hats?.update(x); } };
 }
 
 function postAction(a, path, body) {
