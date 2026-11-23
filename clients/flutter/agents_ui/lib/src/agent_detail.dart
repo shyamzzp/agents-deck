@@ -894,6 +894,10 @@ class _AgentDetailState extends State<AgentDetail> {
     ],
   ];
 
+  /// The table's hairlines: the dim ink at a third, so the rules hold the
+  /// figures apart without drawing the eye themselves.
+  Color get _rule => DeckHud.dim.withValues(alpha: 0.35);
+
   Widget _label(String text, Color color) =>
       Text(text, style: DeckHud.mono(size: 14, color: color));
 
@@ -1016,11 +1020,13 @@ class _AgentDetailState extends State<AgentDetail> {
           TickBar(value: a.contextFraction, color: DeckHud.ink),
           const SizedBox(height: 16),
           // Four figures as a table: one hairline round the lot and one
-          // between each pair, so a column is a cell rather than a gap.
+          // between each pair, so a column is a cell rather than a gap. Half
+          // a point and a third of the dim ink: a rule has to be found rather
+          // than seen, or it reads as heavier than the figures it holds.
           DecoratedBox(
             key: const Key('agent-figures'),
             decoration: BoxDecoration(
-              border: Border.all(color: DeckHud.dim, width: 1),
+              border: Border.all(color: _rule, width: 0.5),
             ),
             child: IntrinsicHeight(
               child: Row(
@@ -1042,14 +1048,15 @@ class _AgentDetailState extends State<AgentDetail> {
                           border: i == 0
                               ? null
                               : Border(
-                                  left: BorderSide(
-                                    color: DeckHud.dim,
-                                    width: 1,
-                                  ),
+                                  left: BorderSide(color: _rule, width: 0.5),
                                 ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          // The label at the top of the cell and the figure on
+                          // its floor: a cell whose label wraps to two lines
+                          // would otherwise lift its figure above the rest.
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             _label(label, DeckHud.dim),
                             const SizedBox(height: 6),
@@ -1298,15 +1305,21 @@ class _AgentDetailState extends State<AgentDetail> {
                     text: ' · ',
                     style: TextStyle(color: DeckHud.dim),
                   ),
-                  TextSpan(text: act.detail),
+                  // What the call touches is small print: a command or a path
+                  // runs long, and the verb is what is read first.
+                  TextSpan(
+                    text: act.detail,
+                    style: DeckHud.rm(13, DeckHud.ink),
+                  ),
                 ],
               ],
             ),
-            // Two lines: a path or a command is the thing you came to read,
-            // and one line of a phone's width cuts most of them off.
-            maxLines: 2,
+            // Three lines of it, now that it is smaller: a path or a command
+            // is the thing you came to read, and one line of a phone's width
+            // cuts most of them off.
+            maxLines: 3,
             overflow: TextOverflow.ellipsis,
-            style: DeckHud.rm(20, DeckHud.ink),
+            style: DeckHud.rm(17, DeckHud.ink),
           ),
         );
       case AgentStatus.error:
