@@ -1058,7 +1058,11 @@ class _AgentDetailState extends State<AgentDetail> {
                   ].indexed)
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
+                        // Even on all four sides: the cells are a quarter of
+                        // the row each, so uneven padding shows up as one of
+                        // them (turns, whose figure is shortest) looking like
+                        // it has been pushed left.
+                        padding: const EdgeInsets.all(11),
                         decoration: BoxDecoration(
                           border: i == 0
                               ? null
@@ -1067,7 +1071,11 @@ class _AgentDetailState extends State<AgentDetail> {
                                 ),
                         ),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          // Centred in the cell, not pushed to its left edge:
+                          // "turns" holds the shortest figure of the four, so
+                          // left-aligned it looked as though its cell had been
+                          // given all its room on the right.
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           // The label at the top of the cell and the figure on
                           // its floor: a cell whose label wraps to two lines
                           // would otherwise lift its figure above the rest.
@@ -1110,14 +1118,15 @@ class _AgentDetailState extends State<AgentDetail> {
           const SizedBox(height: 8),
           // As many lines of it as fit, and never none: what the agent was
           // last asked is half of why the card is open. On a phone that
-          // leaves one line, clipped rather than dropped.
+          // leaves one line, clipped rather than dropped. 15, not 17: it is
+          // the longest text on the card.
           Expanded(
             child: ClipRect(
               child: LayoutBuilder(
                 builder: (context, box) {
                   const style = TextStyle(height: 1.45);
                   // Keep clear of the footer under it.
-                  final lines = ((box.maxHeight - 10) / (17 * 1.45))
+                  final lines = ((box.maxHeight - 10) / (15 * 1.45))
                       .floor()
                       .clamp(1, 4);
                   return Text(
@@ -1125,7 +1134,7 @@ class _AgentDetailState extends State<AgentDetail> {
                     key: const Key('agent-last-prompt'),
                     maxLines: lines,
                     overflow: TextOverflow.ellipsis,
-                    style: DeckHud.rm(17, DeckHud.ink).merge(style),
+                    style: DeckHud.rm(15, DeckHud.ink).merge(style),
                   );
                 },
               ),
