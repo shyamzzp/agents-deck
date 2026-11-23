@@ -29,3 +29,18 @@ func TestForegroundSSH(t *testing.T) {
 		}
 	}
 }
+
+func TestLocalCodexPaneTitles(t *testing.T) {
+	names := map[string]string{"Work item": "session", "Duplicate": "", "Work item extended": "other"}
+	for title, want := range map[string]string{
+		"Work item":                      "session",
+		`⠧ Work item | project (codex")`: "session",
+		"Work item extended (codex)":     "other",
+		"Some Work item":                 "",
+		"Duplicate | project":            "",
+	} {
+		if got := paneThread(title, names); got != want {
+			t.Errorf("%q: got %q, want %q", title, got, want)
+		}
+	}
+}

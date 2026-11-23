@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/brushknight/agents-deck/backend/internal/sshdeck"
+	"github.com/brushknight/agents-deck/backend/internal/store"
 )
 
 //go:embed terminal.js
@@ -40,11 +41,12 @@ func (p Pane) Label() string {
 }
 
 type Inventory struct {
-	Preferred string          `json:"preferred"`
-	Host      string          `json:"host"`
-	Remote    map[string]Pane `json:"remote"`
-	Local     map[string]Pane `json:"local"`
-	HostPanes []Pane          `json:"hostPanes"`
+	CodexBinary string          `json:"-"`
+	Preferred   string          `json:"preferred"`
+	Host        string          `json:"host"`
+	Remote      map[string]Pane `json:"remote"`
+	Local       map[string]Pane `json:"local"`
+	HostPanes   []Pane          `json:"hostPanes"`
 }
 
 var uuid = regexp.MustCompile(`(?i)^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$`)
@@ -93,14 +95,52 @@ func resumeID(args []string) string {
 	return ""
 }
 
-func Discover(ctx context.Context, host string, localTTY map[string]string, threadIDs map[string]string) (Inventory, error) {
+// CodexIndex includes only mirrored CLI/app threads. Empty values mark ambiguous names.
+func CodexIndex(entries []store.Entry) (map[string]string, map[string]string) {
+	ids, names := map[string]string{}, map[string]string{}
+	for _, e := range entries {
+		if e.A.Tool != "codex" || !e.External || e.A.App != "" || !ValidID(e.SessionID) {
+			continue
+		}
+		ids[e.SessionID] = e.A.ID
+		title := e.A.Title
+		if title == "" || title == e.A.Folder {
+			continue
+		}
+		if _, seen := names[title]; seen {
+			names[title] = ""
+		} else {
+			names[title] = e.A.ID
+		}
+	}
+	return ids, names
+}
+
+// Codex prefixes busy titles with a braille spinner. iTerm may append the
+// folder and foreground process. Match the entire remaining thread name.
+func paneThread(title string, names map[string]string) string {
+	title = strings.TrimSpace(strings.TrimLeftFunc(title, func(r rune) bool { return r >= 0x2800 && r <= 0x28ff }))
+	for _, suffix := range []string{` (codex")`, " (codex)"} {
+		title = strings.TrimSuffix(title, suffix)
+	}
+	if id, ok := names[title]; ok {
+		return id
+	}
+	name, _, _ := strings.Cut(title, " | ")
+	return names[name]
+}
+
+func Discover(ctx context.Context, host string, localTTY map[string]string, threadIDs, names map[string]string) (Inventory, error) {
 	inv := Inventory{Host: host, Remote: map[string]Pane{}, Local: map[string]Pane{}}
 	if runtime.GOOS != "darwin" {
 		return inv, nil
 	}
 	var gui struct {
 		Preferred string
-		Panes     []Pane
+		Panes     []struct {
+			Pane
+			Title string
+		}
 	}
 	raw, err := exec.CommandContext(ctx, "/usr/bin/osascript", "-l", "JavaScript", "-e", terminalScript, "--", "list").Output()
 	if err != nil {
@@ -126,7 +166,9 @@ func Discover(ctx context.Context, host string, localTTY map[string]string, thre
 		}
 	}
 	bare := map[string]Pane{}
-	for _, p := range gui.Panes {
+	candidates := map[string][]Pane{}
+	for _, guiPane := range gui.Panes {
+		p := guiPane.Pane
 		for id, tty := range localTTY {
 			if p.TTY == tty && inv.Local[id].App == "" {
 				inv.Local[id] = p
@@ -136,6 +178,16 @@ func Discover(ctx context.Context, host string, localTTY map[string]string, thre
 			args := f[6:]
 			if id := threadIDs[resumeID(args)]; id != "" && inv.Local[id].App == "" {
 				inv.Local[id] = p
+			}
+			if filepath.Base(args[0]) == "codex" {
+				if filepath.IsAbs(args[0]) {
+					inv.CodexBinary = args[0]
+				}
+				if resumeID(args) == "" {
+					if id := paneThread(guiPane.Title, names); id != "" {
+						candidates[id] = append(candidates[id], p)
+					}
+				}
 			}
 			if filepath.Base(args[0]) != "ssh" || host == "" {
 				continue
@@ -156,6 +208,11 @@ func Discover(ctx context.Context, host string, localTTY map[string]string, thre
 				inv.HostPanes = append(inv.HostPanes, p)
 				bare[f[0]] = p
 			}
+		}
+	}
+	for id, panes := range candidates {
+		if len(panes) == 1 && inv.Local[id].App == "" {
+			inv.Local[id] = panes[0]
 		}
 	}
 	if len(bare) > 0 {
