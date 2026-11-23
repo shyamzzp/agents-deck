@@ -224,7 +224,7 @@ func (d *Daemon) syncLive() {
 // working until Claude's final reply of the turn, then idle (hungry once a
 // turn finishes while we watch).
 func (d *Daemon) liveStatus(e *store.Entry, l claude.Live) bool {
-	turn, tool := claude.TranscriptTurn(e.Transcript, 10*time.Minute)
+	turn, tool, detail := claude.TranscriptTurn(e.Transcript, 10*time.Minute, e.A.Cwd)
 	running := turn
 	changed := false
 	if l.Reported { // Claude Code's own report beats reading the transcript
@@ -258,14 +258,14 @@ func (d *Daemon) liveStatus(e *store.Entry, l claude.Live) bool {
 		changed = true
 	}
 	if running {
-		cur := ""
+		cur, curDetail := "", ""
 		if e.A.Activity != nil {
-			cur = e.A.Activity.Tool
+			cur, curDetail = e.A.Activity.Tool, e.A.Activity.Detail
 		}
-		if cur != tool {
+		if cur != tool || curDetail != detail {
 			e.A.Activity = nil
 			if tool != "" {
-				e.A.Activity = &model.Activity{Tool: tool}
+				e.A.Activity = &model.Activity{Tool: tool, Detail: detail}
 			}
 			changed = true
 		}

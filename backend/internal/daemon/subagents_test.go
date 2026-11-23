@@ -115,14 +115,14 @@ func TestCmuxSubagents(t *testing.T) {
 	e := &store.Entry{}
 	e.A = model.Agent{Status: model.Running} // the main thread's turn
 	e.A.Subagents = []model.Subagent{{ID: "a1111111111111111"}}
-	cmuxApply(e, cmux.Session{Lifecycle: "running", Updated: 1}, "", "", time.Time{}, true)
+	cmuxApply(e, cmux.Session{Lifecycle: "running", Updated: 1}, "", "", "", time.Time{}, true)
 	claude.FollowSubagents(e)
 	since := e.A.StatusSince
 	if e.A.Status != model.Running || !e.Background || !e.A.Unseen {
 		t.Fatalf("turn over, subagents at work: %+v", e.A)
 	}
 	for _, state := range []string{"running", "idle", "running"} {
-		if cmuxApply(e, cmux.Session{Lifecycle: state, Updated: 2}, "", "", time.Time{}, true) || claude.FollowSubagents(e) {
+		if cmuxApply(e, cmux.Session{Lifecycle: state, Updated: 2}, "", "", "", time.Time{}, true) || claude.FollowSubagents(e) {
 			t.Fatalf("%s: changed", state)
 		}
 		if !e.A.StatusSince.Equal(since) || !e.Background {
@@ -130,7 +130,7 @@ func TestCmuxSubagents(t *testing.T) {
 		}
 	}
 	// The main thread starts a turn: its own again.
-	cmuxApply(e, cmux.Session{Lifecycle: "running", Updated: 3}, "Read", "", time.Time{}, false)
+	cmuxApply(e, cmux.Session{Lifecycle: "running", Updated: 3}, "Read", "", "", time.Time{}, false)
 	if e.Background || e.A.Activity == nil || e.A.Activity.Tool != "Read" {
 		t.Fatalf("main turn: %+v", e.A)
 	}
