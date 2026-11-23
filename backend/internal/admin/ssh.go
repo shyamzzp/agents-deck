@@ -19,12 +19,13 @@ import (
 )
 
 type sshState struct {
-	Pinned     []string      `json:"pinned,omitempty"`
-	Terminal   bool          `json:"terminal"`
-	Host       string        `json:"host"`
-	Connection string        `json:"connection"`
-	Sessions   []model.Agent `json:"sessions"`
-	LastSeen   time.Time     `json:"lastSeen"`
+	GroupSlots map[string]int `json:"groupSlots,omitempty"`
+	Pinned     []string       `json:"pinned,omitempty"`
+	Terminal   bool           `json:"terminal"`
+	Host       string         `json:"host"`
+	Connection string         `json:"connection"`
+	Sessions   []model.Agent  `json:"sessions"`
+	LastSeen   time.Time      `json:"lastSeen"`
 }
 
 type sshWatch struct {
@@ -92,6 +93,15 @@ func (a *Admin) sshSnapshot(added *model.Agent) sshState {
 		go m.run(ctx, host, m.generation, pins)
 	}
 	state := m.state
+	assignments, _ := cfg["sshDeckGroups"].(map[string]any)
+	for _, id := range pins {
+		if slot, ok := assignments[host+"/"+id].(float64); ok {
+			if state.GroupSlots == nil {
+				state.GroupSlots = map[string]int{}
+			}
+			state.GroupSlots[id] = int(slot)
+		}
+	}
 	state.Terminal = runtime.GOOS == "darwin"
 	if state.Connection == "online" && time.Since(state.LastSeen) > 30*time.Second {
 		state.Connection = "offline"

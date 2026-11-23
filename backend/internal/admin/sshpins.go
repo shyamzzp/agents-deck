@@ -63,8 +63,9 @@ func (a *Admin) sshSessions(w http.ResponseWriter, r *http.Request) {
 
 func (a *Admin) sshPin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Host, ID string
-		Pinned   *bool
+		Host, ID  string
+		GroupSlot *int
+		Pinned    *bool
 	}
 	if readBody(r, 1024, &req) != nil || !deskterm.ValidID(req.ID) || !sshdeck.ValidHost(req.Host) || req.Pinned == nil {
 		writeErr(w, 400, "invalid Codebox selection")
@@ -96,6 +97,35 @@ func (a *Admin) sshPin(w http.ResponseWriter, r *http.Request) {
 	err := a.editConfig(func(cfg map[string]any) error {
 		if str(cfg, "sshCodexHost", "") != req.Host {
 			return errors.New("the configured SSH host changed")
+		}
+		if req.GroupSlot != nil || !*req.Pinned {
+			slot := 0
+			if req.GroupSlot != nil {
+				slot = *req.GroupSlot
+			}
+			key := req.Host + "/" + req.ID
+			assignments, _ := cfg["sshDeckGroups"].(map[string]any)
+			if slot == 0 {
+				delete(assignments, key)
+			} else {
+				lines, _ := cfg["groups"].([]any)
+				found := slices.ContainsFunc(lines, func(v any) bool {
+					g, _ := v.(map[string]any)
+					return g["slot"] == float64(slot) && slot > 0
+				})
+				if !*req.Pinned || !found {
+					return errors.New("the selected group is unavailable")
+				}
+				if assignments == nil {
+					assignments = map[string]any{}
+				}
+				assignments[key] = slot
+			}
+			if len(assignments) == 0 {
+				delete(cfg, "sshDeckGroups")
+			} else {
+				cfg["sshDeckGroups"] = assignments
+			}
 		}
 		pins := sshPins(cfg, req.Host)
 		idx := slices.Index(pins, req.ID)
