@@ -66,12 +66,17 @@ func (a *Admin) sshPin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Host, ID              string
 		GroupCell, SourceCell *int
+		Dismiss               bool
 		SwapID                string
 		GroupSlot             *int
 		Pinned                *bool
 	}
 	if readBody(r, 1024, &req) != nil || !deskterm.ValidID(req.ID) || !sshdeck.ValidHost(req.Host) || req.Pinned == nil {
 		writeErr(w, 400, "invalid Codebox selection")
+		return
+	}
+	if req.Dismiss && (*req.Pinned || req.GroupSlot != nil || req.GroupCell != nil || req.SwapID != "") {
+		writeErr(w, 400, "dismiss requires an unpinned session")
 		return
 	}
 	if req.SwapID != "" && (!deskterm.ValidID(req.SwapID) || req.SwapID == req.ID || req.GroupCell == nil) {
@@ -117,6 +122,23 @@ func (a *Admin) sshPin(w http.ResponseWriter, r *http.Request) {
 	err := a.editConfig(func(cfg map[string]any) error {
 		if str(cfg, "sshCodexHost", "") != req.Host {
 			return errors.New("the configured SSH host changed")
+		}
+		if req.Dismiss || *req.Pinned {
+			key := req.Host + "/" + req.ID
+			hidden, _ := cfg["sshDeckDismissed"].(map[string]any)
+			if req.Dismiss {
+				if hidden == nil {
+					hidden = map[string]any{}
+				}
+				hidden[key] = true
+			} else {
+				delete(hidden, key)
+			}
+			if len(hidden) == 0 {
+				delete(cfg, "sshDeckDismissed")
+			} else {
+				cfg["sshDeckDismissed"] = hidden
+			}
 		}
 		pins := sshPins(cfg, req.Host)
 		for _, cell := range []*int{req.GroupCell, req.SourceCell} {

@@ -724,8 +724,7 @@ function renderSSH(layout) {
   for (const a of list) {
     let t = sshTiles.get(a.id);
     if (!t) {
-      t = makeTile(a, null);
-      wireSSHDrag(t.el, a);
+      t = makeTile(a, el => wireSSHDrag(el, a));
       sshTiles.set(a.id, t);
     }
     updateTile(t, a);
@@ -2098,13 +2097,13 @@ function closeTileMenu(toTile) {
 }
 
 function openTileMenu(id, x, y) {
-  const a = state?.agents.find((v) => v.id === id);
+  const a = sshState.sessions.find(v => v.id === id) || state?.agents.find(v => v.id === id);
   if (!a) return;
   closeTileMenu(false);
   menuFor = id;
   // dismiss means different things: a session we only watch keeps running and
   // just loses its tile, one agentctl owns is stopped along with its tmux.
-  const owned = !a.external && !a.app && a.status !== 'exited';
+  const owned = !a.sshHost && !a.external && !a.app && a.status !== 'exited';
   const label = h('span', { class: 'mi-t', text: MENU_LABEL });
   const why = h('small', {
     class: 'mi-why',
@@ -2125,7 +2124,19 @@ function openTileMenu(id, x, y) {
     clearTimeout(menuArmed); menuArmed = null;
     item.disabled = true;
     setText(label, 'removing…');
-    const r = await api(`/v1/agents/${encodeURIComponent(id)}/dismiss`);
+    let r;
+    if (a.sshHost) {
+      await moveWrites;
+      r = await api('/admin/v1/ssh-codex/pins', {
+        host:a.sshHost, id:a.threadID, pinned:false, dismiss:true,
+      }, true);
+      if (r.ok && sshState.host === a.sshHost) {
+        ++sshRevision;
+        applySSHState(r.data.state);
+        if (selectedId === id) closeDetail();
+        render();
+      }
+    } else r = await api(`/v1/agents/${encodeURIComponent(id)}/dismiss`);
     if (r.ok) { closeTileMenu(false); return; }
     item.disabled = false;
     item.classList.remove('armed');

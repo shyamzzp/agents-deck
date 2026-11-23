@@ -94,6 +94,11 @@ func (a *Admin) sshSnapshot(added *model.Agent) sshState {
 		go m.run(ctx, host, m.generation, pins)
 	}
 	state := m.state
+	if hidden, _ := cfg["sshDeckDismissed"].(map[string]any); len(hidden) != 0 {
+		state.Sessions = slices.DeleteFunc(slices.Clone(state.Sessions), func(agent model.Agent) bool {
+			return hidden[host+"/"+agent.ID] == true
+		})
+	}
 	assignments, _ := cfg["sshDeckGroups"].(map[string]any)
 	cells, _ := cfg["sshDeckCells"].(map[string]any)
 	for _, id := range pins {

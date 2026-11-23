@@ -85,6 +85,19 @@ func TestSSHPinsScopedAndIdempotent(t *testing.T) {
 		t.Fatal("replacement inherited an old assignment")
 	}
 	pin("test-box", true, 200, 4)
+	dismiss := httptest.NewRecorder()
+	a.sshPin(dismiss, httptest.NewRequest("POST", "/admin/v1/ssh-codex/pins", strings.NewReader(
+		`{"host":"test-box","id":"`+id+`","pinned":false,"dismiss":true}`)))
+	if dismiss.Code != 200 || len(a.sshSnapshot(nil).Sessions) != 0 {
+		t.Fatal("dismissed session reappeared")
+	}
+	if len(a.ssh.state.Sessions) != 1 {
+		t.Fatal("dismissal changed the source snapshot")
+	}
+	pin("test-box", true, 200)
+	if len(a.sshSnapshot(nil).Sessions) != 1 {
+		t.Fatal("could not add a dismissed session again")
+	}
 	pin("test-box", false, 200)
 	if _, ok := a.readConfig()["sshDeckGroups"]; ok {
 		t.Fatal("unpin left an assignment")
