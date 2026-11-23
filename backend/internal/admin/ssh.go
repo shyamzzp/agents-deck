@@ -19,6 +19,7 @@ import (
 )
 
 type sshState struct {
+	GroupCells map[string]int `json:"groupCells,omitempty"`
 	GroupSlots map[string]int `json:"groupSlots,omitempty"`
 	Pinned     []string       `json:"pinned,omitempty"`
 	Terminal   bool           `json:"terminal"`
@@ -94,12 +95,19 @@ func (a *Admin) sshSnapshot(added *model.Agent) sshState {
 	}
 	state := m.state
 	assignments, _ := cfg["sshDeckGroups"].(map[string]any)
+	cells, _ := cfg["sshDeckCells"].(map[string]any)
 	for _, id := range pins {
 		if slot, ok := assignments[host+"/"+id].(float64); ok {
 			if state.GroupSlots == nil {
 				state.GroupSlots = map[string]int{}
 			}
 			state.GroupSlots[id] = int(slot)
+			if cell, ok := cells[host+"/"+id].(float64); ok {
+				if state.GroupCells == nil {
+					state.GroupCells = map[string]int{}
+				}
+				state.GroupCells[id] = int(cell)
+			}
 		}
 	}
 	state.Terminal = runtime.GOOS == "darwin"

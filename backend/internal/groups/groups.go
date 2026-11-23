@@ -161,10 +161,15 @@ func (b *Book) Set(slot int, name string) error {
 		}
 		if remove {
 			assignments, _ := cfg["sshDeckGroups"].(map[string]any)
+			cells, _ := cfg["sshDeckCells"].(map[string]any)
 			for key, value := range assignments {
 				if value == float64(slot) {
 					delete(assignments, key)
+					delete(cells, key)
 				}
+			}
+			if len(cells) == 0 {
+				delete(cfg, "sshDeckCells")
 			}
 			if len(assignments) == 0 {
 				delete(cfg, "sshDeckGroups")

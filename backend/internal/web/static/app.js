@@ -697,8 +697,9 @@ function renderGrid() {
   for (const [id, t] of tiles) if (!seen.has(id)) { t.el.remove(); tiles.delete(id); }
   const lines = new Set(groupLines().map((g) => g.slot));
   for (const slot of dividers.keys()) if (!lines.has(slot)) dividers.delete(slot);
-  renderSSH();
-  const want = panelOn() ? panelCells(list) : needsFirst || onPhone() ? list.map((a) => tiles.get(a.id).el) : boardCells(list);
+  const layout = sshLayout();
+  renderSSH(layout);
+  const want = panelOn() ? panelCells(list) : needsFirst || onPhone() ? list.map((a) => tiles.get(a.id).el) : boardCells(list, layout);
   // Reconcile in place so running animations aren't restarted needlessly.
   reconcile(grid, want);
   const onAttn = view === 'attn';
@@ -714,7 +715,7 @@ const sshAddTile = h('button', {type:'button', class:'tile-empty ssh-add',
   'aria-label':'Add a Codebox session', title:'Add a Codebox session', text:'＋',
   onclick: () => openPicker(-1, sshState.host)});
 
-function renderSSH() {
+function renderSSH(layout) {
   const box = $('ssh-deck');
   box.hidden = !sshState.host || view === 'attn';
   const list = sshState.sessions;
@@ -728,7 +729,7 @@ function renderSSH() {
       sshTiles.set(a.id, t);
     }
     updateTile(t, a);
-    if (!groups.some(g => g.slot === sshState.groupSlots?.[a.threadID])) nodes.push(t.el);
+    if (!groups.some(g => g.slot === layout.groups[a.threadID])) nodes.push(t.el);
   }
   for (const id of sshTiles.keys()) {
     if (!list.some(a => a.id === id)) sshTiles.delete(id);
@@ -748,38 +749,75 @@ function wireSSHDrag(el, agent) {
   el.draggable = true;
   el.addEventListener('dragstart', e => {
     draggedSSH = agent;
+    el.dataset.dragging = '';
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', agent.id);
   });
   el.addEventListener('dragend', () => {
     draggedSSH = null;
+    delete el.dataset.dragging;
     clearSSHDrop();
   });
 }
 
 let sshDropTarget;
 function clearSSHDrop() {
-  if (sshDropTarget) delete sshDropTarget.dataset.groupDrop;
+  if (sshDropTarget) delete sshDropTarget.dataset.drop;
   sshDropTarget = null;
 }
 
 function sshDropZone(event, container) {
-  if (container === $('ssh-deck')) return container;
-  let cell = event.target.closest('#grid > *');
-  while (cell && !cell.hasAttribute('data-group-slot')) cell = cell.previousElementSibling;
-  return cell;
+  if (container === $('ssh-deck')) return event.target.closest('#ssh-sessions > *') || sshAddTile;
+  if (panelOn() || needsFirst || onPhone()) return null;
+  const cell = event.target.closest('#grid > *');
+  if (cell?.hasAttribute('data-group-slot')) {
+    const group = cell.dataset.groupSlot;
+    return container.querySelector(`.tile-empty[data-board-group="${group}"]`) || cell.nextElementSibling;
+  }
+  return cell?.dataset.boardGroup ? cell : null;
 }
 
-async function moveSSHToGroup(agent, slot, note) {
+// Keep pending drops on screen during polling. Write them in gesture order
+// so rapidly moving a tile twice leaves it in the last requested cell.
+const pendingMoves = [];
+let moveWrites = Promise.resolve();
+function sshLayout() {
+  const groups = {...sshState.groupSlots}, cells = {...sshState.groupCells};
+  for (const move of pendingMoves) {
+    if (move.host !== sshState.host) continue;
+    if (move.swapID) {
+      groups[move.swapID] = groups[move.id];
+      cells[move.swapID] = move.sourceCell;
+    }
+    groups[move.id] = move.groupSlot;
+    cells[move.id] = move.groupCell;
+  }
+  return {groups, cells};
+}
+
+function moveSSHToGroup(agent, zone) {
   const {sshHost:host, threadID:id} = agent;
-  if (sshState.host !== host || (sshState.groupSlots?.[id] || 0) === slot) return;
-  const r = await api('/admin/v1/ssh-codex/pins', {host, id, pinned:true, groupSlot:slot}, true);
-  if (sshState.host !== host) return;
-  if (!r.ok) { setText(note, 'Could not move session · ' + r.error); return; }
-  ++sshRevision;
-  applySSHState(r.data.state);
-  setText(note, '');
-  render();
+  if (sshState.host !== host || zone.dataset.id === agent.id) return;
+  const source = sshTiles.get(agent.id).el;
+  const groupSlot = zone.parentElement === $('grid') ? Number(zone.dataset.boardGroup) : 0;
+  if (!groupSlot && source.parentElement === $('ssh-sessions')) return;
+  const target = sshState.sessions.find(s => s.id === zone.dataset.id);
+  const move = {host, id, pinned:true, groupSlot};
+  if (groupSlot) move.groupCell = Number(zone.dataset.boardCell);
+  if (source.parentElement === $('grid')) move.sourceCell = Number(source.dataset.boardCell);
+  if (groupSlot && target) move.swapID = target.threadID;
+  pendingMoves.push(move);
+  renderGrid();
+  moveWrites = moveWrites.then(async () => {
+    const r = await api('/admin/v1/ssh-codex/pins', move, true);
+    pendingMoves.shift();
+    if (sshState.host !== host) return;
+    ++sshRevision;
+    if (r.ok) applySSHState(r.data.state);
+    const note = dividers.get(groupSlot)?.note || $('ssh-group-note');
+    setText(note, r.ok ? '' : 'Could not move session · ' + r.error);
+    render();
+  });
 }
 
 for (const container of [$('grid'), $('ssh-deck')]) {
@@ -795,12 +833,11 @@ for (const container of [$('grid'), $('ssh-deck')]) {
       if (!zone) return;
       if (type === 'dragover') {
         sshDropTarget = zone;
-        zone.dataset.groupDrop = '';
+        zone.dataset.drop = 'swap';
       } else {
         const agent = draggedSSH;
         draggedSSH = null;
-        const slot = Number(zone.dataset.groupSlot || 0);
-        moveSSHToGroup(agent, slot, zone.querySelector('.group-note') || $('ssh-group-note'));
+        moveSSHToGroup(agent, zone);
       }
     }, true);
   }
@@ -865,7 +902,7 @@ function emptyCell(slot) {
 // The free-form board: a cell per slot up to the last agent, the row filled out
 // with free cells so there's always somewhere to drop, with a group's line
 // across the grid wherever one is anchored (groupLines below).
-function boardCells(list) {
+function boardCells(list, layout) {
   const lines = groupLines();
   if (!list.length && !lines.length) return [];
   const bySlot = new Map(list.map((a) => [a.slot, a]));
@@ -875,20 +912,39 @@ function boardCells(list) {
   // free cells under it to drop into.
   const lastLine = lines.length ? lines[lines.length - 1].slot + GROUP_ROW - 1 : 0;
   const n = Math.min(MAX_SLOT + 1, Math.ceil((Math.max(last, lastLine) + 1) / cols) * cols);
-  const byLine = new Map(lines.map((g) => [g.slot, g]));
   const cells = [];
-  let remote = [];
-  for (let s = 0; s < n; s++) {
-    const g = byLine.get(s);
-    if (g) {
-      cells.push(...remote, dividerCell(g));
-      remote = sshState.sessions.filter(a => sshState.groupSlots?.[a.threadID] === s)
-        .map(a => sshTiles.get(a.id).el);
-    }
-    // Keep local agents in their slots and use free cells for Codebox tiles.
-    cells.push(bySlot.has(s) ? tiles.get(bySlot.get(s).id).el : remote.shift() || emptyCell(s));
+  const base = s => bySlot.has(s) ? tiles.get(bySlot.get(s).id).el : null;
+  for (let s = 0; s < (lines[0]?.slot ?? n); s++) {
+    const el = base(s) || emptyCell(s);
+    delete el.dataset.boardGroup;
+    cells.push(el);
   }
-  return cells.concat(remote);
+  for (const [i,g] of lines.entries()) {
+    cells.push(dividerCell(g));
+    const end = lines[i+1]?.slot ?? n;
+    const local = Array.from({length:end-g.slot}, (_, j) => base(g.slot+j));
+    const remote = sshState.sessions.filter(a => layout.groups[a.threadID] === g.slot);
+    const row = [];
+    const waiting = [];
+    for (const agent of remote) {
+      const el = sshTiles.get(agent.id).el;
+      const index = layout.cells[agent.threadID];
+      if (Number.isInteger(index) && index >= 0 && !row[index]) row[index] = el;
+      else waiting.push(el);
+    }
+    local.forEach((el, j) => {
+      if (row[j] && el) waiting.unshift(el);
+      else if (!row[j]) row[j] = el;
+    });
+    for (let j = 0; j < row.length || waiting.length; j++) {
+      const el = row[j] || waiting.shift() ||
+        (j < local.length ? emptyCell(g.slot+j) : h('div', {class:'tile-empty'}));
+      el.dataset.boardGroup = g.slot;
+      el.dataset.boardCell = j;
+      cells.push(el);
+    }
+  }
+  return cells;
 }
 
 // ------------------------------------------------------------------- groups
