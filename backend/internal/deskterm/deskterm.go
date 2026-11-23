@@ -166,6 +166,7 @@ func Discover(ctx context.Context, host string, localTTY map[string]string, thre
 		}
 	}
 	bare := map[string]Pane{}
+	sshTitles := map[string]string{}
 	candidates := map[string][]Pane{}
 	for _, guiPane := range gui.Panes {
 		p := guiPane.Pane
@@ -203,10 +204,12 @@ func Discover(ctx context.Context, host string, localTTY map[string]string, thre
 			if id != "" && inv.Remote[id].App == "" {
 				inv.Remote[id] = p
 			}
-			if len(command) == 0 {
+			// A direct Codex launch can also resolve its thread interactively.
+			if len(command) == 0 || (id == "" && filepath.Base(command[0]) == "codex") {
 				p.Connection = strings.Join(f[:6], "-")
 				inv.HostPanes = append(inv.HostPanes, p)
 				bare[f[0]] = p
+				sshTitles[p.Key()] = guiPane.Title
 			}
 		}
 	}
@@ -218,7 +221,7 @@ func Discover(ctx context.Context, host string, localTTY map[string]string, thre
 	if len(bare) > 0 {
 		// A plain SSH shell can identify the thread on the remote side. Compare the
 		// full TCP tuple; a multiplexed or NAT-translated client may have no match.
-		probe, cancel := context.WithTimeout(ctx, 3*time.Second)
+		probe, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		cmd, err := sshdeck.Command(probe, host, "terminals", "")
 		var links map[string]string
@@ -228,7 +231,14 @@ func Discover(ctx context.Context, host string, localTTY map[string]string, thre
 				_ = json.Unmarshal(raw, &links)
 			}
 		}
-		if len(links) > 0 {
+		hasEndpoints := false
+		for k := range links {
+			if strings.Contains(k, "->") {
+				hasEndpoints = true
+				break
+			}
+		}
+		if hasEndpoints {
 			for pid, p := range bare {
 				out, _ := exec.CommandContext(probe, "/usr/sbin/lsof", "-nP", "-a", "-p", pid, "-iTCP", "-sTCP:ESTABLISHED", "-Fn").Output()
 				for _, line := range strings.Split(string(out), "\n") {
@@ -238,8 +248,35 @@ func Discover(ctx context.Context, host string, localTTY map[string]string, thre
 				}
 			}
 		}
+		matchSSHTitles(&inv, sshTitles, links)
 	}
 	return inv, nil
+}
+
+// A bare SSH client exposes the host in ps. Inside it, Codex may set a
+// per-pane title even when its shared app-server owns all the rollout files.
+func matchSSHTitles(inv *Inventory, titles, links map[string]string) {
+	occupied := map[string]bool{}
+	for _, p := range inv.Remote {
+		occupied[p.Key()] = true
+	}
+	candidates := map[string][]Pane{}
+	for _, p := range inv.HostPanes {
+		title := strings.TrimSpace(titles[p.Key()])
+		// iTerm appends the foreground process, sometimes on a new line.
+		title = strings.TrimSpace(strings.TrimSuffix(title, " (ssh)"))
+		title = strings.TrimSpace(strings.TrimLeftFunc(title, func(r rune) bool {
+			return r >= 0x2800 && r <= 0x28ff
+		}))
+		if id := links[sshdeck.TitleKey(title)]; title != "" && ValidID(id) {
+			candidates[id] = append(candidates[id], p)
+		}
+	}
+	for id, panes := range candidates {
+		if len(panes) == 1 && !occupied[panes[0].Key()] && inv.Remote[id].App == "" {
+			inv.Remote[id] = panes[0]
+		}
+	}
 }
 
 func Focus(ctx context.Context, p Pane, mode string) error {

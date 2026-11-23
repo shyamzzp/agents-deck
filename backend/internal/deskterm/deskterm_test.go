@@ -3,6 +3,8 @@ package deskterm
 import (
 	"strings"
 	"testing"
+
+	"github.com/brushknight/agents-deck/backend/internal/sshdeck"
 )
 
 func TestForegroundSSH(t *testing.T) {
@@ -42,5 +44,36 @@ func TestLocalCodexPaneTitles(t *testing.T) {
 		if got := paneThread(title, names); got != want {
 			t.Errorf("%q: got %q, want %q", title, got, want)
 		}
+	}
+}
+
+func TestMatchSSHTitles(t *testing.T) {
+	const id = "01234567-89ab-4def-8123-456789abcdef"
+	const other = "12345678-89ab-4def-8123-456789abcdef"
+	a := Pane{App: "iTerm2", ID: "first", Connection: "conn-a"}
+	b := Pane{App: "iTerm2", ID: "second", Connection: "conn-b"}
+	links := map[string]string{sshdeck.TitleKey("Fix issue | project"): id, sshdeck.TitleKey("Duplicate"): ""}
+	cases := []struct {
+		name, first, second, known string
+		want                       bool
+	}{
+		{"whole title with spinner and transport", "⠧ Fix issue | project\n (ssh)", "", "", true},
+		{"generic host title", "login shell (ssh)", "", "", false},
+		{"partial title", "Fix issue (ssh)", "", "", false},
+		{"different panes with same title", "Fix issue | project", "Fix issue | project (ssh)", "", false},
+		{"duplicate catalog title", "Duplicate (ssh)", "", "", false},
+		{"already owned by another thread", "Fix issue | project", "", other, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			inv := Inventory{Remote: map[string]Pane{}, HostPanes: []Pane{a, b}}
+			if c.known != "" {
+				inv.Remote[c.known] = a
+			}
+			matchSSHTitles(&inv, map[string]string{a.Key(): c.first, b.Key(): c.second}, links)
+			if got := inv.Remote[id]; (got == a) != c.want {
+				t.Fatalf("match = %+v", got)
+			}
+		})
 	}
 }

@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/brushknight/agents-deck/backend/internal/codex"
+	"github.com/brushknight/agents-deck/backend/internal/sshdeck"
 )
 
 // Return a binding only for a foreground Codex client on the SSH login TTY.
@@ -81,8 +84,28 @@ func terminalLinks() error {
 			}
 		}
 		if id != "" {
-			links[net.JoinHostPort(words[0], words[1])+"->"+net.JoinHostPort(words[2], words[3])] = id
+			recordMatch(links, net.JoinHostPort(words[0], words[1])+"->"+net.JoinHostPort(words[2], words[3]), id)
+		}
+	}
+	// Index every visible thread, including older sessions outside the deck.
+	// An abbreviated title or a folder name alone is not a thread identity.
+	if threads, err := codex.AllThreads(); err == nil {
+		for _, t := range threads {
+			for _, title := range []string{t.Name, t.Title} {
+				if title = strings.TrimSpace(title); title != "" && title != filepath.Base(t.Cwd) {
+					recordMatch(links, sshdeck.TitleKey(title), t.ID)
+				}
+			}
 		}
 	}
 	return json.NewEncoder(os.Stdout).Encode(links)
+}
+
+// Keep ambiguous keys empty even when a third match arrives.
+func recordMatch(links map[string]string, key, id string) {
+	if previous, exists := links[key]; exists && previous != id {
+		links[key] = ""
+	} else {
+		links[key] = id
+	}
 }

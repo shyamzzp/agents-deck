@@ -20,3 +20,13 @@ func TestManualLinkExpiresWhenSSHProcessChanges(t *testing.T) {
 		t.Fatal("stale link survived")
 	}
 }
+
+func TestFormerManualOwnerCannotClaimReidentifiedPane(t *testing.T) {
+	p := deskterm.Pane{App: "iTerm2", ID: "pane", Connection: "same-shell"}
+	inv := deskterm.Inventory{Host: "box", Remote: map[string]deskterm.Pane{"current": p}, HostPanes: []deskterm.Pane{p}}
+	b := terminalBindings{byPane: map[string]string{inv.Host + "/" + p.Key(): "previous"}}
+	b.apply(&inv)
+	if len(inv.Remote) != 1 || len(b.byPane) != 0 {
+		t.Fatal("pane retained a stale manual owner")
+	}
+}

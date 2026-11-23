@@ -110,10 +110,19 @@ func (b *terminalBindings) apply(inv *deskterm.Inventory) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	live := map[string]bool{}
+	occupied := map[string]string{}
+	for id, p := range inv.Remote {
+		occupied[p.Key()] = id
+	}
 	for _, p := range inv.HostPanes {
 		key := inv.Host + "/" + p.Key()
 		live[key] = true
-		if id := b.byPane[key]; id != "" && inv.Remote[id].App == "" {
+		id := b.byPane[key]
+		if owner := occupied[p.Key()]; owner != "" && owner != id {
+			delete(b.byPane, key)
+			continue
+		}
+		if id != "" && inv.Remote[id].App == "" {
 			p.Linked = true
 			inv.Remote[id] = p
 		}
