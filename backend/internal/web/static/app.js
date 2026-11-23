@@ -2014,6 +2014,7 @@ function render() {
   renderTop();
   renderGrid();
   renderDetail();
+  positionQuickMessage();
 }
 
 function applyState(s) {
