@@ -952,6 +952,14 @@ class _AgentDetailState extends State<AgentDetail> {
     final resumeFlash = _flashColors('resume', onAccent: false);
     final others = _otherAccounts(a);
     final armed = others.where((x) => x.name == _confirmHandoff).firstOrNull;
+    // On a phone the row's fixed widths do not fit: 68 for the back button,
+    // 200 for the second action and two 14pt gaps leave the main action about
+    // 60 points, most of which is its own padding. There the row is divided
+    // by share instead, three parts to two.
+    final tight = DeckCompact.of(context);
+    Widget second(Widget button) => tight
+        ? Expanded(flex: 2, child: button)
+        : SizedBox(width: 200, child: button);
     return _card(
       fill: DeckHud.bg,
       child: Column(
@@ -1156,7 +1164,10 @@ class _AgentDetailState extends State<AgentDetail> {
                 ),
                 for (final to in others) ...[
                   const SizedBox(width: 14),
-                  SizedBox(width: 240, child: _handoffButton(a, to)),
+                  if (tight)
+                    Expanded(child: _handoffButton(a, to))
+                  else
+                    SizedBox(width: 240, child: _handoffButton(a, to)),
                 ],
               ],
             ),
@@ -1172,6 +1183,7 @@ class _AgentDetailState extends State<AgentDetail> {
               ),
               if (!exited)
                 Expanded(
+                  flex: tight ? 3 : 1,
                   child: AgentButton(
                     key: const Key('agent-focus'),
                     label: _flashKey == 'focus' && _flash == _Flash.sent
@@ -1193,9 +1205,8 @@ class _AgentDetailState extends State<AgentDetail> {
                 ),
               if (running && (!a.external || a.inApp)) ...[
                 const SizedBox(width: 14),
-                SizedBox(
-                  width: 200,
-                  child: AgentButton(
+                second(
+                  AgentButton(
                     key: const Key('agent-interrupt'),
                     label: _flashKey == 'interrupt' && _flash == _Flash.sent
                         ? 'sent'
@@ -1210,6 +1221,7 @@ class _AgentDetailState extends State<AgentDetail> {
                 ),
               ] else if (exited && a.resumable) ...[
                 Expanded(
+                  flex: tight ? 3 : 1,
                   child: AgentButton(
                     key: const Key('agent-resume'),
                     label: _flashKey == 'resume' && _flash == _Flash.sent
@@ -1224,12 +1236,12 @@ class _AgentDetailState extends State<AgentDetail> {
                   ),
                 ),
                 const SizedBox(width: 14),
-                SizedBox(width: 200, child: _removeButton(a, rmFlash)),
+                second(_removeButton(a, rmFlash)),
               ] else if (exited)
                 Expanded(child: _removeButton(a, rmFlash))
               else ...[
                 const SizedBox(width: 14),
-                SizedBox(width: 200, child: _removeButton(a, rmFlash)),
+                second(_removeButton(a, rmFlash)),
               ],
             ],
           ),
@@ -1963,9 +1975,11 @@ class CardBackButton extends StatelessWidget {
       child: Pressable(
         key: const Key('agent-back'),
         onTap: onTap,
+        // 49 on a phone, which is what AgentButton's 68 becomes there: a
+        // square that keeps its full size stands taller than the row it is in.
         builder: (context, pressed) => Container(
-          width: 68,
-          height: 68,
+          width: DeckCompact.of(context) ? 49 : 68,
+          height: DeckCompact.of(context) ? 49 : 68,
           decoration: BoxDecoration(
             color: pressed ? pressedFill : null,
             borderRadius: BorderRadius.zero,
