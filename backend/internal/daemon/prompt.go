@@ -196,13 +196,20 @@ func bracketed(text string) string {
 // API. The text is submitted with a carriage return, the way pressing Enter
 // in that terminal would.
 func (d *Daemon) typeLive(e store.Entry, text string) error {
-	if err := d.iterm.typeTTY(e.LiveTTY, bracketed(text)+"\r"); err != nil {
+	// The text first and Enter on its own afterwards, as every other path
+	// does it: sent together, Claude Code reads the carriage return as part
+	// of what was pasted and the prompt sits in its input box unsent.
+	if err := d.iterm.typeTTY(e.LiveTTY, bracketed(text)); err != nil {
 		if errors.Is(err, errNotShown) {
 			return fmt.Errorf("%w: its terminal is not an iTerm session the deck can see", server.ErrReadOnly)
 		}
 		return fmt.Errorf("could not type into %s: %w", e.A.ID, err)
 	}
-	log.Printf("prompt %s (live): %d bytes typed into %s", e.A.ID, len(text), e.LiveTTY)
+	time.Sleep(beforeEnter)
+	if err := d.iterm.typeTTY(e.LiveTTY, "\r"); err != nil {
+		return fmt.Errorf("could not submit the prompt to %s: %w", e.A.ID, err)
+	}
+	log.Printf("prompt %s (live): %d bytes typed into %s, submitted", e.A.ID, len(text), e.LiveTTY)
 	return nil
 }
 
