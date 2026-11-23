@@ -6,14 +6,14 @@ Everything the deck shows and does, in one place. The [README](../README.md) is 
 
 One tile per agent, on a 4×4 deck: the same board in the menu bar, on the desk panel and in the browser's panel view.
 
-- **The critter** is Claude's pixel mascot (Codex threads get an onigiri) and shows what the agent is doing: thinking, reading, editing, running a command, searching the web, planning, delegating to subagents. A finished turn waves a checkered flag; an error throws both arms up; while Claude compacts the conversation it gets squeezed flat and springs back.
+- **The critter** is Claude's pixel mascot (Codex threads get an onigiri) and shows what the agent is doing: thinking, reading, editing, running a command, searching the web, planning, delegating to subagents. A finished turn shows a still sleeping critter in the browser and waves a checkered flag on the panel; an error throws both arms up; while Claude compacts the conversation it gets squeezed flat and springs back.
 - **Hats.** Every agent wears a pixel hat picked by its working folder, so agents of one project look alike at a glance: 13 shapes (hard hat, cap, beanie, helmet, wizard, beret, chef, crown, headphones, propeller, top hat, cowboy, bandana) in 8 colours, chosen by a stable hash of the folder. Tap the critter on an agent's card (or click it in the web dashboard) to pick another shape or colour for that folder, or go back to automatic. While an agent works its hat animates too, a pixel at a time (the propeller spins, the bandana's tails flutter on the left, the wizard's tip sways…); otherwise it stays still. From the terminal: `agentctl hats`, `agentctl set hat <agent|folder> <shape> [colour]`, `agentctl set hat <agent|folder> auto`. The hats were inspired by the hatted pixel Claudes in [“9 NEW Claude Mods that can truly change how you work”](https://www.youtube.com/watch?v=lDrAZ1wAyVs) by Jay E (RoboNuggets).
 - **Claude accounts.** If you use more than one Claude account (say personal and work, each its own Claude config folder), name them once: `agentctl account add personal ~/.claude sky`, `agentctl account add work ~/.claude-work yellow`. Each agent then shows a small square in its account's colour: on its tile, next to its name on the card, and in its terminal's header. Sessions you started by hand are found in every account. `agentctl new -a work` starts an agent in a given account (`agentctl account default work` changes the default). When one account runs out of usage, **continue on…** on the agent's card (or `agentctl handoff <agent> <account>`) copies the conversation into the other account and resumes it there: an agent the deck started comes back in the same tile, and a session you started by hand keeps its own terminal while the copy starts as a new agent. The original conversation stays in the first account.
 - **Colour.** Orange means working; a solid orange tile means the agent needs you (a permission prompt or a question).
 - **The border** fills clockwise with the agent's context window.
-- **Hungry.** An agent that finished but whose result you haven't reviewed gets sliding orange stripes and a critter chomping at a cookie, until you focus its terminal or give it a new task.
+- **Finished turns.** The browser shows “done” on a plain idle card with a sleeping critter. An unread result also appears in Needs You. On the desk panel, sliding stripes and a cookie mark that result until you focus its terminal or give it a new task.
 - **Subagents.** A small critter in the tile's top-left corner means subagents are at work too, with a count when there are several. The agent's card lists them under "doing now", one to a row: a small critter posed by what it's doing, then its task and its type.
-- **Background subagents keep the agent working.** When Claude finishes its turn but subagents it started in the background (or a workflow run) are still at work, the agent stays working: the tile reads "N subagents working" and the agent stays on the Needs you screen and the boards. A question or permission prompt from a subagent still shows as "needs you", and an error still shows. When the last one is done and Claude starts no turn of its own, the agent is done and hungry ("feed me") until you look at it. A subagent counts as working from its launch until Claude Code reports it finished, failed, killed or stopped, however quiet it is meanwhile. Subagents end with the Claude Code session: once its terminal closes, or a session is restarted or resumed, none of the earlier ones count. As a last resort, one with no sign of life for 6 hours is over. Background shell commands are not subagents and don't keep the agent working.
+- **Background subagents keep the agent working.** When Claude finishes its turn but subagents it started in the background (or a workflow run) are still at work, the agent stays working: the tile reads "N subagents working" and the agent stays on the Needs you screen and the boards. A question or permission prompt from a subagent still shows as "needs you", and an error still shows. When the last one is done and Claude starts no turn of its own, the agent is done and appears in Needs You until you look at it. A subagent counts as working from its launch until Claude Code reports it finished, failed, killed or stopped, however quiet it is meanwhile. Subagents end with the Claude Code session: once its terminal closes, or a session is restarted or resumed, none of the earlier ones count. As a last resort, one with no sign of life for 6 hours is over. Background shell commands are not subagents and don't keep the agent working.
 - **Pages.** The deck holds 16 agents per page (page = slot ÷ 16). With more, the tiles get a little shorter (they keep their width) and a row of bars appears under the grid, in the same square: the current page bright, another page orange when an agent there needs you. Swipe left and right (touch or trackpad), use ← / →, or tap a bar.
 - **Needs you.** One extra screen to the left of the first page holds only the agents at work or asking you something, and the ones that finished and you haven't checked yet (hungry): those stay until you check them. An agent leaves 5 seconds after it stops needing you. The service keeps this screen as one grid of 16 spots (4×4) and tells every screen who is in which spot, so the panel, the menu bar app, the browser and the boards show the same agents in the same spots. An agent keeps its spot: nobody moves up when another leaves, a newcomer takes the lowest free spot, and an agent that comes back gets its old spot if it is free (else a random free one). The old spots are kept when the service restarts. In the browser you can drag a tile to another spot (or onto another tile to swap them), the same as on the deck; every screen follows. With more than 16, the rest wait for a spot, the one waiting longest first (the count on the mark includes them). It looks like any page of the deck; the mark at the left of the page bars turns solid orange while you are on it. The deck always opens on the normal view; scroll or swipe left, press ←, or tap the mark (it shows how many agents are there) to go to it, and swipe back, press → or tap a page bar to return. The agents stay on the deck too. Screens with fewer than 16 cells (a phone, the smaller boards) show the agents in order of their spot, lowest first, as many as fit; the first spots fill first, so this rarely leaves anyone out. The square boards have it too: on the 4″ it is the page left of the first, with the same 16 spots (swipe right on the first page, tap the mark at the left of the page bars, or press BOOT after the last page), on the 1.8″ AMOLED and the T4-S3 a screen of 2×2 or 2×3 left of the list (swipe right, or press BOOT; two small marks at the top say where you are), and on the 1.47″ the mini-board while you hold BOOT. A board always starts on the normal view. Boards need the new firmware for the shared spots; older firmware keeps placing the agents by itself. The round boards don't have it yet.
 - **Arranging.** Drag a tile onto any free spot to move it there, or onto another tile to swap them (long-press on touch screens). The layout is shared by every view. `agentctl move <agent> <n>` does the same from the terminal.
@@ -118,6 +118,10 @@ terminal and brings cmux forward. **hide** takes the agent off the deck until it
 daemon uses the socket methods `surface.read_text`, `surface.send_text`, `surface.send_key`,
 `surface.focus` and `system.identify`. Codex sessions in cmux aren't mirrored yet. `config.json`:
 `"cmux": false` turns it off.
+
+## Add a session
+
+The web picker combines local Claude Code sessions, unarchived local Codex threads, agents already discovered through enabled harnesses, and sessions from the configured Codebox. Search by title, folder, ID or source. The Codebox section’s add button opens the same picker filtered to that host. Selecting a saved local Codex thread keeps it on the deck until you hide it. `agentctl live` lists the local catalog and `agentctl ls --ssh` lists the Codebox catalog.
 
 ## Claude sessions started elsewhere
 
@@ -302,3 +306,61 @@ on this computer only, never on the network.
 | `sessions` | `pick` (default), `auto`: Claude sessions started elsewhere join the deck when you add them, or by themselves |
 | `web` | `local` (default), `lan`: also serve the dashboard on your local network |
 | `hat` | `agentctl set hat <agent|folder> <shape> [colour]`, `none` or `auto`: the hat of a working folder (stored in `config.json` `"hats"`) |
+
+### Use Codex on an SSH host
+
+In the browser, open Settings → Agents and enter an SSH alias or user@host
+under **Codex SSH host**. The Codebox section on the dashboard shows recent
+sessions, their titles and their status. The dashed **+** tile opens the same history as `agentctl ls --ssh`. Double-click a tile (or press Shift+Enter on a focused tile) to message its session. Enter submits the text. Codex uses its thread-specific message queue on the selected host. The picker shows a cached list for up to five minutes and refreshes it in the background. Select **Filter by Issues** to show titles starting with a six-digit issue number. You can also search within those results. Add a saved thread to keep it on this host’s deck beyond the recent-activity window. Drag a Codebox tile onto a group divider or a cell below it in the web grid to pin it in that group. Drop it back in Codebox to remove it from the group and keep it pinned. Reopen the picker to unpin it. Right-click a Codebox tile and choose **force remove from deck** to hide even a recent session. The session keeps running and can be added again from the picker. A dropped connection marks the last
+snapshot offline. The open dashboard retries automatically. Clear the host
+in Settings to stop monitoring.
+
+Install the helper at
+`~/.local/bin/agents-deck-codex-reader` on the remote machine. Build it from
+`backend/` for the host's OS and CPU. For example, for 64-bit Intel Linux:
+
+```sh
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./cmd/agents-deck-codex-reader
+```
+
+The service opens a separate noninteractive SSH connection. For first-time setup, run `agentctl config --ssh` in a terminal. OpenSSH
+verifies the host and handles password, key-passphrase or MFA prompts. Deck
+saves the destination and reuses the authenticated SSH connection. After 15
+minutes with no open channels, OpenSSH closes it. Run setup again if the
+connection expires and your host requires interactive authentication.
+The helper uses the remote account's Codex data directory and the same
+six-hour activity window as the default local deck. The dashboard receives thread details including the last prompt, working
+folder, model, activity and usage when Codex records them. The helper exits when its SSH connection closes.
+
+Use the same SSH configuration from the terminal:
+
+```sh
+agentctl config --ssh             # review or edit the host interactively
+agentctl config --ssh user@host   # save an SSH destination or alias
+agentctl ls --ssh                 # all unarchived sessions, newest first
+agentctl ls --ssh ID              # details for a full or unique partial ID
+agentctl attach --ssh ID          # interactive remote Codex TUI
+agentctl config --ssh --clear     # remove the saved host
+```
+
+The full listing requires the remote Codex state database and sqlite3. Older
+threads appear as saved. Inspect a thread to read its rollout details, or use
+`ls --ssh --json` to consume the list in a script. Select a recent Codebox tile to see its details in the browser’s right drawer. **Settings → Layout → Session title font size** adjusts the title text size for both local and Codebox drawers in this browser. **Agent tile font size** independently adjusts the names on the tiles. **Agent card border width** sets the stroke around local and Codebox cards, from 0 to 3 px. It defaults to 0.5 px. On macOS, Deck checks iTerm2 panes and Terminal tabs. For local Codex sessions it can match a foreground CLI by its resume ID or unique thread title. When no pane matches, the focus action can resume the session in a new terminal. The TERMINAL column in
+`agentctl ls` and `agentctl ls --ssh` displays the window, tab and pane for
+an identified session. Window numbers follow the current front-to-back order.
+Use `agentctl focus --ssh ID` for the pane or `agentctl focus --ssh --tab ID`
+for its tab. Omit `--ssh` for local agents. Attach checks for an existing
+pane before resuming the thread in the current terminal.
+
+Deck scans the panes in every terminal window. For an interactive SSH shell on the configured Codebox, it can automatically match a complete Codex thread title to a single pane. Install the updated reader on the Codebox to enable title matching. It checks the full session catalog, including saved threads. Duplicate titles or multiple panes showing the same title require a manual choice when no thread ID is available. The drawer offers **Focus pane** or
+**Focus tab** when Deck can identify the selected thread’s terminal.
+Use `agentctl focus --ssh --host-pane` or `--host-tab` to focus a single host connection.
+An idle thread can have no open pane. For a new terminal the dashboard prefers
+iTerm2 and falls back to Terminal. macOS may request Automation access.
+
+If automatic discovery cannot identify an existing SSH shell showing the thread, choose
+its location under **Link an existing pane…** and confirm with **Link pane**, or run
+`agentctl focus --ssh --link-pane --location 1:1:2 ID` (window:tab:pane).
+Subsequent listings and focus actions use that pane. Use **Unlink pane** if
+you switch threads inside the shell. A link expires with the connection or
+when the Deck service restarts.

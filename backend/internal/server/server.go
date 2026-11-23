@@ -284,6 +284,13 @@ func (s *Server) api() *http.ServeMux {
 		s.setHat(w, e.A.Cwd, body)
 	})
 	mux.HandleFunc("GET /v1/live", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("catalog") == "all" {
+			if catalog, ok := s.Ctl.(interface{ SessionCatalog() (any, string) }); ok {
+				sessions, warning := catalog.SessionCatalog()
+				writeJSON(w, http.StatusOK, map[string]any{"sessions": sessions, "warning": warning})
+				return
+			}
+		}
 		lw, ok := s.Ctl.(Watcher)
 		if !ok {
 			writeJSON(w, http.StatusOK, map[string]any{"sessions": []any{}})

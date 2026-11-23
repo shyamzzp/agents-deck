@@ -29,6 +29,7 @@ import (
 	"github.com/brushknight/agents-deck/backend/internal/accounts"
 	"github.com/brushknight/agents-deck/backend/internal/daemon"
 	"github.com/brushknight/agents-deck/backend/internal/demo"
+	"github.com/brushknight/agents-deck/backend/internal/deskterm"
 	"github.com/brushknight/agents-deck/backend/internal/devices"
 	"github.com/brushknight/agents-deck/backend/internal/groups"
 	"github.com/brushknight/agents-deck/backend/internal/hats"
@@ -57,7 +58,7 @@ const usage = `agentctl: runs and controls agents deck
   agentctl handoff <agent> <account>
                                  continue a Claude session in another account (out of usage)
   agentctl set hat <agent|folder> <shape> [colour] | auto
-  agentctl live                  Claude sessions started by hand in other terminals
+  agentctl live                  list local sessions available to the deck
   agentctl add <session>         put one of them on the deck (watched)
   agentctl reopen                iTerm tabs for every agent no terminal shows (after a crash)
   agentctl resume <agent or session>... [-d] [--force]
@@ -70,6 +71,13 @@ const usage = `agentctl: runs and controls agents deck
                                  lists it first, asks before more than 5
   agentctl attach <agent>        show an agent in this terminal (detach: ctrl-q); one that isn't
                                  running is brought back first (it asks)
+  agentctl focus [--ssh] [--tab] ID   focus the existing pane or its tab
+  agentctl focus --ssh --host-pane | --host-tab   focus the codebox connection
+  agentctl focus --ssh --link-pane [--location W:T:P] ID   link an open SSH shell
+  agentctl focus --ssh --unlink-pane ID                    forget its pane link
+  agentctl config --ssh [user@host|--clear]   show, set or clear the SSH host
+  agentctl ls --ssh [--json] [ID]   list unarchived remote Codex threads, or inspect one
+  agentctl attach --ssh ID        open the selected thread in Codex on the SSH host
   agentctl ls [--sort active]    list agents (ACTIVE: its latest message sent or received);
                                  --sort active: most recently active first
   agentctl rm <agent>            stop and forget an agent
@@ -163,6 +171,8 @@ func main() {
 		err = serve(args)
 	case "new":
 		err = newAgent(args)
+	case "focus":
+		err = focusCmd(args)
 	case "attach", "a":
 		err = attach(args)
 	case "reopen":
@@ -195,6 +205,8 @@ func main() {
 		err = completionCmd(args)
 	case "set":
 		err = setCmd(args)
+	case "config":
+		err = sshConfig(args)
 	case "get":
 		err = getCmd(args)
 	case "__complete":
@@ -387,6 +399,13 @@ func reorder(args []string, takesValue map[string]bool) []string {
 }
 
 func attach(args []string) error {
+	if len(args) > 0 && args[0] == "--ssh" {
+		if len(args) != 2 {
+			return errors.New("usage: agentctl attach --ssh ID")
+		}
+		return attachSSH(args[1])
+	}
+
 	if len(args) != 1 {
 		return errors.New("usage: agentctl attach <agent>   (an id, or its name or part of it)")
 	}
@@ -532,33 +551,43 @@ func hatsCmd() error {
 	return nil
 }
 
-// liveCmd lists Claude sessions started by hand in other terminals.
+// liveCmd lists discovered local sessions, including saved Codex threads.
 func liveCmd() error {
 	var res struct {
+		Warning  string
 		Sessions []struct {
-			SessionID, Title, Folder string
-			OnBoard, Background      bool
+			SessionID, Title, Folder, Tool, App, Status string
+			OnBoard, Background                         bool
 		}
 	}
-	if err := call("GET", "/v1/live", nil, &res); err != nil {
+	if err := call("GET", "/v1/live?catalog=all", nil, &res); err != nil {
 		return err
 	}
+	if res.Warning != "" {
+		fmt.Fprintln(os.Stderr, res.Warning)
+	}
 	if len(res.Sessions) == 0 {
-		fmt.Println("no other Claude sessions running in your terminals")
+		fmt.Println("no local sessions found")
 		return nil
 	}
 	tw := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(tw, "SESSION\tTITLE\tFOLDER\tKIND\tDECK")
+	fmt.Fprintln(tw, "SESSION\tTITLE\tFOLDER\tSOURCE\tDECK")
 	for _, s := range res.Sessions {
 		deck := "-"
 		if s.OnBoard {
 			deck = "on the deck"
 		}
-		kind := "terminal"
-		if s.Background {
-			kind = "background"
+		source := s.Tool
+		if source == "" {
+			source = "claude"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", s.SessionID[:8], s.Title, s.Folder, kind, deck)
+		if s.App != "" {
+			source += " · " + s.App
+		}
+		if s.Background {
+			source += " · background"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", termText(s.SessionID), termText(s.Title), termText(s.Folder), termText(source), deck)
 	}
 	if err := tw.Flush(); err != nil {
 		return err
@@ -574,7 +603,7 @@ func addCmd(args []string) error {
 	if err := call("POST", "/v1/live/"+url.PathEscape(args[0])+"/add", nil, nil); err != nil {
 		return err
 	}
-	fmt.Println("on the deck · watched: status, context and cost; answer it in its own terminal")
+	fmt.Println("on the deck")
 	return nil
 }
 
@@ -617,9 +646,17 @@ func reopen() error {
 
 func list(args []string) error {
 	fs := flag.NewFlagSet("ls", flag.ContinueOnError)
+	remote := fs.Bool("ssh", false, "list remote Codex sessions")
+	asJSON := fs.Bool("json", false, "print remote sessions as JSON")
 	sortBy := fs.String("sort", "position", "order: position (as on the deck) or active (most recently active first)")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *remote {
+		return listSSH(fs.Args(), *sortBy, *asJSON)
+	}
+	if *asJSON {
+		return errors.New("--json requires --ssh")
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("agentctl ls takes no names: %q (try agentctl ls --sort active)", fs.Arg(0))
@@ -628,12 +665,17 @@ func list(args []string) error {
 	if err != nil {
 		return err
 	}
-	switch *sortBy {
+	inv := paneInventory()
+	return printList(s, *sortBy, inv.Local)
+}
+
+func printList(s model.State, sortBy string, locations map[string]deskterm.Pane) error {
+	switch sortBy {
 	case "position", "slot":
 	case "active":
 		sort.SliceStable(s.Agents, func(i, j int) bool { return s.Agents[i].LastActive.After(s.Agents[j].LastActive) })
 	default:
-		return fmt.Errorf("--sort %s: use position or active", *sortBy)
+		return fmt.Errorf("--sort %s: use position or active", sortBy)
 	}
 	if len(s.Agents) == 0 {
 		fmt.Println("no agents — start one with `agentctl new`")
@@ -648,7 +690,7 @@ func list(args []string) error {
 		acctCol = acctCol || a.Account != nil
 		waitCol = waitCol || a.Waiting != nil
 	}
-	head := []string{"ID", "NAME", "STATUS", "ACTIVE", "CONTEXT", "COST", "FOLDER"}
+	head := []string{"ID", "NAME", "STATUS", "ACTIVE", "CONTEXT", "COST", "FOLDER", "TERMINAL"}
 	if acctCol {
 		head = append(head, "ACCOUNT")
 	}
@@ -673,7 +715,11 @@ func list(args []string) error {
 		if a.External {
 			cost = "—" // Codex reports no prices
 		}
-		row := []string{a.ID, clip(listName(a.Title), 40), st, activeAgo(a.LastActive), ctx, cost, clip(a.Folder, 24)}
+		loc := "—"
+		if p, ok := locations[a.ID]; ok {
+			loc = p.Label()
+		}
+		row := []string{a.ID, clip(listName(a.Title), 40), st, activeAgo(a.LastActive), ctx, cost, clip(a.Folder, 24), loc}
 		if acctCol {
 			acct := ""
 			if a.Account != nil {
@@ -1194,6 +1240,9 @@ func serve(args []string) error {
 	}
 	wifiDefault := &link.WifiDefault{Store: wifiStore}
 	adm := newAdmin(st, srv, self, *logFile)
+	if local, ok := ctl.(*daemon.Daemon); ok {
+		adm.SendMessage = local.Message
+	}
 	hub := &link.Hub{Wifi: wifiDefault, OnFirmware: adm.FirmwareChanged} // updates over Wi-Fi feed admin jobs
 	links := &link.Manager{Deck: link.ServerDeck{S: srv}, Hub: hub, Wifi: wifiDefault,
 		Ports: func() []link.PortConfig { return adm.LinkPorts(loadConfig().Link.Ports) }}

@@ -40,7 +40,6 @@
   /* the three that carry alpha, so they follow whatever the theme sets */
   --scrim: color-mix(in srgb, var(--bg) 72%, transparent);
   --ring-track-on-accent: color-mix(in srgb, var(--bg) 25%, transparent);
-  --zebra: color-mix(in srgb, var(--accent) 16%, transparent);
 
   --tool-claude: #C98B6B;
   --tool-codex: #4FB3A6;
@@ -163,18 +162,18 @@ a.toggle { display: inline-block; text-decoration: none; }
   padding: 8px var(--gutter);
 }
 /* "add a session" picker */
-.picker { position: fixed; inset: 0; z-index: 40; background: var(--scrim); display: flex; align-items: flex-start; justify-content: center; padding: 10vh var(--gutter) 0; }
+.picker { position: fixed; inset: 0; z-index: 40; background: var(--scrim); display: flex; align-items: flex-start; justify-content: center; padding: min(10vh, 48px) var(--gutter) min(4vh, 24px); }
 .picker[hidden] { display: none; }
-.picker-card { width: min(560px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 0; padding: 22px 24px 18px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
+.picker-card { display: flex; flex-direction: column; max-height: 100%; min-width: 0; width: min(560px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 0; padding: 22px 24px 18px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
 .picker-head { display: flex; align-items: center; justify-content: space-between; }
 .picker-head h2 { margin: 0; font-family: var(--f-head); font-weight: 700; font-size: 22px; }
-.picker-sub { margin: 8px 0 16px; color: var(--dim); font-size: 13px; line-height: 1.5; }
-.picker-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.picker-list li { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 0; }
+.picker-sub { overflow-wrap: anywhere; margin: 8px 0 16px; color: var(--dim); font-size: 13px; line-height: 1.5; }
+.picker-list { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.picker-list li { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 0; }
 .picker-list .toggle { grid-row: 1 / span 2; grid-column: 2; }
 .picker-list .toggle:disabled { opacity: 0.5; cursor: default; }
 .picker-name { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.picker-meta { font-size: 12px; color: var(--dim); }
+.picker-meta { overflow-wrap: anywhere; font-size: 12px; color: var(--dim); }
 .picker-empty { color: var(--dim); font-size: 14px; display: block !important; border-style: dashed !important; }
 .tile-empty { cursor: pointer; }
 .tile-empty:hover { border-color: var(--dim); }
@@ -249,7 +248,6 @@ body.offline .main { opacity: 0.4; }
   /* per-state colours; the sprite reads --body and --cut */
   --t-bg: var(--panel);
   --t-border: var(--panel);
-  --t-bw: 1px;
   --body: var(--ink);
   --cut: var(--t-bg);
   --label: var(--ink);
@@ -265,7 +263,7 @@ body.offline .main { opacity: 0.4; }
   padding: 10px 12px 12px;
   border-radius: var(--r-tile);
   background: var(--t-bg);
-  border: var(--t-bw) solid var(--t-border);
+  border: 0;
   color: var(--label);
   cursor: pointer;
   display: flex;
@@ -275,10 +273,24 @@ body.offline .main { opacity: 0.4; }
   text-align: center;
   overflow: hidden;
 }
+/* Scale the stroke after layout so the browser can paint half a CSS pixel. */
+.tile::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 200%;
+  transform-origin: top left;
+  transform: scale(0.5);
+  border: calc(2 * var(--tile-border-width, 0.5px)) solid var(--t-border);
+  border-radius: calc(2 * var(--r-tile));
+  pointer-events: none;
+}
 .tile:hover { --t-border: var(--dim); }
 .tile.st-waiting:hover { --t-border: var(--ink); }
 .tile:active { --t-bg: var(--ink); --body: var(--bg); --label: var(--bg); --meta: var(--bg); --t-border: var(--ink); }
-.tile.selected { --t-bg: var(--sel); --t-border: var(--dim); --t-bw: 2px; }
+.tile.selected { --t-bg: var(--sel); --t-border: var(--dim); }
 .tile.selected::after { content: ""; position: absolute; left: 50%; bottom: 8px; width: 24px; height: 2px; margin-left: -12px; background: var(--label); }
 /* focused (its terminal is in front on the Mac): a lifted fill */
 .tile.focused { --t-bg: var(--focus-bg); --t-border: var(--focus-bg); }
@@ -316,7 +328,7 @@ body.offline .main { opacity: 0.4; }
 .tile .spr svg, .empty-art svg { transform: translateX(11.111%); }
 .tile .name {
   margin-top: 9%;
-  font-size: 16px; letter-spacing: 0.5px; color: var(--label);
+  font-size: var(--tile-name-size, 16px); letter-spacing: 0.5px; color: var(--label);
   max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .tile .meta {
@@ -330,20 +342,17 @@ body.offline .main { opacity: 0.4; }
 .c { fill: var(--cut); }
 .cx { stroke: var(--cut); fill: none; }
 .zt { fill: var(--body); font-family: var(--f-label); }
-.fl { fill: var(--ink); } /* the finish flag's light squares */
 
 @keyframes la { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
 @keyframes lb { 0%, 49% { opacity: 0 } 50%, 100% { opacity: 1 } }
 @keyframes bob { 0%, 49% { transform: translateY(0) } 50%, 100% { transform: translateY(-0.5px) } }
 @keyframes blink { 0%, 59% { opacity: 1 } 60%, 100% { opacity: 0.15 } }
 @keyframes dots { 0% { opacity: .2 } 50% { opacity: 1 } 100% { opacity: .2 } }
-@keyframes zz { 0%, 100% { transform: translateY(0); opacity: .9 } 50% { transform: translateY(-0.6px); opacity: .4 } }
 .la { animation: la .5s infinite; }
 .lb { animation: lb .5s infinite; }
 .bob { animation: bob .5s infinite; }
 .blink { animation: blink 1s infinite; }
 .dots { animation: dots 1.2s steps(3) infinite; }
-.zz { animation: zz 2.4s steps(4) infinite; }
 /* working poses (mirrors critter.dart on the panel) */
 .fast { animation-duration: .2s !important; }
 .slow { animation-duration: .8s !important; }
@@ -358,19 +367,12 @@ body.offline .main { opacity: 0.4; }
 @keyframes tick0 { 0%, 24% { opacity: 1 } 25%, 100% { opacity: 0 } }
 @keyframes tick1 { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
 @keyframes tick2 { 0%, 74% { opacity: 1 } 75%, 100% { opacity: 0 } }
-@keyframes hop { 0%, 49% { transform: translateY(0) } 50%, 100% { transform: translateY(-1.5px) } }
-@keyframes spark { 0%, 33% { opacity: 1 } 34%, 100% { opacity: .45 } }
 .glance { animation: glance 1.2s infinite; }
 .scan { animation: scan 1.2s infinite; }
 .t1 { animation: rise1 1.2s infinite; } .t2 { animation: rise2 1.2s infinite; } .t3 { animation: rise3 1.2s infinite; }
 .tapA { animation: tapA .3s infinite; } .tapB { animation: tapB .3s infinite; }
 .cursor { animation: cursor 1s infinite; }
 .tick0 { animation: tick0 2s infinite; } .tick1 { animation: tick1 2s infinite; } .tick2 { animation: tick2 2s infinite; }
-.hop { animation: hop .4s infinite; }
-.spark { animation: spark .6s infinite; }
-@keyframes bobc { 0%, 49% { transform: translateY(0) } 50%, 100% { transform: translateY(0.6px) } }
-.bobc { animation: bobc .6s infinite; }
-.s1 { animation-delay: .2s; } .s2 { animation-delay: .4s; }
 /* hat frames while working: frame i of n shows during slot i of each n x ms cycle */
 @keyframes hf2 { 0%, 49.99% { opacity: 1 } 50.00%, 100% { opacity: 0 } }
 @keyframes hf3 { 0%, 33.32% { opacity: 1 } 33.33%, 100% { opacity: 0 } }
@@ -472,7 +474,6 @@ body.offline .main { opacity: 0.4; }
 
 .d-head { display: flex; flex-direction: column; gap: 16px; }
 .d-top { display: flex; flex-direction: column; gap: 12px; }
-.d-bar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 /* the mascot opens the hat picker */
 .d-spr-btn { cursor: pointer; border-radius: 0; }
 .d-spr-btn:hover { outline: 1px dashed var(--d-dim); outline-offset: 4px; }
@@ -489,7 +490,7 @@ body.offline .main { opacity: 0.4; }
 .hatpick-foot { display: flex; align-items: center; gap: 12px; }
 .hatpick-foot .toggle:disabled { opacity: 0.5; cursor: default; }
 .hatpick-note { color: var(--accent); font-size: 13px; }
-.d-id { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.d-id { width: 100%; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .d-spr { width: 54px; flex-shrink: 0; line-height: 0; }
 .d-spr svg { width: 100%; height: auto; overflow: visible; }
 .d-mascots { display: flex; align-items: flex-end; gap: 14px; }
@@ -500,12 +501,11 @@ body.offline .main { opacity: 0.4; }
 .d-crew-n { font-family: var(--f-label); font-size: 12px; color: var(--d-dim); margin-left: 6px; white-space: nowrap; }
 .d-title:focus { outline: none; }
 .d-title {
-  margin: 0; font-family: var(--f-head); font-weight: 700; font-size: 28px; letter-spacing: -0.3px;
+  margin: 0; font-family: var(--f-head); font-weight: 700; font-size: var(--drawer-title-size, 24px); letter-spacing: -0.3px;
   overflow-wrap: anywhere;
 }
 .d-ai { color: var(--d-dim); font-size: 14px; margin-top: -4px; }
-.d-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-.d-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; min-width: 0; }
+.d-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 0; }
 .d-close {
   width: 36px; height: 36px; border-radius: 0; padding: 0;
   background: transparent; color: var(--d-fg); border: 1px solid var(--d-dim); cursor: pointer;
@@ -513,15 +513,17 @@ body.offline .main { opacity: 0.4; }
 }
 .d-close svg { width: 12px; height: 12px; }
 .d-close:active { background: var(--d-fg); color: var(--d-bg); }
-.d-pillrow { display: flex; align-items: center; gap: 8px; }
+.d-pillrow { display: flex; align-items: center; gap: 6px; max-width: 100%; }
+.d-pillrow .d-close, .d-pillrow .chip { flex: none; }
 .d-pillrow .chip { width: 8px; height: 8px; background: var(--chip); }
 .d-acct { display: inline-flex; align-items: center; gap: 6px; margin-top: -4px; color: var(--dim); font-family: var(--f-label); font-size: 12px; }
 .d-acct[hidden] { display: none; }
 .p-accent .d-pillrow .chip { box-shadow: 0 0 0 1px var(--bg); }
 .pill {
-  font-size: 14px; padding: 4px 12px; border-radius: 0; white-space: nowrap;
+  font-size: 14px; padding: 4px 8px; border-radius: 0; overflow-wrap: anywhere;
   background: var(--d-fg); color: var(--d-bg);
 }
+.idle-mark { width: 1.25em; height: 1.25em; vertical-align: middle; }
 .p-question .pill, .p-error .pill { background: var(--accent); color: var(--bg); }
 .p-dim .pill { background: transparent; color: var(--dim); box-shadow: inset 0 0 0 1px var(--dim); }
 
@@ -560,6 +562,9 @@ body.offline .main { opacity: 0.4; }
   font-size: 17px; letter-spacing: 0.5px; cursor: pointer;
   background: transparent; color: var(--d-fg); border: 2px solid var(--d-dim);
 }
+.pane-link-picker { flex: 1 1 100%; display: flex; gap: 8px; }
+.pane-link-picker select { min-width: 0; background: var(--d-bg); }
+.pane-link-picker .btn.narrow { flex: 0 0 auto; }
 .btn.solid { background: var(--d-fg); color: var(--d-bg); border-color: var(--d-fg); }
 .btn.acc { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .btn.narrow { flex: 0 1 200px; }
@@ -630,9 +635,8 @@ body.offline .main { opacity: 0.4; }
   .top-right { width: 100%; justify-content: space-between; }
   .wordmark { font-size: 20px; }
   .clock { font-size: 17px; }
-  .tile .name { font-size: 15px; }
+  .tile .name { font-size: var(--tile-name-size, 15px); }
   .tile .meta { font-size: 12px; }
-  .d-title { font-size: 24px; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .btn { font-size: 16px; }
   .btn.narrow { flex: 1 1 0; }
@@ -654,7 +658,7 @@ body.offline .main { opacity: 0.4; }
   }
   body:not(.panel-mode) .tile .spr { grid-row: 1 / span 2; width: 58px; margin: 0; }
   body:not(.panel-mode) .tile .spr svg { transform: none; }
-  body:not(.panel-mode) .tile .name { margin: 0; align-self: end; font-size: 16px; }
+  body:not(.panel-mode) .tile .name { margin: 0; align-self: end; font-size: var(--tile-name-size, 16px); }
   body:not(.panel-mode) .tile .meta { margin: 3px 0 0; align-self: start; font-size: 13px; }
   body:not(.panel-mode) .tile .ring { display: none; }
   body:not(.panel-mode) .tile .ctxbar {
@@ -729,7 +733,7 @@ body.panel-mode .grid {
   container-type: inline-size;
 }
 body.panel-mode .tile { aspect-ratio: auto; width: 100%; height: 100%; min-height: 0; padding: 4% 5%; }
-body.panel-mode .tile .name { font-size: clamp(9px, 2.2cqi, 16px); }
+body.panel-mode .tile .name { font-size: var(--tile-name-size, clamp(9px, 2.2cqi, 16px)); }
 body.panel-mode .tile .meta { font-size: clamp(8px, 1.75cqi, 12.5px); }
 /* ---------- the menu a right-click on a tile opens ---------- */
 .tilemenu {
@@ -763,12 +767,6 @@ body.panel-mode.paged .grid { aspect-ratio: auto; height: calc(var(--pv) - 30px)
 .pagebar .page.hot { background: var(--accent); }
 .pagebar .page.on { width: 56px; background: var(--ink); }
 
-/* hungry: finished, not yet reviewed — sliding orange zebra stripes */
-.tile.hungry { --body: var(--accent); --meta: var(--accent); --label: var(--ink);
-  background-image: repeating-linear-gradient(135deg, var(--zebra) 0 12px, transparent 12px 24px);
-  background-size: 34px 34px; animation: zebra 0.6s steps(6) infinite; }
-@keyframes zebra { from { background-position: 0 0 } to { background-position: 34px 0 } }
-
 /* ---------- "needs you": one screen left of the deck's first page ----------
    Drawn as a page of the deck: the same grid, tiles and free cells. Only the
    mark in the page bar shows you are on it. The columns are set from app.js
@@ -795,3 +793,33 @@ body:not(.panel-mode) .pagebar { position: sticky; bottom: 0; margin-top: 8px; b
 .pagebar .page.attn-mark.on { width: auto; background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .attn-chev { font-family: var(--f-head); font-weight: 700; font-size: 14px; margin-top: -2px; }
 .attn-n { font-family: var(--f-head); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+#ssh-deck { width: 100%; margin-block: 1.5rem; }
+#ssh-deck h2 { font-size: 1rem; }
+.ssh-heading { display: flex; align-items: center; gap: .45rem; position: relative; }
+.ssh-info button { border: 0; background: transparent; color: var(--dim); cursor: help; padding: .25rem; }
+#ssh-status { position: absolute; z-index: 3; left: 0; top: 100%; width: max-content; max-width: 100%; overflow-wrap: anywhere; padding: .45rem .65rem; background: var(--panel); color: var(--ink); border: 1px solid var(--line); visibility: hidden; }
+.ssh-info:hover #ssh-status, .ssh-info:focus-within #ssh-status { visibility: visible; }
+#ssh-refresh { width: 3rem; height: .3rem; accent-color: var(--accent); }
+.ssh-command { overflow-wrap: anywhere; font-size: .8rem; }
+.tile.st-offline { --body: var(--dim); --label: var(--dim); }
+
+#ssh-sessions .ssh-add {
+  display: grid; place-items: center; border: 1px dashed var(--empty-edge);
+  color: var(--dim); font-size: 1.4rem; background: transparent;
+}
+#ssh-sessions .ssh-add:hover { color: var(--ink); border-color: currentColor; }
+#picker-controls:not([hidden]) { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: center; gap: .6rem; margin-bottom: .75rem; }
+#picker-issues-label { display: flex; align-items: center; gap: .35rem; font-size: 14px; cursor: pointer; }
+#picker-filter { min-width: 0; width: 100%; padding: .5rem; }
+@media (max-width: 640px) {
+  body:not(.panel-mode) #ssh-sessions .ssh-add { aspect-ratio: auto; min-height: 3rem; }
+}
+
+#quick-message:not([hidden]) { position: fixed; z-index: 35; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; width: min(300px, calc(100vw - 16px)); padding: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+#quick-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#quick-text, #quick-feedback { grid-column: 1 / -1; min-width: 0; }
+#quick-text { padding: 8px; background: var(--bg); color: var(--ink); border: 1px solid var(--dim); }
+#quick-close { background: transparent; border: 0; color: inherit; cursor: pointer; }
+#quick-feedback { font-size: 13px; }
+#quick-feedback:empty { display: none; }

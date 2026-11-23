@@ -4,7 +4,9 @@
 
 import { buildPicker, themes, followThemeChanges } from './theme.js';
 
-const PAGES = ['general', 'agents', 'appearance', 'boards', 'network', 'updates', 'troubleshoot', 'about'];
+import { drawerFont, tileFont, tileBorder, layoutValue } from './layout.js';
+
+const PAGES = ['general', 'agents', 'appearance', 'layout', 'boards', 'network', 'updates', 'troubleshoot', 'about'];
 const SCOPES = [
   { value: 'view', text: 'look only' },
   { value: 'act', text: 'can answer' },
@@ -425,10 +427,10 @@ function drawAgents() {
     ]));
   }
 
-  out.push(lab('running here, not on the deck'));
+  out.push(lab('Claude sessions available to add'));
   const live = (S.live?.sessions || []).filter((s) => !s.onBoard);
   if (S.errors.live) out.push(h('p', { class: 'note' }, `Couldn't list them: ${S.errors.live.message}`));
-  else if (!live.length) out.push(h('p', { class: 'note' }, 'Nothing: every Claude session on this computer is on the deck.'));
+  else if (!live.length) out.push(h('p', { class: 'note' }, 'No additional running Claude sessions.'));
   for (const s of live) {
     const where = s.background ? 'in the background' : 'in a terminal';
     out.push(row(s.title || s.folder || 'Claude session', `Claude Code · started ${ago(s.started)} · ${where}`, [
@@ -1725,11 +1727,30 @@ function drawAppearance() {
   return buildPicker(themeList, { h, row });
 }
 
+function layoutRow(pref, id, label, description) {
+  const select = h('select', {
+    id, onchange: e => {
+      try { localStorage.setItem(pref.key, e.target.value); }
+      catch { e.target.value = String(layoutValue(pref)); toast('Could not save this setting in this browser.', true); }
+    },
+  }, pref.values.map(n => h('option', {value:n, selected:n === layoutValue(pref)},
+    n === 0 && pref.zeroLabel ? pref.zeroLabel : n + ' px')));
+  return row(h('label', {for:id}, label), description, [select]);
+}
+
+function drawLayout() {
+  return [
+    layoutRow(drawerFont, 'drawer-title-size', 'Session title font size', 'Text size of the title in the session drawer.'),
+    layoutRow(tileFont, 'tile-name-size', 'Agent tile font size', 'Text size of agent names on the deck.'),
+    layoutRow(tileBorder, 'tile-border-width', 'Agent card border width', 'Thickness of the border around each agent card.'),
+  ];
+}
+
 const DRAW = {
   general: ['general-body', drawGeneral], agents: ['agents-body', drawAgents], boards: ['boards-body', drawBoards],
   newboard: ['newboard-body', drawNewBoard], flash: ['newboard-body', drawFlash], network: ['network-body', drawNetwork],
   updates: ['updates-body', drawUpdates], troubleshoot: ['troubleshoot-body', drawTroubleshoot], about: ['about-body', drawAbout],
-  appearance: ['appearance-body', drawAppearance],
+  appearance: ['appearance-body', drawAppearance], layout: ['layout-body', drawLayout],
 };
 
 // draw redraws the open page. The timer's redraw (force false) leaves a page
@@ -1792,7 +1813,7 @@ async function refresh(force) {
   }
   showSystem(sys);
   const busyUI = S.open.more || S.open.wifi || S.pairing || S.confirmLoginOff;
-  if (!force && (busyUI || ['general', 'about', 'appearance'].includes(page))) return;
+  if (!force && (busyUI || ['general', 'about', 'appearance', 'layout'].includes(page))) return;
   await loadAll(...needs(page), ...extras(page));
   if (page === S.page) draw(false);
 }

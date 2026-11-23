@@ -5,6 +5,21 @@
 import { needsYou as needsYouScreen, packed, simulate, SPOTS } from './attention.js';
 
 import { followThemeChanges } from './theme.js';
+import { drawerFont, tileFont, tileBorder, layoutValue } from './layout.js';
+
+function applyLayout() {
+  const style = document.documentElement.style;
+  style.setProperty('--drawer-title-size', layoutValue(drawerFont) + 'px');
+  style.setProperty('--tile-border-width', layoutValue(tileBorder) + 'px');
+  const tile = layoutValue(tileFont);
+  if (tile) style.setProperty('--tile-name-size', tile + 'px');
+  else style.removeProperty('--tile-name-size');
+}
+applyLayout();
+addEventListener('pageshow', applyLayout);
+addEventListener('storage', e => {
+  if (e.key === null || [drawerFont, tileFont, tileBorder].some(pref => pref.key === e.key)) applyLayout();
+});
 
 const $ = (id) => document.getElementById(id);
 followThemeChanges(); // Settings is another page: pick its theme change up live
@@ -14,6 +29,16 @@ const FIXTURE = location.protocol === 'file:' || params.has('fixture');
 // ---------------------------------------------------------------- model
 let state = null;          // last State from the server
 let skew = 0;              // server clock minus local clock (ms)
+let sshState = { host: '', connection: '', sessions: [] };
+let sshRevision = 0;
+const sshTiles = new Map();
+let terminals = {};
+const locationFor = a => a.sshHost
+  ? (a.sshHost === terminals.host && terminals.remote?.[a.threadID])
+  : terminals.local?.[a.id];
+const locationKey = p => p.app + '/' + p.id + '/' + (p.connection || '');
+const locationText = p => p.app + ' W' + p.window + ' T' + p.tab +
+  (p.app === 'iTerm2' ? ' P' + p.pane : '');
 let selectedId = null;     // agent shown in the detail panel
 let needsFirst = false;    // "needs you first" sort toggle
 let panelMode = false;     // "panel view": the 720×720 panel's 4×4 grid
@@ -70,8 +95,6 @@ const verb = (tool) => { const t = (tool || '').toLowerCase(); return VERBS[t] |
 
 // status → sprite pose
 const POSE = { running: 'run', waiting: 'wait', error: 'err', idle: 'idle', starting: 'start', exited: 'exit' };
-// A running agent's pose follows its tool; a just-finished one hops for a bit.
-const CELEBRATE_MS = 6000;
 const TOOL_POSE = {
   read: 'read', grep: 'read', glob: 'read', ls: 'read',
   edit: 'write', write: 'write', multiedit: 'write', notebookedit: 'write',
@@ -83,8 +106,6 @@ const poseOf = (a) => {
     const tool = (a.activity?.tool || '').toLowerCase();
     return tool ? TOOL_POSE[tool] || 'run' : 'think';
   }
-  if (a.status === 'idle' && a.statusSince && now() - Date.parse(a.statusSince) < CELEBRATE_MS) return 'celebrate';
-  if (hungry(a)) return 'hungry';
   return POSE[a.status] || 'idle';
 };
 
@@ -96,9 +117,6 @@ const inApp = (a) => !!a.app; // runs in another app (Orca, herdr): answer, inte
 
 const needsYou = (a) => a.status === 'waiting' || a.status === 'error';
 
-// Finished a turn nobody has reviewed yet: hungry until its terminal is focused.
-const hungry = (a) => a.status === 'idle' && a.unseen;
-
 // Claude's turn is over and only its subagents work: "3 subagents", not the
 // main thread at a tool (the service sets this activity line for it).
 function subsOnly(a) {
@@ -108,7 +126,7 @@ function subsOnly(a) {
 }
 
 function tileMeta(a) {
-  if (hungry(a)) return 'hungry · feed me';
+  if (a.sshHost && a.status === 'idle') return lastActive(a) || 'idle';
   switch (a.status) {
     case 'running': return `${subsOnly(a) || verb(a.activity?.tool)} · ${ctxPct(a)}% ctx`;
     case 'waiting': {
@@ -120,7 +138,7 @@ function tileMeta(a) {
       if (w.kind === 'question') return `pick 1 of ${(w.options || []).length}`;
       return 'needs input';
     }
-    case 'idle': return ageMin(a.statusSince) < 120 ? `done · ${rel(a.statusSince)} ago` : `idle · ${rel(a.statusSince)}`;
+    case 'idle': return a.unseen || ageMin(a.statusSince) < 120 ? 'done' : `idle · ${rel(a.statusSince)}`;
     case 'error': return a.error?.message || 'error';
     case 'starting': return 'starting…';
     case 'exited': return a.lost ? 'lost with tmux' : a.resumable ? `ended · resumable` : `exited · ${rel(a.statusSince)} ago`;
@@ -129,11 +147,12 @@ function tileMeta(a) {
 }
 
 function pillText(a) {
+  if (a.sshHost && !a.statusSince) return a.status === 'waiting' ? 'needs you' : a.status;
   const since = rel(a.statusSince);
   switch (a.status) {
     case 'running': return `running · ${since}`;
     case 'waiting': return a.waiting?.kind === 'question' && a.waiting.context ? a.waiting.context : `needs you · ${since}`;
-    case 'idle': return a.unseen ? `hungry · ${since}` : `idle · ${since}`;
+    case 'idle': return `idle · ${since}`;
     case 'error': return `error · ${since}`;
     case 'exited': return a.lost ? `lost with tmux · ${since}` : `exited · ${since}`;
     default: return a.status;
@@ -418,6 +437,8 @@ function hatSVG(hat, oni, faded, animate = false) {
 // Poses of a working agent: its hat animates; every other pose keeps it still.
 const WORKING_POSES = new Set(['run', 'think', 'read', 'write', 'bash', 'web', 'plan', 'delegate', 'compact']);
 
+const SLEEP_MARK = '<text class="zt" x="14.8" y="-0.6" font-size="3.2">z</text><text class="zt" x="16.6" y="-2.4" font-size="2.3">z</text>';
+
 function spriteSVG(pose, species = 'claude', hat = null, opts = {}) {
   const bot = species === 'codex';
   const working = WORKING_POSES.has(pose);
@@ -428,7 +449,7 @@ function spriteSVG(pose, species = 'claude', hat = null, opts = {}) {
   const arm = (l, r, cls = '') => bot
     ? `<rect class="b ${cls}" x="1" y="${l - 1}" width="1" height="2"/><rect class="b ${cls}" x="12" y="${r - 1}" width="1" height="2"/>`
     : `<rect class="b ${cls}" x="0" y="${l}" width="1" height="2"/><rect class="b ${cls}" x="13" y="${r}" width="1" height="2"/>`;
-  let arms = arm(2, 2), held = '';
+  let arms = arm(2, 2);
   switch (pose) {
     case 'think':
       eyes = `<g class="glance">${eyesOpenAt(1, 1.5)}</g>`; arms = arm(2, 1);
@@ -456,25 +477,6 @@ function spriteSVG(pose, species = 'claude', hat = null, opts = {}) {
       eyes = eyesOpen(2); feet = legs(LEGS_A, 'la') + legs(LEGS_B, 'lb'); grp = 'bob'; arms = arm(2, 1, 'la') + arm(1, 2, 'lb');
       bubble = MINI(14.4, 3.2, 0.26);
       break;
-    case 'hungry':
-      // Eyes up at a bobbing cookie; the mouth chomps open and shut.
-      eyes = '<rect class="c" x="4.6" y="1" width="1" height="2"/><rect class="c" x="9.6" y="1" width="1" height="2"/>' +
-        (bot ? '<rect class="c la slow" x="6.2" y="3.4" width="1.6" height="1.4"/><rect class="c lb slow" x="6.2" y="4" width="1.6" height="0.5"/>'
-          : '<rect class="c la slow" x="6.2" y="4.2" width="2.2" height="1.6"/><rect class="c lb slow" x="6.2" y="4.8" width="2.2" height="0.5"/>');
-      bubble = `<g class="bobc">${pixels(['.###.', '##.##', '#####', '#.###', '.###.'], 14.3, 0.75, '', 0.75, -4.2)}</g>`;
-      break;
-    case 'celebrate': {
-      eyes = [4.5, 9.5].map((x) => `<path class="cx" stroke-width="0.55" d="M${x - 1} 3.3 L${x} 2.2 L${x + 1} 3.3"/>`).join('');
-      grp = 'hop'; feet = `<g class="hop">${legs(LEGS_A)}</g>`; arms = arm(0, 0);
-      // The finish flag in the raised hand: a pole and a 3×2 checker that waves
-      // by swapping its squares.
-      const checker = (phase, cls) => `<g class="${cls}">` + [0, 1, 2].flatMap((cx) => [0, 1].map((cy) =>
-        `<rect class="${(cx + cy + phase) % 2 ? 'c' : 'fl'}" x="${15 + cx}" y="${-4 + cy}" width="1" height="1"/>`)).join('') + '</g>';
-      held = `<rect class="fl" x="14" y="-4" width="1" height="6"/>${checker(0, 'la')}${checker(1, 'lb')}`;
-      const plus = (x, y, i) => `<g class="spark s${i}"><rect class="b" x="${x - 0.5}" y="${y}" width="1.5" height="0.5"/><rect class="b" x="${x}" y="${y - 0.5}" width="0.5" height="1.5"/></g>`;
-      bubble = plus(16.4, -6.2, 0) + plus(18.2, -4.4, 1);
-      break;
-    }
     case 'run':
       eyes = eyesOpen(2); feet = legs(LEGS_A, 'la') + legs(LEGS_B, 'lb'); bubble = DOTS; grp = 'bob'; arms = arm(2, 1, 'la') + arm(1, 2, 'lb'); break;
     case 'wait':
@@ -500,13 +502,13 @@ function spriteSVG(pose, species = 'claude', hat = null, opts = {}) {
       eyes = '<rect class="b" x="4" y="3" width="1" height="1"/><rect class="b" x="9" y="3" width="1" height="1"/>'; break;
     default: // idle: asleep
       eyes = eyesShut;
-      bubble = '<text class="zt zz" x="14.8" y="-0.6" font-size="3.2">z</text><text class="zt zz" x="16.6" y="-2.4" font-size="2.3">z</text>';
+      bubble = SLEEP_MARK;
   }
   // The block's face sits half a row higher than the onigiri's.
   const face = bot ? eyes : `<g transform="translate(0 -0.5)">${eyes}</g>`;
   const hatG = hat ? hatSVG(hat, bot, pose === 'exit', working) : '';
   if (opts.bubble === false) bubble = '';
-  return `<svg viewBox="0 -4 18 13" shape-rendering="crispEdges" aria-hidden="true" focusable="false"><g class="${grp}">${body}${arms}${face}${hatG}${held}</g>${feet}${bubble}</svg>`;
+  return `<svg viewBox="0 -4 18 13" shape-rendering="crispEdges" aria-hidden="true" focusable="false"><g class="${grp}">${body}${arms}${face}${hatG}</g>${feet}${bubble}</svg>`;
 }
 
 // ---------------------------------------------------------------- dom helpers
@@ -550,6 +552,61 @@ function makeRing() {
 }
 
 // wire makes it draggable: onto the deck's slots (wireDrag) or the "needs you" spots.
+let detailClick;
+let quickTarget;
+const quickForm = $('quick-message');
+function closeQuickMessage() {
+  quickForm.hidden = true;
+  quickTarget = null;
+}
+function positionQuickMessage() {
+  if (!quickTarget) return;
+  const r = quickTarget.anchor.getBoundingClientRect();
+  if (!quickTarget.anchor.isConnected || !r.width) { closeQuickMessage(); return; }
+  const w = quickForm.offsetWidth, h = quickForm.offsetHeight;
+  const right = r.right + 8;
+  const left = right + w <= innerWidth - 8 ? right : r.left - w - 8;
+  quickForm.style.left = Math.max(8, Math.min(innerWidth-w-8, left >= 8 ? left : r.left)) + 'px';
+  const top = left >= 8 ? r.top : r.bottom + 8;
+  quickForm.style.top = Math.max(8, Math.min(innerHeight-h-8, top)) + 'px';
+}
+function openQuickMessage(id, anchor) {
+  const agent = sshState.sessions.find(s => s.id === id) || state?.agents.find(s => s.id === id);
+  if (!agent) return;
+  closeDetail();
+  quickTarget = {anchor, id:agent.threadID || id, host:agent.sshHost || ''};
+  $('quick-title').textContent = 'Message ' + (agent.title || id);
+  $('quick-feedback').textContent = '';
+  $('quick-text').disabled = false;
+  $('quick-text').value = '';
+  quickForm.hidden = false;
+  positionQuickMessage();
+  $('quick-text').focus({preventScroll:true});
+}
+quickForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const target = quickTarget, input = $('quick-text');
+  if (!target || input.disabled || !input.value.trim()) return;
+  input.disabled = true;
+  setText($('quick-feedback'), 'Sending…');
+  const result = await api('/admin/v1/agents/message', {host:target.host,id:target.id,text:input.value});
+  if (target !== quickTarget) return;
+  input.disabled = false;
+  if (result.ok) input.value = '';
+  setText($('quick-feedback'), result.ok ? 'Sent' : result.error);
+  positionQuickMessage();
+  input.focus({preventScroll:true});
+});
+$('quick-close').addEventListener('click', closeQuickMessage);
+quickForm.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    event.preventDefault(); event.stopPropagation();
+    quickTarget?.anchor.focus(); closeQuickMessage();
+  }
+});
+addEventListener('resize', positionQuickMessage);
+document.addEventListener('scroll', positionQuickMessage, true);
+
 function makeTile(a, wire = wireDrag) {
   const spr = h('span', { class: 'spr' });
   const name = h('span', { class: 'name' });
@@ -560,15 +617,31 @@ function makeTile(a, wire = wireDrag) {
   const chip = h('span', { class: 'chip', 'aria-hidden': 'true' }); // the tool's colour, or its Claude account's
   const el = h('button', { type: 'button', class: 'tile', 'data-id': a.id },
     chip, subs, spr, name, meta, ring.svg, bar);
-  el.addEventListener('click', () => openDetail(a.id));
-  el.addEventListener('contextmenu', (e) => { e.preventDefault(); openTileMenu(a.id, e.clientX, e.clientY); });
-  el.addEventListener('keydown', (e) => {
-    if (e.key !== 'ContextMenu' && !(e.key === 'F10' && e.shiftKey)) return;
-    e.preventDefault();
-    const r = el.getBoundingClientRect();
-    openTileMenu(a.id, r.left + 10, r.bottom - 6);
+  el.addEventListener('click', event => {
+    clearTimeout(detailClick);
+    if (!event.detail) { closeQuickMessage(); openDetail(a.id); return; }
+    if (event.detail === 1) detailClick = setTimeout(() => {
+      closeQuickMessage(); openDetail(a.id);
+    }, 350);
   });
-  wire(el, a.id);
+  el.addEventListener('dblclick', event => {
+    event.preventDefault(); clearTimeout(detailClick); openQuickMessage(a.id, el);
+  });
+  el.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && event.shiftKey) {
+      event.preventDefault(); openQuickMessage(a.id, el);
+    }
+  });
+  if (wire) {
+    el.addEventListener('contextmenu', (e) => { e.preventDefault(); openTileMenu(a.id, e.clientX, e.clientY); });
+    el.addEventListener('keydown', (e) => {
+      if (e.key !== 'ContextMenu' && !(e.key === 'F10' && e.shiftKey)) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      openTileMenu(a.id, r.left + 10, r.bottom - 6);
+    });
+    wire(el, a.id);
+  }
   return { el, spr, name, meta, subs, chip, bar, subsKey: '', acctKey: '', ring: ring.fill, dash: '', cls: '', label: '' };
 }
 
@@ -621,7 +694,7 @@ function wireDrag(el, id) {
 }
 
 function updateTile(t, a) {
-  const cls = `tile st-${a.status} tool-${a.tool}` + (hungry(a) ? ' hungry' : '') + (a.focused ? ' focused' : '') + (a.id === selectedId ? ' selected' : '');
+  const cls = `tile st-${a.status} tool-${a.tool}` + (a.focused ? ' focused' : '') + (a.id === selectedId ? ' selected' : '');
   if (t.cls !== cls) { t.el.className = cls; t.cls = cls; }
   setSprite(t.spr, poseOf(a), a.tool, a.hat);
   const used = a.context?.window > 0 ? Math.min(100, (a.context.used / a.context.window) * 100) : 0;
@@ -673,14 +746,204 @@ function renderGrid() {
   for (const [id, t] of tiles) if (!seen.has(id)) { t.el.remove(); tiles.delete(id); }
   const lines = new Set(groupLines().map((g) => g.slot));
   for (const slot of dividers.keys()) if (!lines.has(slot)) dividers.delete(slot);
-  const want = panelOn() ? panelCells(list) : needsFirst || onPhone() ? list.map((a) => tiles.get(a.id).el) : boardCells(list);
+  const layout = sshLayout();
+  renderSSH(layout);
+  const want = panelOn() ? panelCells(list) : needsFirst || onPhone() ? list.map((a) => tiles.get(a.id).el) : boardCells(list, layout);
   // Reconcile in place so running animations aren't restarted needlessly.
   reconcile(grid, want);
   const onAttn = view === 'attn';
-  $('empty').hidden = list.length > 0 || !state || panelOn() || onAttn;
-  grid.hidden = (list.length === 0 && !panelOn()) || onAttn;
+  $('empty').hidden = list.length > 0 || sshState.sessions.length > 0 || !state || panelOn() || onAttn;
+  grid.hidden = !want.length || onAttn;
   renderAttention();
   renderPageBar(panelOn() ? panelPageCount(list) : 1, panelOn() ? new Set(list.filter(needsYou).map((a) => Math.floor(a.slot / 16))) : new Set());
+}
+
+// SSH sessions use the same tile and drawer as local agents. Their identities
+// include the host so a host switch cannot attach an old selection elsewhere.
+const sshAddTile = h('button', {type:'button', class:'tile-empty ssh-add',
+  'aria-label':'Add a Codebox session', title:'Add a Codebox session', text:'＋',
+  onclick: () => openPicker(-1, sshState.host)});
+
+function renderSSH(layout) {
+  const box = $('ssh-deck');
+  box.hidden = !sshState.host || view === 'attn';
+  const list = sshState.sessions;
+  const groups = panelOn() || needsFirst || onPhone() ? [] : groupLines();
+  const nodes = [];
+  for (const a of list) {
+    let t = sshTiles.get(a.id);
+    if (!t) {
+      t = makeTile(a, el => wireSSHDrag(el, a));
+      sshTiles.set(a.id, t);
+    }
+    updateTile(t, a);
+    if (!groups.some(g => g.slot === layout.groups[a.threadID])) nodes.push(t.el);
+  }
+  for (const id of sshTiles.keys()) {
+    if (!list.some(a => a.id === id)) sshTiles.delete(id);
+  }
+  reconcile($('ssh-sessions'), [...nodes, sshAddTile]);
+  let status = sshState.host + ' · ' + sshState.connection;
+  if (sshState.connection === 'online' && !list.length) status += ' · No sessions in the last six hours.';
+  if (sshState.connection === 'offline' && list.length && sshState.lastSeen) {
+    status += ' · Last seen ' + new Date(sshState.lastSeen).toLocaleTimeString();
+  }
+  setText($('ssh-status'), status);
+}
+
+// Remote IDs have no local board slot. Save their group on the configured host.
+let draggedSSH = null;
+function wireSSHDrag(el, agent) {
+  el.draggable = true;
+  el.addEventListener('dragstart', e => {
+    draggedSSH = agent;
+    el.dataset.dragging = '';
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', agent.id);
+  });
+  el.addEventListener('dragend', () => {
+    draggedSSH = null;
+    delete el.dataset.dragging;
+    clearSSHDrop();
+  });
+}
+
+let sshDropTarget;
+function clearSSHDrop() {
+  if (sshDropTarget) delete sshDropTarget.dataset.drop;
+  sshDropTarget = null;
+}
+
+function sshDropZone(event, container) {
+  if (container === $('ssh-deck')) return event.target.closest('#ssh-sessions > *') || sshAddTile;
+  if (panelOn() || needsFirst || onPhone()) return null;
+  const cell = event.target.closest('#grid > *');
+  if (cell?.hasAttribute('data-group-slot')) {
+    const group = cell.dataset.groupSlot;
+    return container.querySelector(`.tile-empty[data-board-group="${group}"]`) || cell.nextElementSibling;
+  }
+  return cell?.dataset.boardGroup ? cell : null;
+}
+
+// Keep pending drops on screen during polling. Write them in gesture order
+// so rapidly moving a tile twice leaves it in the last requested cell.
+const pendingMoves = [];
+let moveWrites = Promise.resolve();
+function sshLayout() {
+  const groups = {...sshState.groupSlots}, cells = {...sshState.groupCells};
+  for (const move of pendingMoves) {
+    if (move.host !== sshState.host) continue;
+    if (move.swapID) {
+      groups[move.swapID] = groups[move.id];
+      cells[move.swapID] = move.sourceCell;
+    }
+    groups[move.id] = move.groupSlot;
+    cells[move.id] = move.groupCell;
+  }
+  return {groups, cells};
+}
+
+function moveSSHToGroup(agent, zone) {
+  const {sshHost:host, threadID:id} = agent;
+  if (sshState.host !== host || zone.dataset.id === agent.id) return;
+  const source = sshTiles.get(agent.id).el;
+  const groupSlot = zone.parentElement === $('grid') ? Number(zone.dataset.boardGroup) : 0;
+  if (!groupSlot && source.parentElement === $('ssh-sessions')) return;
+  const target = sshState.sessions.find(s => s.id === zone.dataset.id);
+  const move = {host, id, pinned:true, groupSlot};
+  if (groupSlot) move.groupCell = Number(zone.dataset.boardCell);
+  if (source.parentElement === $('grid')) move.sourceCell = Number(source.dataset.boardCell);
+  if (groupSlot && target) move.swapID = target.threadID;
+  pendingMoves.push(move);
+  renderGrid();
+  moveWrites = moveWrites.then(async () => {
+    const r = await api('/admin/v1/ssh-codex/pins', move, true);
+    pendingMoves.shift();
+    if (sshState.host !== host) return;
+    ++sshRevision;
+    if (r.ok) applySSHState(r.data.state);
+    const note = dividers.get(groupSlot)?.note || $('ssh-group-note');
+    setText(note, r.ok ? '' : 'Could not move session · ' + r.error);
+    render();
+  });
+}
+
+for (const container of [$('grid'), $('ssh-deck')]) {
+  for (const type of ['dragover', 'drop']) {
+    container.addEventListener(type, event => {
+      if (!draggedSSH) return;
+      // A text input in a divider should accept the tile as a group move.
+      event.preventDefault();
+      event.stopPropagation();
+      const zone = sshDropZone(event, container);
+      clearSSHDrop();
+      event.dataTransfer.dropEffect = zone ? 'move' : 'none';
+      if (!zone) return;
+      if (type === 'dragover') {
+        sshDropTarget = zone;
+        zone.dataset.drop = 'swap';
+      } else {
+        const agent = draggedSSH;
+        draggedSSH = null;
+        moveSSHToGroup(agent, zone);
+      }
+    }, true);
+  }
+  container.addEventListener('dragleave', e => {
+    if (!container.contains(e.relatedTarget)) clearSSHDrop();
+  });
+}
+
+function applySSHState(data) {
+  const hostChanged = data.host !== sshState.host;
+  if (hostChanged) {
+    if (pickerHost) closePicker();
+    sshCatalog = {host:data.host, sessions:null, updated:0, pending:null};
+  }
+  if (data.host && data.connection === 'online' &&
+      (sshState.host !== data.host || sshState.connection !== 'online')) {
+    refreshCatalog(sshCatalog);
+  }
+  sshState = { ...data, sessions: (data.sessions || []).map(a => ({
+    ...a, id: 'ssh/' + data.host + '/' + a.id, threadID: a.id,
+    sshHost: data.host, sshTerminal: data.terminal,
+    status: data.connection === 'online' ? a.status : 'offline',
+    statusSince: null,
+  })) };
+  if (hostChanged && !$('picker').hidden) {
+    pickerPins = new Set(data.pinned || []);
+    renderChoices();
+  }
+}
+
+let sshRefreshes = 0;
+function markSSHRefresh(change) {
+  sshRefreshes += change;
+  $('ssh-refresh').hidden = sshRefreshes === 0;
+}
+
+async function refreshSSH() {
+  if (expired) return;
+  const revision = sshRevision;
+  markSSHRefresh(1);
+  try {
+    const r = await fetch('/admin/v1/ssh-codex', { cache: 'no-store' });
+    if (r.status === 401) { showExpired(); return; }
+    if (!r.ok) throw new Error('unavailable');
+    const data = await r.json();
+    try {
+      const inventory = await fetch('/admin/v1/terminals', {cache:'no-store'});
+      terminals = inventory.ok ? await inventory.json() : {};
+    } catch { terminals = {}; }
+    if (revision === sshRevision) applySSHState(data);
+  } catch {
+    if (revision === sshRevision) {
+      sshState.connection = 'offline';
+      sshState.sessions = sshState.sessions.map(a => ({ ...a, status: 'offline' }));
+    }
+  } finally { markSSHRefresh(-1); }
+  render();
+  setTimeout(refreshSSH, 5000);
 }
 
 function reconcile(parent, want) {
@@ -699,22 +962,47 @@ function emptyCell(slot) {
 // The free-form board: a cell per slot up to the last agent, the row filled out
 // with free cells so there's always somewhere to drop, with a group's line
 // across the grid wherever one is anchored (groupLines below).
-function boardCells(list) {
-  if (!list.length) return [];
+function boardCells(list, layout) {
+  const lines = groupLines();
+  if (!list.length && !lines.length) return [];
   const bySlot = new Map(list.map((a) => [a.slot, a]));
   const cols = Math.max(1, getComputedStyle($('grid')).gridTemplateColumns.split(' ').length);
-  const lines = groupLines();
-  const last = Math.max(...bySlot.keys());
+  const last = Math.max(0, ...bySlot.keys());
   // A line is drawn even where no agent has reached it yet, so a new group has
   // free cells under it to drop into.
   const lastLine = lines.length ? lines[lines.length - 1].slot + GROUP_ROW - 1 : 0;
   const n = Math.min(MAX_SLOT + 1, Math.ceil((Math.max(last, lastLine) + 1) / cols) * cols);
-  const byLine = new Map(lines.map((g) => [g.slot, g]));
   const cells = [];
-  for (let s = 0; s < n; s++) {
-    const g = byLine.get(s);
-    if (g) cells.push(dividerCell(g));
-    cells.push(bySlot.has(s) ? tiles.get(bySlot.get(s).id).el : emptyCell(s));
+  const base = s => bySlot.has(s) ? tiles.get(bySlot.get(s).id).el : null;
+  for (let s = 0; s < (lines[0]?.slot ?? n); s++) {
+    const el = base(s) || emptyCell(s);
+    delete el.dataset.boardGroup;
+    cells.push(el);
+  }
+  for (const [i,g] of lines.entries()) {
+    cells.push(dividerCell(g));
+    const end = lines[i+1]?.slot ?? n;
+    const local = Array.from({length:end-g.slot}, (_, j) => base(g.slot+j));
+    const remote = sshState.sessions.filter(a => layout.groups[a.threadID] === g.slot);
+    const row = [];
+    const waiting = [];
+    for (const agent of remote) {
+      const el = sshTiles.get(agent.id).el;
+      const index = layout.cells[agent.threadID];
+      if (Number.isInteger(index) && index >= 0 && !row[index]) row[index] = el;
+      else waiting.push(el);
+    }
+    local.forEach((el, j) => {
+      if (row[j] && el) waiting.unshift(el);
+      else if (!row[j]) row[j] = el;
+    });
+    for (let j = 0; j < row.length || waiting.length; j++) {
+      const el = row[j] || waiting.shift() ||
+        (j < local.length ? emptyCell(g.slot+j) : h('div', {class:'tile-empty'}));
+      el.dataset.boardGroup = g.slot;
+      el.dataset.boardCell = j;
+      cells.push(el);
+    }
   }
   return cells;
 }
@@ -762,7 +1050,7 @@ function makeDivider(slot) {
     'aria-label': `remove the group line above tile ${slot + 1}`,
     onclick: () => setGroup(slot, '', note),
   });
-  const el = h('div', { class: 'group-line', role: 'separator' }, name, note, del);
+  const el = h('div', { class: 'group-line', role: 'separator', 'data-group-slot':slot }, name, note, del);
   return { el, name, note };
 }
 
@@ -829,10 +1117,11 @@ function renderPageBar(pages, hot) {
   const key = `${pages}|${panelPage}|${[...hot].join(',')}|${onAttn}|${n}|${asking}|${panelOn()}`;
   if (bar.dataset.key === key) return;
   bar.dataset.key = key;
+  const countLabel = n ? n + (n === 1 ? ' agent' : ' agents') : 'nothing right now';
   const mark = h('button', {
     type: 'button', class: `page attn-mark${onAttn ? ' on' : ''}${asking ? ' hot' : ''}`,
-    'aria-label': `needs you: ${n ? `${n} agent${n === 1 ? '' : 's'} at work or asking` : 'nothing right now'}`,
-    title: n ? `${n} agent${n === 1 ? '' : 's'} at work or asking you something (←)` : 'needs you: nothing right now (←)',
+    'aria-label': `needs you: ${countLabel}`,
+    title: `needs you: ${countLabel} (←)`,
   }, h('span', { class: 'attn-chev', 'aria-hidden': 'true', text: '‹' }), n ? h('span', { class: 'attn-n', text: String(n) }) : null);
   mark.addEventListener('click', () => goView('attn'));
   const label = (p) => (panelOn() ? `page ${p + 1} of ${pages}` : 'the deck');
@@ -1035,44 +1324,166 @@ function makeEmptyCell(slot) {
 }
 
 // ---------------------------------------------------------------- add a session
-// Claude sessions started by hand in other terminals (GET /v1/live); adding
-// one puts it on the deck, in the free cell it was opened from.
+// The main picker combines local sessions with the configured Codebox.
 let pickerSlot = -1;
+let pickerHost = '';
+let pickerGeneration = 0;
+const catalogLifetime = 5 * 60 * 1000;
+let sshCatalog = {host:'', sessions:null, updated:0, pending:null};
+let pickerRefreshTimer;
+const pendingPins = new Set();
+let pickerPins = new Set();
+const localCatalog = {sessions:null, updated:0, pending:null};
+const localPickerText = $('picker-sub').textContent;
+const pickerRow = (title, meta, button) => h('li', {},
+  h('span', {class:'picker-name', text:title}),
+  h('span', {class:'picker-meta', text:meta}), button);
+const pickerMessage = text => $('picker-list').replaceChildren(
+  h('li', {class:'picker-empty', text}));
 
-async function openPicker(slot = -1) {
+function openPicker(slot = -1, host = '') {
+  ++pickerGeneration;
+  pickerHost = host;
   pickerSlot = slot;
+  setText($('picker-title'), host ? 'Add a Codebox session' : 'Add a session');
+  $('picker-controls').hidden = false;
+  $('picker-filter').value = '';
   if (!$('picker-close').firstElementChild) $('picker-close').replaceChildren(closeIcon());
   $('picker').hidden = false;
-  $('picker-close').focus();
-  await refreshPicker();
-}
-
-function closePicker() { $('picker').hidden = true; }
-
-async function refreshPicker() {
-  const list = $('picker-list');
-  let sessions = [];
-  try {
-    const r = FIXTURE ? { ok: true, json: async () => ({ sessions: fixtureLive }) } : await fetch('/v1/live', { credentials: 'same-origin', cache: 'no-store' });
-    if (r.ok) sessions = (await r.json()).sessions || [];
-  } catch { /* offline: empty list */ }
-  if (!sessions.length) {
-    list.replaceChildren(h('li', { class: 'picker-empty', text: 'No Claude Code session is running outside the deck right now. Start one in a terminal with claude, or on the deck with agentctl new.' }));
-    return;
+  $('picker-filter').focus();
+  clearInterval(pickerRefreshTimer);
+  for (const catalog of [localCatalog, sshCatalog]) {
+    if (Date.now() - catalog.updated >= catalogLifetime) catalog.sessions = null;
   }
-  list.replaceChildren(...sessions.map((s) => {
-    const btn = h('button', { type: 'button', class: 'toggle', text: s.onBoard ? 'on the deck' : 'add', disabled: s.onBoard });
-    btn.addEventListener('click', async () => {
-      btn.disabled = true; btn.textContent = 'adding…';
-      const r = await api(`/v1/live/${encodeURIComponent(s.sessionId)}/add`, pickerSlot >= 0 ? { slot: pickerSlot } : {});
-      if (r.ok) closePicker(); else { btn.disabled = false; btn.textContent = `failed · ${r.error}`; }
-    });
-    return h('li', {},
-      h('span', { class: 'picker-name', text: s.title || s.folder }),
-      h('span', { class: 'picker-meta', text: `${s.folder}${s.background ? ' · background' : ''} · started ${rel(s.started)} ago` }),
-      btn);
-  }));
+  pickerPins = new Set(sshState.pinned || []);
+  renderChoices();
+  function refresh() {
+    if (!pickerHost) refreshCatalog(localCatalog);
+    if (sshCatalog.host) refreshCatalog(sshCatalog);
+  }
+  refresh();
+  pickerRefreshTimer = setInterval(() => { if (!document.hidden) refresh(); }, 30000);
 }
+
+// Reopening the picker shares an in-flight request. A failed source leaves
+// sessions from the other source and the previous successful snapshot usable.
+function refreshCatalog(catalog) {
+  if (catalog.pending || expired) return;
+  const remote = catalog !== localCatalog;
+  if (remote) markSSHRefresh(1);
+  const url = remote ? '/admin/v1/ssh-codex/sessions?host=' + encodeURIComponent(catalog.host) : '/v1/live?catalog=all';
+  const request = FIXTURE && !remote ? Promise.resolve({ok:true, json:async()=>({sessions:fixtureLive})}) :
+    fetch(url, {cache:'no-store', credentials:'same-origin'});
+  catalog.pending = request.then(async r => {
+    if (expired || (remote && catalog !== sshCatalog)) return;
+    if (r.status === 401) { showExpired(); return; }
+    if (!r.ok) throw new Error('Could not refresh ' + (remote ? 'Codebox' : 'local') + ' sessions.');
+    const data = await r.json();
+    if (expired || (remote && catalog !== sshCatalog)) return;
+    catalog.sessions = (remote ? data : data.sessions) || [];
+    catalog.warning = data?.warning || '';
+    catalog.updated = Date.now();
+  }).catch(err => { catalog.warning = err.message + (catalog.sessions ? ' Showing the last list.' : ''); }).finally(() => {
+    catalog.pending = null;
+    if (remote) markSSHRefresh(-1);
+    if (!expired && !$('picker').hidden && (remote ? catalog === sshCatalog : !pickerHost)) renderChoices();
+  });
+}
+
+function closePicker() {
+  clearInterval(pickerRefreshTimer);
+  ++pickerGeneration;
+  $('picker').hidden = true;
+  if (pickerHost) sshAddTile.focus();
+  pickerHost = '';
+}
+
+function renderChoices() {
+  if ($('picker').hidden) return;
+  const filter = $('picker-filter').value.trim().toLowerCase();
+  const issuesOnly = $('picker-issues').checked;
+  const rows = [];
+  const visible = (s, source) => (!issuesOnly || /^\s*\d{6}(?!\d)/.test(s.title || '')) &&
+    [s.title, s.folder, s.sessionId, s.id, s.agentId, s.app, source].some(v => v && v.toLowerCase().includes(filter));
+  if (!pickerHost) for (const s of localCatalog.sessions || []) {
+    const tool = s.tool || 'claude';
+    const source = [tool, s.app, 'local'].filter(Boolean).join(' · ');
+    if (visible(s,source)) rows.push(localChoice(s,source));
+  }
+  const onDeck = new Set(sshState.sessions.map(s => s.threadID));
+  for (const s of sshCatalog.sessions || []) {
+    if (visible(s,'Codex · Codebox')) rows.push(sshChoice(s,sshCatalog.host,onDeck));
+  }
+  const sources = [!pickerHost && localCatalog, sshCatalog.host && sshCatalog].filter(Boolean);
+  const warnings = sources.map(c=>c.warning).filter(Boolean);
+  setText($('picker-sub'), warnings.join(' ') || (pickerHost ? 'Choose a session from ' + pickerHost + '.' : localPickerText));
+  const list = $('picker-list'), scroll = list.scrollTop;
+  const focused = document.activeElement.dataset.sessionId;
+  if (rows.length) list.replaceChildren(...rows);
+  else if (sources.some(c=>!c.sessions && !c.warning)) pickerMessage('Loading sessions…');
+  else if (warnings.length) pickerMessage('No sessions available from the responding sources.');
+  else pickerMessage(filter || issuesOnly ? 'No matching sessions.' : 'No sessions found.');
+  if (focused) (list.querySelector('[data-session-id="' + CSS.escape(focused) + '"]') || $('picker-filter')).focus({preventScroll:true});
+  list.scrollTop = scroll;
+}
+
+function sshChoice(s, host, onDeck) {
+  const generation = pickerGeneration;
+  const pinned = pickerPins.has(s.id);
+  const already = !pinned && onDeck.has(s.id);
+  const key = host + '/' + s.id;
+  const busy = pendingPins.has(key);
+  const btn = h('button', {type:'button', class:'toggle', 'data-session-id':s.id, disabled:already || busy,
+    text:busy ? (pinned ? 'removing…' : 'adding…') : pinned ? 'unpin' : already ? 'on the deck' : 'add'});
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = pinned ? 'removing…' : 'adding…';
+    pendingPins.add(key);
+    const r = await api('/admin/v1/ssh-codex/pins', {host, id:s.id, pinned:!pinned}, true);
+    pendingPins.delete(key);
+    if (r.ok && sshState.host === host && r.data?.state?.host === host) {
+      ++sshRevision; // Ignore polls started before this change.
+      applySSHState(r.data.state);
+      render();
+    }
+    if (generation !== pickerGeneration) return;
+    if (!r.ok) {
+      renderChoices();
+      setText($('picker-sub'), r.error);
+      return;
+    }
+    if (pinned) pickerPins.delete(s.id); else pickerPins.add(s.id);
+    closePicker();
+  });
+  return pickerRow(s.title || s.folder || s.id,
+    ['Codex · Codebox', s.status, lastActive(s), s.context?.window ? ctxPct(s) + '% context' : '',
+      s.folder, s.id].filter(Boolean).join(' · '), btn);
+}
+
+function localChoice(s,source) {
+  const generation = pickerGeneration, key = 'local/' + s.sessionId;
+  const busy = pendingPins.has(key);
+  const btn = h('button', {type:'button', class:'toggle', 'data-session-id':key,
+    disabled:s.onBoard || busy, text:busy ? 'adding…' : s.onBoard ? 'on the deck' : 'add'});
+  btn.addEventListener('click', async () => {
+    pendingPins.add(key);
+    btn.disabled = true; btn.textContent = 'adding…';
+    const r = await api('/v1/live/' + encodeURIComponent(s.sessionId) + '/add', pickerSlot >= 0 ? {slot:pickerSlot} : {});
+    pendingPins.delete(key);
+    if (r.ok) {
+      s.onBoard = true;
+      if (generation === pickerGeneration) closePicker();
+      if (!FIXTURE) await loadState();
+    } else if (generation === pickerGeneration) {
+      renderChoices();
+      setText($('picker-sub'),r.error);
+    }
+  });
+  return pickerRow(s.title || s.folder || s.sessionId, [source, s.background ? 'background' : s.status,
+    s.folder, lastActive(s)].filter(Boolean).join(' · '), btn);
+}
+$('picker-filter').addEventListener('input', renderChoices);
+$('picker-issues').addEventListener('change', renderChoices);
 
 $('add-session').addEventListener('click', () => openPicker(-1));
 $('add-group').addEventListener('click', (e) => addGroup(e.currentTarget));
@@ -1082,7 +1493,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('pick
 
 function renderTop() {
   const c = { running: 0, waiting: 0, idle: 0, error: 0 };
-  for (const a of state?.agents || []) {
+  for (const a of [...(state?.agents || []), ...sshState.sessions]) {
     if (a.status === 'running' || a.status === 'starting') c.running++;
     else if (a.status === 'exited') c.idle++;
     else if (a.status in c) c[a.status]++;
@@ -1144,7 +1555,7 @@ function closeDetail() {
   selectedId = null; det = null;
   panel.hidden = true; panel.replaceChildren();
   render();
-  (view === 'attn' ? attnTiles : tiles).get(id)?.el.focus({ preventScroll: true });
+  (sshTiles.get(id) || (view === 'attn' ? attnTiles : tiles).get(id))?.el.focus({ preventScroll: true });
 }
 
 const closeIcon = () => {
@@ -1284,6 +1695,26 @@ function handoffButton(a, acc, note) {
   return b;
 }
 
+function updateStatusPill(pill, a) {
+  const label = pillText(a);
+  if (a.status !== 'idle' || !label.startsWith('idle')) {
+    pill.removeAttribute('title');
+    setText(pill, label);
+    return;
+  }
+  if (!pill.firstElementChild) {
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.setAttribute('class', 'idle-mark');
+    icon.setAttribute('viewBox', '14 -5 5 5');
+    icon.setAttribute('role', 'img');
+    icon.setAttribute('aria-label', 'Idle');
+    icon.innerHTML = SLEEP_MARK;
+    pill.replaceChildren(icon, document.createTextNode(''));
+  }
+  pill.title = 'Idle' + label.slice(4);
+  pill.lastChild.textContent = label.slice(4);
+}
+
 function header(a) {
   const spr = h('span', { class: 'd-spr' });
   const crew = h('span', { class: 'd-crew', role: 'img' });
@@ -1291,22 +1722,18 @@ function header(a) {
   const ai = h('span', { class: 'd-ai' });
   const chip = h('span', { class: 'chip', title: a.tool, 'aria-label': `tool: ${a.tool}`, role: 'img' });
   const acct = acctLabel(chip);
-  // Status pill sits beside the close button on the top bar so the title below
-  // it gets the full panel width.
+  const title = h('h2', { class: 'd-title', id: 'd-title', tabindex: '-1', text: a.title });
   const el = h('div', { class: 'd-top' },
-    h('div', { class: 'd-bar' },
-      h('div', { class: 'd-mascots' }, spr, crew),
-      h('div', { class: 'd-right' },
-        h('div', { class: 'd-meta' },
-          h('div', { class: `d-pillrow tool-${a.tool}` }, chip, pill),
-          acct.el),
-        h('button', { type: 'button', class: 'd-close', 'aria-label': 'close panel (esc)', onclick: closeDetail }, closeIcon()))),
-    h('div', { class: 'd-id' }, h('h2', { class: 'd-title', id: 'd-title', tabindex: '-1', text: a.title }), ai));
+    h('div', { class: 'd-mascots' }, spr, crew),
+    h('div', { class: 'd-right' },
+      h('div', { class: `d-pillrow tool-${a.tool}` }, chip, pill,
+        h('button', { type: 'button', class: 'd-close', 'aria-label': 'close panel (esc)', onclick: closeDetail }, closeIcon())),
+      acct.el));
   setSprite(spr, poseOf(a), a.tool, a.hat);
   crewUpdate(crew, a);
   // Click the mascot to pick its hat.
-  const hats = hatPicker(a);
-  if (a.cwd) {
+  const hats = a.sshHost ? null : hatPicker(a);
+  if (a.cwd && hats) {
     spr.classList.add('d-spr-btn');
     spr.setAttribute('role', 'button');
     spr.setAttribute('tabindex', '0');
@@ -1316,10 +1743,20 @@ function header(a) {
     spr.addEventListener('click', toggle);
     spr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
   }
-  return { el: h('div', { class: 'd-head' }, el, hats.el), update: (x) => { acct.update(x); setText(pill, pillText(x)); setText(ai, x.aiTitle || ''); ai.hidden = !x.aiTitle; crewUpdate(crew, x); setSprite(spr, poseOf(x), x.tool, x.hat); hats.update(x); } };
+  return { el: h('div', { class: 'd-head' }, el, h('div', { class: 'd-id' }, title, ai), hats?.el), update: (x) => { setText(title, x.title); acct.update(x); updateStatusPill(pill, x); setText(ai, x.aiTitle || ''); ai.hidden = !x.aiTitle; crewUpdate(crew, x); setSprite(spr, poseOf(x), x.tool, x.hat); hats?.update(x); } };
 }
 
 function postAction(a, path, body) {
+  if (path.startsWith('terminal:')) {
+    const [,mode,...key] = path.split(':');
+    const endpoint = mode === 'link' || mode === 'unlink' ? '/admin/v1/terminals/link' : '/admin/v1/terminals/focus';
+    return api(endpoint, {id:a.threadID || a.id,
+      host:a.sshHost || '', mode, key:key.join(':')});
+  }
+  if (a.sshHost) {
+    if (path === 'focus') return api('/admin/v1/ssh-codex/attach', { host: a.sshHost, id: a.threadID });
+    return Promise.resolve({ ok: false, error: 'unavailable for this SSH session' });
+  }
   return api(`/v1/agents/${encodeURIComponent(a.id)}/${path}`, body);
 }
 
@@ -1359,7 +1796,26 @@ function removeButton(a, note) {
   return b;
 }
 
-function buildInfo(a) {
+function availableLinkPanes(a, loc) {
+  if (loc || !a.sshHost || a.sshHost !== terminals.host) return [];
+  const assigned = Object.values(terminals.remote || {});
+  return (terminals.hostPanes || []).filter(p =>
+    !assigned.some(other => other.app === p.app && other.id === p.id));
+}
+
+function paneLinkPicker(a, panes, note) {
+  const select = h('select', {class:'btn', 'aria-label':'Choose a pane to link'},
+    h('option', {value:''}, 'Link an existing pane…'),
+    panes.map(p => h('option', {value:locationKey(p)}, locationText(p))));
+  const picker = h('div', {class:'pane-link-picker'}, select);
+  select.addEventListener('change', () => {
+    picker.querySelector('button')?.remove();
+    if (select.value) picker.append(actionButton(a, 'Link pane', 'terminal:link:'+select.value, 'narrow', note));
+  });
+  return picker;
+}
+
+function buildInfo(a, loc, linkPanes) {
   const hd = header(a);
   const doingLbl = h('span', { class: 'lbl' });
   const doing = h('span', { class: 'val' });
@@ -1375,19 +1831,31 @@ function buildInfo(a) {
   const server = h('span');
   const note = h('div', { class: 'note', role: 'status', 'aria-live': 'polite' });
   const actions = h('div', { class: 'actions' });
-  if (a.status !== 'exited') actions.append(actionButton(a, codexThread(a) ? 'open in codex' : inApp(a) ? `open in ${a.app}` : hungry(a) ? 'review in terminal' : 'focus terminal', 'focus', 'solid', note));
-  else if (a.resumable) actions.append(actionButton(a, 'resume', 'resume', 'solid', note));
-  if (a.status === 'running' && (!a.external || inApp(a))) actions.append(actionButton(a, 'interrupt', 'interrupt', 'narrow', note));
-  else actions.append(removeButton(a, note));
-  if (a.tool === 'claude' && a.account) for (const acc of accounts) if (acc.name !== a.account.name) actions.append(handoffButton(a, acc, note));
+  if (loc) {
+    const key = locationKey(loc);
+    if (loc.linked) actions.append(actionButton(a,'Unlink pane','terminal:unlink:'+key,'narrow',note));
+    if (loc.app === 'iTerm2') actions.append(actionButton(a,'Focus pane','terminal:pane:'+key,'solid',note));
+    actions.append(actionButton(a,'Focus tab','terminal:tab:'+key,'narrow',note));
+  }
+  if (a.sshHost) {
+    if (!loc && a.sshTerminal && a.status !== 'offline') actions.append(actionButton(a, 'Open in '+(terminals.preferred || 'Terminal'), 'focus', 'solid', note));
+    if (linkPanes.length) actions.append(paneLinkPicker(a, linkPanes, note));
+  } else {
+    if (!loc && a.status !== 'exited') actions.append(actionButton(a, codexThread(a) ? (terminals.preferred ? 'Open in '+terminals.preferred : 'Open Codex session') : inApp(a) ? `open in ${a.app}` : 'focus terminal', 'focus', 'solid', note));
+    else if (!loc && a.resumable) actions.append(actionButton(a, 'resume', 'resume', 'solid', note));
+    if (a.status === 'running' && (!a.external || inApp(a))) actions.append(actionButton(a, 'interrupt', 'interrupt', 'narrow', note));
+    else actions.append(removeButton(a, note));
+    if (a.tool === 'claude' && a.account) for (const acc of accounts) if (acc.name !== a.account.name) actions.append(handoffButton(a, acc, note));
+  }
 
-  panel.className = 'detail' + (a.status === 'error' ? ' p-error' : ['idle', 'starting', 'exited'].includes(a.status) ? ' p-dim' : '');
+  panel.className = 'detail' + (a.status === 'error' ? ' p-error' : ['idle', 'starting', 'exited', 'offline'].includes(a.status) ? ' p-dim' : '');
   panel.replaceChildren(hd.el,
     h('div', { class: 'sec' }, doingLbl, doing),
     h('div', { class: 'sec' }, h('div', { class: 'ctx-head' }, h('span', { class: 'h' }, 'context', ctxNums), ctxPctEl), bar),
     h('div', { class: 'stats' }, S.map((s) => s[0])),
     h('div', { class: 'sec grow' }, h('span', { class: 'lbl', text: 'last prompt' }), prompt, active),
     h('div', { class: 'd-foot' }, foot, server),
+    ...(a.sshHost ? [h('code', { class: 'ssh-command', text: `agentctl attach --ssh ${a.threadID}` })] : []),
     actions, note);
 
   return (x) => {
@@ -1396,6 +1864,10 @@ function buildInfo(a) {
       setText(doingLbl, 'doing now');
       if (x.activity) doing.replaceChildren(verb(x.activity.tool), h('span', { class: 'sep', text: ' · ' }), x.activity.detail || '');
       else setText(doing, 'thinking…');
+      doing.className = 'val';
+    } else if (x.sshHost && x.status !== 'error') {
+      setText(doingLbl, x.status === 'waiting' ? 'waiting for input' : 'status');
+      setText(doing, x.status === 'waiting' ? x.waiting?.title || 'Needs input' : x.status);
       doing.className = 'val';
     } else if (x.status === 'error') {
       setText(doingLbl, 'error'); setText(doing, x.error?.message || 'unknown error'); doing.className = 'val err';
@@ -1418,7 +1890,7 @@ function buildInfo(a) {
     setText(prompt, x.lastPrompt || '—');
     setText(active, lastActive(x)); // its latest message sent or received (survives restarts)
     setText(foot, [x.modelLabel || x.model, tilde(x.cwd), x.branch].filter(Boolean).join(' · '));
-    setText(server, state?.server?.name || '');
+    setText(server, [x.sshHost || state?.server?.name, locationFor(x) && locationText(locationFor(x))].filter(Boolean).join(' · '));
   };
 }
 
@@ -1518,18 +1990,20 @@ function buildPrompt(a) {
 }
 
 function renderDetail() {
-  const a = selectedId && state?.agents.find((x) => x.id === selectedId);
+  const a = selectedId && (sshState.sessions.find(x => x.id === selectedId) || state?.agents.find(x => x.id === selectedId));
   if (!a) {
     if (selectedId && state) { selectedId = null; det = null; panel.hidden = true; panel.replaceChildren(); }
     return;
   }
   panel.hidden = false;
   panel.setAttribute('aria-labelledby', 'd-title');
-  const key = detailKey(a);
+  const loc = locationFor(a);
+  const linkPanes = availableLinkPanes(a, loc);
+  const key = detailKey(a) + JSON.stringify([loc, terminals.preferred, linkPanes, a.sshTerminal]);
   if (!det || det.key !== key) {
     const hadFocus = panel.contains(document.activeElement);
     det = { key, id: a.id };
-    det.update = a.status === 'waiting' && a.waiting ? buildPrompt(a) : buildInfo(a);
+    det.update = !a.sshHost && a.status === 'waiting' && a.waiting ? buildPrompt(a) : buildInfo(a, loc, linkPanes);
     if (hadFocus) $('d-title')?.focus({ preventScroll: true });
   }
   det.update(a);
@@ -1540,6 +2014,7 @@ function render() {
   renderTop();
   renderGrid();
   renderDetail();
+  positionQuickMessage();
 }
 
 function applyState(s) {
@@ -1572,7 +2047,7 @@ const dialogIn = (t) => t instanceof HTMLElement && !!t.closest('#picker, #detai
 // are the only way to rename or remove a group without a mouse.
 const cycleTiles = () =>
   [...document.querySelectorAll(
-    '#grid > .tile, #grid > .group-line .group-name, #grid > .group-line .group-del, #attn-grid > .tile',
+    '#grid > .tile, #grid > .group-line .group-name, #grid > .group-line .group-del, #attn-grid > .tile, #ssh-sessions > .tile, #ssh-sessions > .ssh-add',
   )].filter((el) => el.offsetParent);
 
 // Returns false when there is nothing to walk, so Tab stays the browser's.
@@ -1726,13 +2201,13 @@ function closeTileMenu(toTile) {
 }
 
 function openTileMenu(id, x, y) {
-  const a = state?.agents.find((v) => v.id === id);
+  const a = sshState.sessions.find(v => v.id === id) || state?.agents.find(v => v.id === id);
   if (!a) return;
   closeTileMenu(false);
   menuFor = id;
   // dismiss means different things: a session we only watch keeps running and
   // just loses its tile, one agentctl owns is stopped along with its tmux.
-  const owned = !a.external && !a.app && a.status !== 'exited';
+  const owned = !a.sshHost && !a.external && !a.app && a.status !== 'exited';
   const label = h('span', { class: 'mi-t', text: MENU_LABEL });
   const why = h('small', {
     class: 'mi-why',
@@ -1753,7 +2228,19 @@ function openTileMenu(id, x, y) {
     clearTimeout(menuArmed); menuArmed = null;
     item.disabled = true;
     setText(label, 'removing…');
-    const r = await api(`/v1/agents/${encodeURIComponent(id)}/dismiss`);
+    let r;
+    if (a.sshHost) {
+      await moveWrites;
+      r = await api('/admin/v1/ssh-codex/pins', {
+        host:a.sshHost, id:a.threadID, pinned:false, dismiss:true,
+      }, true);
+      if (r.ok && sshState.host === a.sshHost) {
+        ++sshRevision;
+        applySSHState(r.data.state);
+        if (selectedId === id) closeDetail();
+        render();
+      }
+    } else r = await api(`/v1/agents/${encodeURIComponent(id)}/dismiss`);
     if (r.ok) { closeTileMenu(false); return; }
     item.disabled = false;
     item.classList.remove('armed');
@@ -1785,7 +2272,7 @@ addEventListener('resize', () => closeTileMenu(false));
 document.querySelector('.main').addEventListener('scroll', () => closeTileMenu(false), true);
 
 // ---------------------------------------------------------------- network
-async function api(path, body) {
+async function api(path, body, readJSON = false) {
   if (FIXTURE) return fixtureAction(path, body);
   try {
     const r = await fetch(path, {
@@ -1794,7 +2281,7 @@ async function api(path, body) {
       body: JSON.stringify(body ?? {}),
     });
     if (r.status === 401) { showExpired(); return { ok: false, status: 401, error: 'session expired' }; }
-    if (r.ok) return { ok: true, status: r.status };
+    if (r.ok) return { ok: true, status: r.status, data: readJSON ? await r.json() : undefined };
     let msg = `http ${r.status}`;
     try { const j = await r.json(); if (j?.error) msg = j.error; } catch { /* not json */ }
     return { ok: false, status: r.status, error: msg };
@@ -1805,6 +2292,9 @@ async function api(path, body) {
 
 function showExpired() {
   expired = true;
+  if (!$('picker').hidden) closePicker();
+  localCatalog.sessions = null;
+  sshCatalog.sessions = null;
   es?.close();
   $('expired').hidden = false;
   setSprite($('expired-art'), 'err');
@@ -1847,11 +2337,8 @@ async function start() {
   tickClock();
   setInterval(tickClock, 1000);
   setInterval(() => state && render(), 15000); // refresh relative times
-  // End "just finished" hops on time (cheap: only re-renders when one is due).
-  setInterval(() => {
-    if (state?.agents.some((a) => a.status === 'idle' && a.statusSince && now() - Date.parse(a.statusSince) < CELEBRATE_MS + 1500)) renderGrid();
-  }, 1000);
   if (FIXTURE) return startFixture();
+  refreshSSH();
   setConn('connecting');
   try { if (!(await loadState())) return; } catch { setConn('reconnecting'); }
   connect();

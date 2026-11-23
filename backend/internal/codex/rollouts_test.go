@@ -28,6 +28,8 @@ func TestRolloutThreads(t *testing.T) {
 	write(yesterday, "rollout-b.jsonl", `{"type":"session_meta","payload":{"id":"t-late","cwd":"/work/web"}}`, now.Add(-2*time.Hour))
 	write(yesterday, "rollout-c.jsonl", `{"type":"session_meta","payload":{"id":"t-old","cwd":"/work/old"}}`, now.Add(-20*time.Hour))
 	write(now, "rollout-d.jsonl", `{"type":"event_msg"}`, now) // not a rollout's first line
+	write(now, "rollout-review.jsonl", `{"type":"session_meta","payload":{"id":"review","source":{"subagent":{"other":"guardian"}}}}`, now)
+	write(now, "rollout-typed.jsonl", `{"type":"session_meta","payload":{"id":"typed","thread_source":"guardian_review","source":"cli"}}`, now)
 	ts, err := rolloutThreads(dir, 6*time.Hour, now)
 	if err != nil {
 		t.Fatal(err)
