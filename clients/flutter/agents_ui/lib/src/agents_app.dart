@@ -102,6 +102,12 @@ class _AgentsAppState extends State<AgentsApp> {
   /// The view shown: 0 = "Needs you", 1 + n = page n. Opens on page 0.
   /// 0 is the leading page when there is one, then the "Needs you" screen,
   /// then the deck's pages. The deck is what opens, not either of them.
+  /// True while a tile is in hand. The deck's pages scroll sideways and a
+  /// drag moves sideways too, so the two fight over the pointer: on iOS the
+  /// page scroll wins and the tile is dropped as soon as it is moved. The
+  /// pager is held still until the tile lands.
+  bool _dragging = false;
+
   int get _lead => widget.leadingPage == null ? 0 : 1;
   late int _view = 1 + _lead;
   late final _pager = PageController(initialPage: 1 + _lead);
@@ -354,7 +360,14 @@ class _AgentsAppState extends State<AgentsApp> {
         return LongPressDraggable<String>(
           data: id,
           delay: const Duration(milliseconds: 350),
-          hapticFeedbackOnStart: false,
+          hapticFeedbackOnStart: true,
+          onDragStarted: () => setState(() => _dragging = true),
+          onDragEnd: (_) {
+            if (mounted) setState(() => _dragging = false);
+          },
+          onDraggableCanceled: (_, _) {
+            if (mounted) setState(() => _dragging = false);
+          },
           feedback: SizedBox(
             width: box.maxWidth,
             height: box.maxHeight,
@@ -402,6 +415,9 @@ class _AgentsAppState extends State<AgentsApp> {
               child: PageView.builder(
                 key: const Key('agents-pages'),
                 controller: _pager,
+                physics: _dragging
+                    ? const NeverScrollableScrollPhysics()
+                    : null,
                 itemCount: pages + 1 + _lead,
                 onPageChanged: (v) => setState(() => _view = v),
                 itemBuilder: (context, v) => v < _lead
