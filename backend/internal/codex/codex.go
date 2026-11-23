@@ -14,6 +14,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -65,16 +66,67 @@ func RecentThreads(window time.Duration) ([]Thread, error) {
 		return nil, nil
 	}
 	since := time.Now().Add(-window).UnixMilli()
-	q := "select id, rollout_path, cwd, coalesce(title,'') as title, coalesce(name,'') as name, " +
-		"coalesce(git_branch,'') as git_branch, coalesce(model,'') as model, coalesce(updated_at_ms,0) as updated_at_ms " +
-		"from threads where coalesce(archived,0)=0 and coalesce(updated_at_ms,0) >= " + itoa(since) +
-		" order by updated_at_ms desc limit 32"
 	bin := sqlite3()
 	if bin == "" { // no sqlite3 (Windows, a minimal Linux): the rollout logs alone
 		return rolloutThreads(filepath.Join(Home(), "sessions"), window, time.Now())
 	}
+	return queryThreads(bin, db, " and coalesce(updated_at_ms,0) >= "+itoa(since)+" order by updated_at_ms desc limit 32")
+}
+
+// AllThreads reads the unarchived history, including sessions outside the live window.
+func AllThreads() ([]Thread, error) {
+	db := stateDB()
+	if db == "" {
+		return nil, fmt.Errorf("Codex session database is missing")
+	}
+	bin := sqlite3()
+	if bin == "" {
+		return nil, fmt.Errorf("sqlite3 is required to list saved Codex sessions")
+	}
+	return queryThreads(bin, db, " order by updated_at_ms desc, id")
+}
+
+// ThreadsByID applies the history visibility rules to explicitly pinned threads.
+func ThreadsByID(ids []string) ([]Thread, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	bin, db := sqlite3(), stateDB()
+	if bin == "" || db == "" {
+		return nil, fmt.Errorf("Codex session index is unavailable")
+	}
+	values := make([]string, 0, len(ids))
+	for _, id := range ids {
+		values = append(values, "'"+strings.ReplaceAll(id, "'", "''")+"'")
+	}
+	return queryThreads(bin, db, " and id in ("+strings.Join(values, ",")+") order by updated_at_ms desc, id")
+}
+
+func queryThreads(bin, db, tail string) ([]Thread, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+	// Older Codex indexes do not have both source fields. Apply the available
+	// predicates before LIMIT so reviews cannot crowd real sessions off the deck.
+	columns := exec.CommandContext(ctx, bin, "-readonly", "-noheader", db,
+		"select name from pragma_table_info('threads') where name in ('source','thread_source')")
+	proc.NoWindow(columns)
+	names, err := columns.Output()
+	if err != nil {
+		return nil, err
+	}
+	var filter string
+	for _, name := range strings.Fields(string(names)) {
+		switch name {
+		case "thread_source":
+			filter += " and thread_source is not 'guardian_review'"
+		case "source":
+			// Ordinary sources such as cli are plain text, not JSON.
+			filter += " and (case when json_valid(source) then json_extract(source,'$.subagent.other') end) is not 'guardian'"
+		}
+	}
+	q := "select id, rollout_path, cwd, coalesce(title,'') as title, coalesce(name,'') as name, " +
+		"coalesce(git_branch,'') as git_branch, coalesce(model,'') as model, coalesce(updated_at_ms,0) as updated_at_ms " +
+		"from threads where coalesce(archived,0)=0" + filter + tail
 	cmd := exec.CommandContext(ctx, bin, "-readonly", "-json", db, q)
 	proc.NoWindow(cmd)
 	out, err := cmd.Output()

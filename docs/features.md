@@ -302,3 +302,61 @@ on this computer only, never on the network.
 | `sessions` | `pick` (default), `auto`: Claude sessions started elsewhere join the deck when you add them, or by themselves |
 | `web` | `local` (default), `lan`: also serve the dashboard on your local network |
 | `hat` | `agentctl set hat <agent|folder> <shape> [colour]`, `none` or `auto`: the hat of a working folder (stored in `config.json` `"hats"`) |
+
+### Use Codex on an SSH host
+
+In the browser, open Settings → Agents and enter an SSH alias or user@host
+under **Codex SSH host**. The Codebox section on the dashboard shows recent
+sessions, their titles and their status. The dashed **+** tile opens the same history as `agentctl ls --ssh`. Add a saved thread to keep it on this host’s deck beyond the recent-activity window. Reopen the picker to unpin it. A dropped connection marks the last
+snapshot offline. The open dashboard retries automatically. Clear the host
+in Settings to stop monitoring.
+
+Install the helper at
+`~/.local/bin/agents-deck-codex-reader` on the remote machine. Build it from
+`backend/` for the host's OS and CPU. For example, for 64-bit Intel Linux:
+
+```sh
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./cmd/agents-deck-codex-reader
+```
+
+The service opens a separate noninteractive SSH connection. For first-time setup, run `agentctl config --ssh` in a terminal. OpenSSH
+verifies the host and handles password, key-passphrase or MFA prompts. Deck
+saves the destination and reuses the authenticated SSH connection. After 15
+minutes with no open channels, OpenSSH closes it. Run setup again if the
+connection expires and your host requires interactive authentication.
+The helper uses the remote account's Codex data directory and the same
+six-hour activity window as the default local deck. The dashboard receives thread details including the last prompt, working
+folder, model, activity and usage when Codex records them. The helper exits when its SSH connection closes.
+
+Use the same SSH configuration from the terminal:
+
+```sh
+agentctl config --ssh             # review or edit the host interactively
+agentctl config --ssh user@host   # save an SSH destination or alias
+agentctl ls --ssh                 # all unarchived sessions, newest first
+agentctl ls --ssh ID              # details for a full or unique partial ID
+agentctl attach --ssh ID          # interactive remote Codex TUI
+agentctl config --ssh --clear     # remove the saved host
+```
+
+The full listing requires the remote Codex state database and sqlite3. Older
+threads appear as saved. Inspect a thread to read its rollout details, or use
+`ls --ssh --json` to consume the list in a script. Select a recent Codebox tile to see its details in the browser’s right drawer. On macOS, Deck checks iTerm2 panes and Terminal tabs. The TERMINAL column in
+`agentctl ls` and `agentctl ls --ssh` displays the window, tab and pane for
+an identified session. Window numbers follow the current front-to-back order.
+Use `agentctl focus --ssh ID` for the pane or `agentctl focus --ssh --tab ID`
+for its tab. Omit `--ssh` for local agents. Attach checks for an existing
+pane before resuming the thread in the current terminal.
+
+A plain SSH shell may identify only the codebox. Its location is shown
+separately. Use **Focus codebox pane** or **Focus codebox tab** in the drawer,
+or `agentctl focus --ssh --host-pane` or `--host-tab` for a single connection.
+An idle thread can have no open pane. For a new terminal the dashboard prefers
+iTerm2 and falls back to Terminal. macOS may request Automation access.
+
+If an existing SSH shell is already showing the selected thread, choose
+**Link this thread** next to its pane or run
+`agentctl focus --ssh --link-pane --location 1:1:2 ID` (window:tab:pane).
+Subsequent listings and focus actions use that pane. Use **Unlink pane** if
+you switch threads inside the shell. A link expires with the connection or
+when the Deck service restarts.

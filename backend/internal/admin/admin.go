@@ -128,20 +128,22 @@ type Admin struct {
 	// (default 2 minutes); CheckEvery is the time between checks (a day).
 	FirstCheck, CheckEvery time.Duration
 
-	cfgMu   sync.Mutex
-	jobs    jobs
-	ports   portHolds
-	catMu   sync.Mutex
-	catalog *firmware.Catalog
-	catAt   time.Time
-	catErr  string
-	catBusy bool
-	updMu   sync.Mutex
-	checked time.Time
-	labels  labelBook
-	ota     otaWatch
-	files   fileBook
-	probes  probeBook
+	bindings terminalBindings
+	ssh      sshWatch
+	cfgMu    sync.Mutex
+	jobs     jobs
+	ports    portHolds
+	catMu    sync.Mutex
+	catalog  *firmware.Catalog
+	catAt    time.Time
+	catErr   string
+	catBusy  bool
+	updMu    sync.Mutex
+	checked  time.Time
+	labels   labelBook
+	ota      otaWatch
+	files    fileBook
+	probes   probeBook
 }
 
 // Handler serves /admin/v1/… . The caller has already decided who may reach
@@ -156,6 +158,14 @@ func (a *Admin) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/v1/cli", a.cli)
 	mux.HandleFunc("POST /admin/v1/open-data-folder", a.openData)
 
+	mux.HandleFunc("GET /admin/v1/ssh-codex/sessions", a.sshSessions)
+	mux.HandleFunc("POST /admin/v1/ssh-codex/pins", a.sshPin)
+	mux.HandleFunc("POST /admin/v1/ssh-codex/attach", a.sshAttach)
+	mux.HandleFunc("GET /admin/v1/terminals", a.terminals)
+	mux.HandleFunc("POST /admin/v1/terminals/link", a.linkTerminal)
+	mux.HandleFunc("POST /admin/v1/terminals/focus", a.focusTerminal)
+	mux.HandleFunc("GET /admin/v1/ssh-codex", a.sshDashboard)
+	mux.HandleFunc("POST /admin/v1/ssh-codex", a.sshDashboard)
 	mux.HandleFunc("GET /admin/v1/agents", a.agents)
 	mux.HandleFunc("POST /admin/v1/accounts/{name}/color", a.accountColor)
 

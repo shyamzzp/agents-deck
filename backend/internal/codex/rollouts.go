@@ -70,14 +70,25 @@ func rolloutMeta(path string) (id, cwd, branch string) {
 	var line struct {
 		Type    string `json:"type"`
 		Payload struct {
-			ID  string `json:"id"`
-			Cwd string `json:"cwd"`
-			Git struct {
+			Source       json.RawMessage `json:"source"`
+			ThreadSource string          `json:"thread_source"`
+			ID           string          `json:"id"`
+			Cwd          string          `json:"cwd"`
+			Git          struct {
 				Branch string `json:"branch"`
 			} `json:"git"`
 		} `json:"payload"`
 	}
 	if json.Unmarshal(sc.Bytes(), &line) != nil || line.Type != "session_meta" {
+		return "", "", ""
+	}
+	var source struct {
+		Subagent struct {
+			Other string `json:"other"`
+		} `json:"subagent"`
+	}
+	if line.Payload.ThreadSource == "guardian_review" ||
+		(json.Unmarshal(line.Payload.Source, &source) == nil && source.Subagent.Other == "guardian") {
 		return "", "", ""
 	}
 	return line.Payload.ID, line.Payload.Cwd, line.Payload.Git.Branch

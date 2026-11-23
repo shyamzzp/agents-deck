@@ -44,7 +44,8 @@
 <div id="picker" class="picker" hidden>
   <div class="picker-card" role="dialog" aria-modal="true" aria-labelledby="picker-title">
     <div class="picker-head"><h2 id="picker-title">add a running session</h2><button type="button" id="picker-close" class="d-close" aria-label="close (esc)">×</button></div>
-    <p class="picker-sub">Add a Claude Code session that is already running on this computer to the deck. The deck then shows its status, context and cost; you still answer it in its own terminal. Codex sessions show up on the deck by themselves.</p>
+    <p class="picker-sub" id="picker-sub">Add a Claude Code session that is already running on this computer to the deck. The deck then shows its status, context and cost; you still answer it in its own terminal. Codex sessions show up on the deck by themselves.</p>
+    <input type="search" id="picker-filter" aria-label="Search Codebox sessions" placeholder="Search by title, folder or ID" hidden>
     <ul id="picker-list" class="picker-list"></ul>
   </div>
 </div>
@@ -63,6 +64,7 @@
       <p>no agents running · start one with <code>agentctl new</code></p>
     </div>
     <nav id="pagebar" class="pagebar" aria-label="pages" hidden></nav>
+    <section id="ssh-deck" hidden aria-label="Remote Codex sessions"><h2>Codebox</h2><p id="ssh-status"></p><div id="ssh-sessions" class="grid" aria-label="SSH agent tiles"></div></section>
   </main>
   <aside id="detail" class="detail" aria-label="agent detail" hidden></aside>
 </div>
