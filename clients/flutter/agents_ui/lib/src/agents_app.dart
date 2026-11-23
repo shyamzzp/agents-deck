@@ -974,7 +974,7 @@ class _PageBars extends StatelessWidget {
                           color: lit ? DeckHud.accent : DeckHud.dim,
                           width: 2,
                         ),
-                        borderRadius: BorderRadius.circular(5),
+                        borderRadius: BorderRadius.zero,
                       ),
                     ),
                   ],
@@ -1004,7 +1004,7 @@ class _PageBars extends StatelessWidget {
                         : (hot.contains(p)
                               ? DeckHud.accent
                               : const Color(0xFF2A2925)),
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.zero,
                   ),
                 ),
               ),
@@ -1028,7 +1028,7 @@ class _OfflineChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
       decoration: BoxDecoration(
         color: DeckHud.panel,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.zero,
         border: Border.all(color: DeckHud.accent, width: 1.5),
       ),
       child: Text(

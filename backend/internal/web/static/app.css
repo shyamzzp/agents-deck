@@ -49,9 +49,9 @@
   --f-label: "Share Tech Mono", ui-monospace, Menlo, monospace;
   --f-head: "Roboto Mono", ui-monospace, Menlo, monospace;
 
-  --r-tile: 4px;
+  --r-tile: 0;
   --r-btn: 0;
-  --r-code: 12px;
+  --r-code: 0;
   --gap: 8px;
   --gutter: 16px;
   --panel-w: 460px;
@@ -164,7 +164,7 @@ a.toggle { display: inline-block; text-decoration: none; }
 /* "add a session" picker */
 .picker { position: fixed; inset: 0; z-index: 40; background: var(--scrim); display: flex; align-items: flex-start; justify-content: center; padding: min(10vh, 48px) var(--gutter) min(4vh, 24px); }
 .picker[hidden] { display: none; }
-.picker-card { display: flex; flex-direction: column; max-height: 100%; min-width: 0; width: min(560px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px 18px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
+.picker-card { display: flex; flex-direction: column; max-height: 100%; min-width: 0; width: min(560px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 0; padding: 22px 24px 18px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
 .picker-head { display: flex; align-items: center; justify-content: space-between; }
 .picker-head h2 { margin: 0; font-family: var(--f-head); font-weight: 700; font-size: 22px; }
 .picker-sub { overflow-wrap: anywhere; margin: 8px 0 16px; color: var(--dim); font-size: 13px; line-height: 1.5; }
@@ -473,11 +473,11 @@ body.offline .main { opacity: 0.4; }
 .detail.p-dim { --body: var(--dim); }
 
 .d-head { display: flex; flex-direction: column; gap: 16px; }
-.d-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.d-top { display: flex; flex-direction: column; gap: 12px; }
 /* the mascot opens the hat picker */
 .d-spr-btn { cursor: pointer; border-radius: 0; }
 .d-spr-btn:hover { outline: 1px dashed var(--d-dim); outline-offset: 4px; }
-.hatpick { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.hatpick { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 0; background: var(--panel); }
 .hatpick[hidden] { display: none; }
 .hatpick-sub { color: var(--d-dim); font-size: 13px; }
 .hatpick-shapes { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 6px; }
@@ -520,7 +520,7 @@ body.offline .main { opacity: 0.4; }
 .d-acct[hidden] { display: none; }
 .p-accent .d-pillrow .chip { box-shadow: 0 0 0 1px var(--bg); }
 .pill {
-  font-size: 14px; padding: 4px 8px; border-radius: 8px; overflow-wrap: anywhere;
+  font-size: 14px; padding: 4px 8px; border-radius: 0; overflow-wrap: anywhere;
   background: var(--d-fg); color: var(--d-bg);
 }
 .idle-mark { width: 1.25em; height: 1.25em; vertical-align: middle; }
@@ -729,7 +729,7 @@ body.panel-mode .grid {
   padding: calc(var(--pv) * 8 / 720);
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 24px;
+  border-radius: 0;
   container-type: inline-size;
 }
 body.panel-mode .tile { aspect-ratio: auto; width: 100%; height: 100%; min-height: 0; padding: 4% 5%; }
@@ -757,13 +757,13 @@ body.panel-mode .tile .meta { font-size: clamp(8px, 1.75cqi, 12.5px); }
 .tile-empty { background: var(--empty); border: 1px solid var(--line); border-radius: var(--r-tile); }
 body:not(.panel-mode) .tile-empty { aspect-ratio: 1 / 1; background: transparent; border: 1px dashed var(--empty-edge); }
 .tile-empty[data-drop="swap"] { box-shadow: inset 0 0 0 3px var(--ink); }
-@media (max-width: 640px) { body.panel-mode .grid { border-radius: 12px; } }
+@media (max-width: 640px) { body.panel-mode .grid { border-radius: 0; } }
 /* more than 16 slots: the board keeps its square, the tiles get a little
    shorter and the page bars fill the space below them */
 body.panel-mode.paged .grid { aspect-ratio: auto; height: calc(var(--pv) - 30px); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .pagebar { display: flex; justify-content: center; align-items: center; gap: 10px; height: 30px; margin: 0 auto; }
 .pagebar[hidden] { display: none; }
-.pagebar .page { width: 30px; height: 8px; padding: 0; border: 0; border-radius: 4px; background: var(--line-2); cursor: pointer; transition: width .2s; }
+.pagebar .page { width: 30px; height: 8px; padding: 0; border: 0; border-radius: 0; background: var(--line-2); cursor: pointer; transition: width .2s; }
 .pagebar .page.hot { background: var(--accent); }
 .pagebar .page.on { width: 56px; background: var(--ink); }
 
