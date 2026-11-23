@@ -413,9 +413,11 @@ class ConfigPage extends StatelessWidget {
       builder: (context, snap, _) {
         final slots = snap.state?.agents.map((a) => a.slot) ?? const <int>[];
         final used = deckPageCount(shapes, slots);
-        // One more than the deck needs, so the next page can be shaped before
-        // an agent ever lands on it.
-        final listed = (used + 1).clamp(shapes.length + 1, 8);
+        // The pages the deck actually has, and one spare so the next can be
+        // shaped before an agent lands on it. Deliberately not driven by how
+        // many shapes are stored: shaping the spare would then add another,
+        // and that one another, without end.
+        final listed = (used + 1).clamp(2, 8);
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
           children: [
@@ -432,9 +434,11 @@ class ConfigPage extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Each page of the deck is drawn in its own grid. A page holds as '
-              'many agents as it has cells, so changing one moves where the '
-              'pages after it begin. An agent keeps its place either way. The '
+              'Each page of the deck is drawn in its own grid. A page holds '
+              'as many agents as it has cells, so changing one moves where the '
+              'pages after it begin. An agent keeps its place either way.\n\n'
+              'A page marked empty has no agents on it yet, so reshaping it '
+              'changes nothing you can see until the pages before it fill. The '
               'desk panel and the boards always draw 4 x 4.',
               style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
@@ -490,12 +494,12 @@ class _PageRow extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'page ${page + 1}',
+                  inUse ? 'page ${page + 1}' : 'page ${page + 1} \u00b7 empty',
                   style: DeckHud.mono(size: 13, color: ink),
                 ),
               ),
               Text(
-                '${shape.cells} agents',
+                'holds ${shape.cells}',
                 style: DeckHud.mono(
                   size: 12,
                   color: inUse ? DeckHud.accent : DeckHud.dim,
