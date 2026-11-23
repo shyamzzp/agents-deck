@@ -70,6 +70,7 @@ class DeckLayout {
     this.perPage = const {},
     this.attention,
     this.ring = defaultRingWidth,
+    this.theme,
   });
 
   /// Every page that has not been given its own shape.
@@ -86,6 +87,9 @@ class DeckLayout {
   /// How thick the context gauge around each card is drawn, in points.
   final double ring;
 
+  /// The chosen iTerm2 colour scheme by name, or null for the stock deck.
+  final String? theme;
+
   DeckShape shapeOf(int page) => perPage[page] ?? fallback;
 
   /// The "Needs you" screen, which is a page you swipe to like any other even
@@ -97,6 +101,7 @@ class DeckLayout {
     perPage: perPage,
     attention: shape == fallback ? null : shape,
     ring: ring,
+    theme: theme,
   );
 
   DeckLayout withRing(double width) => DeckLayout(
@@ -104,6 +109,7 @@ class DeckLayout {
     perPage: perPage,
     attention: attention,
     ring: ringWidths.contains(width) ? width : ring,
+    theme: theme,
   );
 
   /// With a page set to [shape], or back to the default when they are equal.
@@ -119,6 +125,7 @@ class DeckLayout {
       perPage: next,
       attention: attention,
       ring: ring,
+      theme: theme,
     );
   }
 
@@ -132,6 +139,17 @@ class DeckLayout {
     },
     attention: attention == shape ? null : attention,
     ring: ring,
+    theme: theme,
+  );
+
+  /// With the deck painted in the scheme called [name]; null is the stock
+  /// deck, which is also what an unknown name falls back to.
+  DeckLayout withTheme(String? name) => DeckLayout(
+    fallback: fallback,
+    perPage: perPage,
+    attention: attention,
+    ring: ring,
+    theme: name == stockThemeName ? null : name,
   );
 
   /// The shapes [AgentsApp] wants: one per page, the last repeating. The
@@ -146,6 +164,7 @@ class DeckLayout {
     'default': [fallback.columns, fallback.rows],
     if (attention case final a?) 'needsYou': [a.columns, a.rows],
     'ring': ring,
+    'theme': ?theme,
     'pages': {
       for (final e in perPage.entries)
         '${e.key}': [e.value.columns, e.value.rows],
@@ -183,6 +202,7 @@ class DeckLayout {
       ring: r is num && ringWidths.contains(r.toDouble())
           ? r.toDouble()
           : defaultRingWidth,
+      theme: j['theme'] is String ? j['theme'] as String : null,
     );
   }
 }
@@ -230,6 +250,9 @@ class _DeckAppState extends State<DeckApp> {
     final docs = _docs ?? (await getApplicationDocumentsDirectory()).path;
     final path = '$docs/${AgentsConfig.fileName}';
     final layout = await loadLayout(docs);
+    // Before the first frame: the deck should open in the chosen colours
+    // rather than flash the stock ones on the way to them.
+    DeckHud.apply(await deckTheme(layout.theme));
     final (cfg, why) = AgentsConfig.load(env: const {}, paths: [path]);
     if (!mounted) return;
     setState(() {
@@ -257,6 +280,13 @@ class _DeckAppState extends State<DeckApp> {
 
   /// Sets how thick the context gauge around every card is drawn.
   Future<void> _setRing(double width) => _store(_layout.withRing(width));
+
+  /// Paints the deck in a colour scheme. The tokens are statics, so the whole
+  /// tree is rebuilt from the root rather than any one page redrawn.
+  Future<void> _setTheme(DeckTheme? theme) async {
+    DeckHud.apply(theme);
+    await _store(_layout.withTheme(theme?.name));
+  }
 
   Future<void> _store(DeckLayout layout) async {
     final docs = _docs;
@@ -305,6 +335,7 @@ class _DeckAppState extends State<DeckApp> {
                 onFallback: _setFallback,
                 onAttention: _setAttention,
                 onRing: _setRing,
+                onTheme: _setTheme,
                 deck: _deckName(),
                 source: s,
               ),
@@ -516,7 +547,7 @@ class _Button extends StatelessWidget {
 /// The page at the far left of the deck: what a menu bar would hold on a
 /// desktop. The deck opens on its own first page, so this is somewhere you go
 /// rather than somewhere you land.
-class ConfigPage extends StatelessWidget {
+class ConfigPage extends StatefulWidget {
   const ConfigPage({
     super.key,
     required this.layout,
@@ -524,6 +555,7 @@ class ConfigPage extends StatelessWidget {
     required this.onFallback,
     required this.onAttention,
     required this.onRing,
+    required this.onTheme,
     required this.source,
     this.deck,
   });
@@ -533,6 +565,7 @@ class ConfigPage extends StatelessWidget {
   final void Function(DeckShape shape) onFallback;
   final void Function(DeckShape shape) onAttention;
   final void Function(double width) onRing;
+  final void Function(DeckTheme? theme) onTheme;
 
   /// Watched for how many pages the deck currently has.
   final AgentsSource source;
@@ -541,9 +574,103 @@ class ConfigPage extends StatelessWidget {
   final String? deck;
 
   @override
+  State<ConfigPage> createState() => _ConfigPageState();
+}
+
+class _ConfigPageState extends State<ConfigPage> {
+  // 611 schemes: the list shows a window of them, and typing narrows it.
+  static const _shown = 40;
+
+  List<DeckTheme>? _themes;
+  String _query = '';
+  bool _open = false;
+
+  DeckLayout get layout => widget.layout;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadThemes());
+  }
+
+  Future<void> _loadThemes() async {
+    final all = await deckThemes();
+    if (mounted) setState(() => _themes = all);
+  }
+
+  /// The themes to draw: the chosen one first, so the list always opens on it.
+  List<DeckTheme> _matches(List<DeckTheme> all) {
+    final q = _query.trim().toLowerCase();
+    final hits = [
+      for (final t in all)
+        if (q.isEmpty || t.name.toLowerCase().contains(q)) t,
+    ];
+    final name = layout.theme ?? stockThemeName;
+    final i = hits.indexWhere((t) => t.name == name);
+    if (i > 0) hits.insert(0, hits.removeAt(i));
+    return hits;
+  }
+
+  /// The colours section: what is on now, and the list once it is opened.
+  List<Widget> _themeSection() {
+    final all = _themes;
+    final current = layout.theme ?? stockThemeName;
+    final head = _ThemeRow(
+      key: const Key('theme-current'),
+      name: current,
+      theme: all?.where((t) => t.name == current).firstOrNull,
+      selected: true,
+      trailing: _open ? 'close' : 'change',
+      onTap: () => setState(() => _open = !_open),
+    );
+    if (!_open) return [head];
+    if (all == null) {
+      return [
+        head,
+        const SizedBox(height: 10),
+        Text(
+          'reading the schemes\u2026',
+          style: DeckHud.mono(size: 12, color: DeckHud.dim),
+        ),
+      ];
+    }
+    final hits = _matches(all);
+    return [
+      head,
+      const SizedBox(height: 10),
+      _Search(
+        key: const Key('theme-search'),
+        hint: 'search ${all.length} themes',
+        onChanged: (q) => setState(() => _query = q),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        hits.length > _shown
+            ? '${hits.length} themes \u00b7 first $_shown shown, keep typing'
+            : '${hits.length} theme${hits.length == 1 ? '' : 's'}',
+        style: DeckHud.mono(size: 12, color: DeckHud.dim),
+      ),
+      const SizedBox(height: 8),
+      for (final t in hits.take(_shown)) ...[
+        _ThemeRow(
+          key: Key('theme-${t.name}'),
+          name: t.name,
+          theme: t,
+          selected: t.name == current,
+          onTap: () {
+            widget.onTheme(t.name == stockThemeName ? null : t);
+            setState(() {});
+          },
+        ),
+        const SizedBox(height: 6),
+      ],
+    ];
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<AgentsSnapshot>(
-      valueListenable: source.snapshot,
+      valueListenable: widget.source.snapshot,
       builder: (context, snap, _) {
         final slots = snap.state?.agents.map((a) => a.slot) ?? const <int>[];
         final pages = deckPageCount(layout.pageShapes, slots);
@@ -553,7 +680,7 @@ class ConfigPage extends StatelessWidget {
             Text('settings', style: DeckHud.rm(22, DeckHud.ink, weight: 700)),
             const SizedBox(height: 4),
             Text(
-              deck == null ? 'not paired' : 'paired with $deck',
+              widget.deck == null ? 'not paired' : 'paired with ${widget.deck}',
               style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
             const SizedBox(height: 22),
@@ -574,7 +701,7 @@ class ConfigPage extends StatelessWidget {
               title: 'all pages',
               shape: layout.fallback,
               accent: true,
-              onShape: onFallback,
+              onShape: widget.onFallback,
             ),
             const SizedBox(height: 22),
             Text(
@@ -595,7 +722,7 @@ class ConfigPage extends StatelessWidget {
                 title: 'page ${i + 1}',
                 note: layout.perPage.containsKey(i) ? 'its own' : 'as above',
                 shape: layout.shapeOf(i),
-                onShape: (sh) => onPage(i, sh),
+                onShape: (sh) => widget.onPage(i, sh),
               ),
             ],
             const SizedBox(height: 22),
@@ -616,7 +743,7 @@ class ConfigPage extends StatelessWidget {
               title: '\u201cneeds you\u201d page',
               note: layout.attention == null ? 'as above' : 'its own',
               shape: layout.attentionShape,
-              onShape: onAttention,
+              onShape: widget.onAttention,
             ),
             const SizedBox(height: 22),
             Text(
@@ -631,7 +758,19 @@ class ConfigPage extends StatelessWidget {
               style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
             const SizedBox(height: 12),
-            _RingRow(width: layout.ring, onWidth: onRing),
+            _RingRow(width: layout.ring, onWidth: widget.onRing),
+            const SizedBox(height: 22),
+            Text('colours', style: DeckHud.mono(size: 14, color: DeckHud.ink)),
+            const SizedBox(height: 6),
+            Text(
+              'The deck in an iTerm2 colour scheme: its own presets, and the '
+              'set published as mbadolato/iTerm2-Color-Schemes. The choice is '
+              'kept on this device; the deck and the other screens are '
+              'unaffected.',
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
+            ),
+            const SizedBox(height: 12),
+            ..._themeSection(),
             const SizedBox(height: 22),
             Text(
               'Swipe right for the deck.',
@@ -749,6 +888,131 @@ class _Stepper extends StatelessWidget {
       ],
     );
   }
+}
+
+/// One scheme: its five colours, its name, and whether it is a light one.
+class _ThemeRow extends StatelessWidget {
+  const _ThemeRow({
+    super.key,
+    required this.name,
+    required this.theme,
+    required this.selected,
+    required this.onTap,
+    this.trailing,
+  });
+
+  final String name;
+
+  /// Null only while themes.json is still being read, for the heading row.
+  final DeckTheme? theme;
+  final bool selected;
+  final VoidCallback onTap;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    final chips = t == null
+        ? const <Color>[]
+        : [t.bg, t.panel, t.ink, t.dim, t.accent];
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          // The row wears the scheme it offers, so the list is a preview.
+          color: t?.panel ?? DeckHud.panel,
+          border: Border.all(
+            color: selected ? DeckHud.accent : DeckHud.panel,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            for (final c in chips) ...[
+              Container(width: 12, height: 20, color: c),
+              const SizedBox(width: 2),
+            ],
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: DeckHud.mono(size: 13, color: t?.ink ?? DeckHud.ink),
+              ),
+            ),
+            Text(
+              trailing ?? (t?.light == true ? 'light' : 'dark'),
+              style: DeckHud.mono(size: 11, color: t?.dim ?? DeckHud.dim),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One line of text, for narrowing the list of schemes.
+class _Search extends StatefulWidget {
+  const _Search({super.key, required this.hint, required this.onChanged});
+
+  final String hint;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_Search> createState() => _SearchState();
+}
+
+class _SearchState extends State<_Search> {
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() => widget.onChanged(_controller.text));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 40,
+    padding: const EdgeInsets.symmetric(horizontal: 10),
+    alignment: Alignment.centerLeft,
+    decoration: BoxDecoration(
+      color: DeckHud.panel,
+      border: Border.all(color: DeckHud.dim),
+    ),
+    child: Stack(
+      alignment: Alignment.centerLeft,
+      children: [
+        if (_controller.text.isEmpty)
+          Text(
+            widget.hint,
+            style: DeckHud.mono(size: 12, color: DeckHud.dim),
+          ),
+        EditableText(
+          controller: _controller,
+          focusNode: _focus,
+          style: DeckHud.rm(13, DeckHud.ink),
+          cursorColor: DeckHud.accent,
+          backgroundCursorColor: DeckHud.dim,
+          maxLines: 1,
+          autocorrect: false,
+          enableSuggestions: false,
+          selectionColor: DeckHud.accent.withValues(alpha: 0.35),
+        ),
+      ],
+    ),
+  );
 }
 
 class _Tap extends StatelessWidget {

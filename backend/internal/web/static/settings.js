@@ -7,7 +7,9 @@ import {
   subsOnly, tileMeta, pillText, HAT_ART, HAT_COLORS, HAT_SHAPES, HAT_COLOR_NAMES, BOT_BODY, spriteSVG,
 } from './deck-core.js';
 
-const PAGES = ['home', 'agents', 'boards', 'network', 'general', 'updates', 'troubleshoot', 'about'];
+import { buildPicker, themes, followThemeChanges } from './theme.js';
+
+const PAGES = ['home', 'agents', 'boards', 'network', 'general', 'appearance', 'updates', 'troubleshoot', 'about'];
 const SCOPES = [
   { value: 'view', text: 'Look only', icon: 'eye', title: 'Sees the deck, nothing more' },
   { value: 'act', text: 'Can answer', icon: 'reply', title: 'Sees the deck and answers agents' },
@@ -485,6 +487,7 @@ function needs(page) {
     boards: ['devices', 'ports', 'settings'], board: ['devices', 'ports', 'settings'], network: ['settings', 'devices'],
     updates: ['update', 'devices'], troubleshoot: ['diag', 'system'], about: ['system', 'update', 'state'],
     newboard: ['ports', 'devices'], flash: ['devices', 'ports'],
+    appearance: [],
   }[page] || [];
 }
 
@@ -3427,10 +3430,24 @@ function drawAbout() {
 
 // ---- pages and routing ------------------------------------------------------------------------
 
+// Appearance: the themes are a static file, not service state, so they are
+// fetched once and the page redrawn when they land.
+let themeList = null, themeErr = null;
+function drawAppearance() {
+  if (themeErr) return errorBox(`Themes could not be loaded: ${themeErr.message}`, () => { themeErr = null; draw(); });
+  if (!themeList) {
+    themes().then((t) => { themeList = t; if (S.page === 'appearance') draw(); })
+      .catch((e) => { themeErr = e; if (S.page === 'appearance') draw(); });
+    return h('p', { class: 'm' }, 'loading themes…');
+  }
+  return buildPicker(themeList, { h, row });
+}
+
 const DRAW = {
   home: ['home-body', drawHome], agent: ['agent-body', drawAgent], start: ['start-body', drawStart], general: ['general-body', drawGeneral], agents: ['agents-body', drawAgents], boards: ['boards-body', drawBoards],
   board: ['board-body', drawBoard], newboard: ['newboard-body', drawNewBoard], flash: ['newboard-body', drawFlash], network: ['network-body', drawNetwork],
   updates: ['updates-body', drawUpdates], troubleshoot: ['troubleshoot-body', drawTroubleshoot], about: ['about-body', drawAbout],
+  appearance: ['appearance-body', drawAppearance],
 };
 
 // draw redraws the open page. The timer's redraw (force false) leaves a page
@@ -3524,7 +3541,7 @@ async function refresh(force) {
   }
   showSystem(sys);
   const busyUI = S.open.wifi || S.open.rename || S.open.project || S.pairing || S.confirmLoginOff || (S.mcpNew && !S.mcpNew.token);
-  if (!force && (busyUI || ['general', 'about'].includes(page))) return;
+  if (!force && (busyUI || ['general', 'about', 'appearance'].includes(page))) return;
   await loadAll(...needs(page), ...extras(page));
   if (page !== S.page) return;
   if ((page === 'home' && deck?.grid.isConnected) || (page === 'agent' && agentView)) updateDeck();

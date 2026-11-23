@@ -1358,7 +1358,7 @@ class AgentsPairingCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const CritterSprite(
+            CritterSprite(
               pose: CritterPose.wait,
               width: 90,
               body: DeckHud.ink,
@@ -1389,7 +1389,7 @@ class AgentsPairingCard extends StatelessWidget {
             ]),
             step('3', [
               const TextSpan(text: 'paste the whole output into '),
-              const TextSpan(
+              TextSpan(
                 text: 'agents',
                 style: TextStyle(color: DeckHud.accent),
               ),

@@ -43,10 +43,10 @@ class AgentLook {
     this.border,
     this.borderWidth = 0,
     this.bubble,
-    this.ring = DeckHud.accent,
+    Color? ring,
     this.ringTrack = agentsRingTrack,
     this.stripes = false,
-  });
+  }) : _ring = ring;
 
   final Color fill;
   final Color body;
@@ -60,7 +60,9 @@ class AgentLook {
   final Color? bubble;
 
   /// Context ring around the tile: filled part and the faint full track.
-  final Color ring;
+  /// Null is the accent of whichever theme is on.
+  final Color? _ring;
+  Color get ring => _ring ?? DeckHud.accent;
   final Color ringTrack;
 
   /// Sliding orange diagonal stripes behind the critter: this one is working.
@@ -69,7 +71,7 @@ class AgentLook {
   static AgentLook of(Agent a) {
     final tool = agentToolColor(a.tool);
     final look = switch (a.status) {
-      AgentStatus.waiting => const AgentLook(
+      AgentStatus.waiting => AgentLook(
         fill: DeckHud.accent,
         body: DeckHud.bg,
         label: DeckHud.bg,

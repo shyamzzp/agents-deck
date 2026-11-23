@@ -18,6 +18,10 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 
 flutter:
+  assets:
+    # The same themes.json the dashboard reads; scripts/gen-themes.py writes
+    # both copies with --copy.
+    - assets/themes.json
   fonts:
     - family: ShareTechMono
       fonts:
