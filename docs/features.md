@@ -328,7 +328,7 @@ folder, model, activity and usage when Codex records them. The helper exits when
 Use the same SSH configuration from the terminal:
 
 ```sh
-agentctl config --ssh             # show the configured host
+agentctl config --ssh             # review or edit the host interactively
 agentctl config --ssh user@host   # save an SSH destination or alias
 agentctl ls --ssh                 # all unarchived sessions, newest first
 agentctl ls --ssh ID              # details for a full or unique partial ID

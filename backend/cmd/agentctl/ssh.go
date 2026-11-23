@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -36,6 +37,24 @@ func sshConfig(args []string) error {
 		}
 	} else if err := call("GET", sshEndpoint, nil, &info); err != nil {
 		return err
+	}
+	// Scripts can read the current target without an interactive prompt.
+	if len(args) == 1 && isTerminal() {
+		if st, err := os.Stdin.Stat(); err == nil && st.Mode()&os.ModeCharDevice != 0 {
+			fmt.Fprintf(os.Stderr, "SSH host [%s] (Enter to keep): ", info.Host)
+			scanner := bufio.NewScanner(os.Stdin)
+			if scanner.Scan() {
+				value := strings.TrimSpace(scanner.Text())
+				if value != "" {
+					if err := call("POST", sshEndpoint, map[string]string{"host": value}, &info); err != nil {
+						return err
+					}
+				}
+			}
+			if err := scanner.Err(); err != nil {
+				return err
+			}
+		}
 	}
 	if info.Host == "" {
 		fmt.Println("No SSH host configured. Set one with agentctl config --ssh user@host.")
