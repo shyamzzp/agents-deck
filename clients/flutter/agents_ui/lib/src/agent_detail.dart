@@ -1254,19 +1254,17 @@ class _AgentDetailState extends State<AgentDetail> {
   /// already a figure of their own below, each dropped when it has nothing to
   /// say. Joined with the deck's dot so a narrow phone can cut it anywhere.
   Widget? _nowAside(AgentsState state, Agent a) {
+    // The context, the turn and the subagents are figures of their own
+    // further down the card; repeating them here was saying it twice. What
+    // belongs here is the call itself: which tool, as the agent named it.
+    final act = a.activity;
     final bits = <String>[
-      if (a.status == AgentStatus.running &&
-          a.activity != null &&
-          a.activity!.tool.toLowerCase() != a.activity!.verb)
-        a.activity!.tool.toLowerCase(),
+      if (a.status == AgentStatus.running && act != null && act.tool.isNotEmpty)
+        act.tool,
       if (a.queued > 0) '${a.queued} queued',
-      if (a.turns > 0) 'turn ${a.turns}',
-      if (a.contextWindow > 0) '${a.contextPercent}% ctx',
-      if (a.subagents.isNotEmpty) subagentCount(a.subagents.length),
       if (state.upText(a) case final up when up.isNotEmpty) 'up $up',
       if (a.attached) 'attached',
-      if (a.queued == 0 && a.external)
-        a.inApp ? 'watched · ${a.app}' : 'watched',
+      if (a.external) a.inApp ? 'watched · ${a.app}' : 'watched',
     ];
     if (bits.isEmpty) return null;
     return Text(
