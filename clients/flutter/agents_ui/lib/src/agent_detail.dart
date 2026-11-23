@@ -1058,11 +1058,7 @@ class _AgentDetailState extends State<AgentDetail> {
                   ].indexed)
                     Expanded(
                       child: Container(
-                        // Even on all four sides: the cells are a quarter of
-                        // the row each, so uneven padding shows up as one of
-                        // them (turns, whose figure is shortest) looking like
-                        // it has been pushed left.
-                        padding: const EdgeInsets.all(11),
+                        padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
                         decoration: BoxDecoration(
                           border: i == 0
                               ? null
