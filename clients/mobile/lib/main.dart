@@ -563,20 +563,20 @@ class ConfigPage extends StatelessWidget {
             ],
             const SizedBox(height: 22),
             Text(
-              'needs you',
+              'the \u201cneeds you\u201d page',
               style: DeckHud.mono(size: 14, color: DeckHud.ink),
             ),
             const SizedBox(height: 6),
             Text(
-              'The screen before the deck, holding the agents waiting on you. '
-              'It is not one of the deck\u2019s pages and holds sixteen spots '
+              'The page before the deck, holding the agents waiting on you. '
+              'The deck does not number it, and it holds sixteen spots '
               'whatever grid it is drawn in.',
               style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
             const SizedBox(height: 12),
             _ShapeRow(
               key: const Key('shape-row-attention'),
-              title: 'needs you',
+              title: '\u201cneeds you\u201d page',
               note: layout.attention == null ? 'as above' : 'its own',
               shape: layout.attentionShape,
               onShape: onAttention,
