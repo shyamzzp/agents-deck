@@ -385,6 +385,13 @@ class Agent {
   /// deck: watched (status, context, cost), answered in its own terminal.
   bool get watched => external && tool == 'claude' && app.isEmpty;
 
+  /// Whether the deck can type into this session at all.
+  ///
+  /// It can only type into what it started itself, in its own tmux. A session
+  /// running in someone else's terminal, or inside another app, cannot be
+  /// typed into by anything -- the service refuses with 422 and says so.
+  bool get canBeTold => !external;
+
   /// A Claude agent whose conversation can continue in another account
   /// (`POST /v1/agents/{id}/handoff`): the deck's own, or one watched in a
   /// terminal or in Orca (a copy starts on the deck).

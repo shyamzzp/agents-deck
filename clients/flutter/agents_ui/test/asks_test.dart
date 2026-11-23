@@ -101,7 +101,8 @@ void main() {
     expect(sent.single.$2, 'k3f9a2');
     expect(sent.single.$3?['text'], agentAsks.first.text);
     // Queued, so asking while it works does not cut the turn short.
-    expect(sent.single.$3?['mode'], 'queue');
+    // "now": typed in and entered, not queued behind the current turn.
+    expect(sent.single.$3?['mode'], 'now');
     // The card says "sent" for a moment before it closes itself.
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
@@ -115,6 +116,38 @@ void main() {
     await openAsks(tester);
     await tester.tap(find.byKey(const Key('asks-close')));
     await tester.pump();
+    expect(find.byKey(const Key('asks-grid')), findsNothing);
+    expect(source.calls.where((c) => c.$1 == 'prompt'), isEmpty);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a watched session says it cannot be told', (tester) async {
+    tester.view.physicalSize = const Size(900, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    // docs-site in the demo fixture is a watched session.
+    final json = FakeAgentsSource.demo().toJson();
+    final a = (json['agents'] as List)
+        .cast<Map<String, dynamic>>()
+        .firstWhere((x) => x['id'] == 'd0cs1t');
+    a['external'] = true;
+    a['app'] = '';
+    final source = FakeAgentsSource.demo()..load(json);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: DeckHud.bg),
+        home: Scaffold(
+          body: AgentDetail(source: source, agentId: 'd0cs1t', onClose: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('agent-title')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const Key('agent-title')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('asks-refused')), findsOneWidget);
     expect(find.byKey(const Key('asks-grid')), findsNothing);
     expect(source.calls.where((c) => c.$1 == 'prompt'), isEmpty);
     await tester.pumpAndSettle();
