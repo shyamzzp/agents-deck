@@ -8,6 +8,7 @@ import 'agents_client.dart';
 import 'agents_model.dart';
 import 'agents_style.dart';
 import 'critter.dart';
+import 'pixel_icon.dart';
 
 /// How long the "sent" invert holds before the card closes itself.
 const _sentHold = Duration(milliseconds: 600);
@@ -511,10 +512,10 @@ class _AgentDetailState extends State<AgentDetail> {
                   tight ? 10 : 16,
                 ),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: tight ? 2 : 3,
+                  crossAxisCount: tight ? 3 : 4,
                   mainAxisSpacing: 8,
                   crossAxisSpacing: 8,
-                  childAspectRatio: tight ? 1.25 : 1.5,
+                  childAspectRatio: 1,
                 ),
                 itemCount: agentAsks.length,
                 itemBuilder: (context, i) {
@@ -533,28 +534,29 @@ class _AgentDetailState extends State<AgentDetail> {
                           width: 2,
                         ),
                       ),
+                      // What it is, in one picture and one hyphenated name.
+                      // The sentence it sends is not shown: it is the same
+                      // every time, and the cell is a button, not a page.
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
+                          PixelIcon(
+                            key: Key('ask-icon-${ask.icon}'),
+                            name: ask.icon,
+                            // The theme's own ink, or the background when the
+                            // cell is filled on a tap.
+                            color: sent ? DeckHud.bg : DeckHud.ink,
+                            size: tight ? 34 : 44,
+                          ),
+                          SizedBox(height: tight ? 8 : 10),
                           Text(
                             sent ? 'sent' : ask.label,
                             maxLines: 2,
+                            textAlign: TextAlign.center,
                             overflow: TextOverflow.ellipsis,
-                            style: DeckHud.rm(
-                              tight ? 16 : 19,
-                              sent ? DeckHud.bg : DeckHud.ink,
-                              weight: 700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Expanded(
-                            child: Text(
-                              ask.text,
-                              overflow: TextOverflow.fade,
-                              style: DeckHud.mono(
-                                size: tight ? 11 : 12,
-                                color: sent ? DeckHud.bg : DeckHud.dim,
-                              ),
+                            style: DeckHud.mono(
+                              size: tight ? 13 : 15,
+                              color: sent ? DeckHud.bg : DeckHud.ink,
                             ),
                           ),
                         ],
