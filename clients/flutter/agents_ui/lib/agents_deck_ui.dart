@@ -15,6 +15,7 @@ export 'src/attention_screen.dart';
 export 'src/critter.dart';
 export 'src/hats.dart';
 export 'src/live_picker.dart';
+export 'src/pixel_icon.dart';
 export 'src/theme.dart';
 export 'src/theme_catalogue.dart';
 export 'src/widgets.dart';

@@ -734,49 +734,67 @@ String agentPillLabel(Agent a, AgentsState state, [DateTime? localNow]) {
 /// worth a tap rather than a keyboard: the text is what the local dashboard's
 /// message box would send.
 class AgentAsk {
-  const AgentAsk(this.label, this.text);
+  const AgentAsk(this.label, this.text, this.icon);
 
-  /// What the card shows.
+  /// What the card shows, hyphenated: it reads as the name of a task rather
+  /// than a sentence, and fits a cell on a phone.
   final String label;
 
   /// What the agent is told.
   final String text;
+
+  /// The pixel icon drawn above the label (a key of pixelIcons), in the
+  /// colour of whichever theme is on.
+  final String icon;
 }
 
 /// The quick list, in the order it is swiped through.
 const agentAsks = [
   AgentAsk(
-    'verify changes',
-    'Verify the changes you have made: re-read them, check they do what was '
-        'asked, and say plainly what you checked and what you did not.',
+    'verify-changes',
+    'Verify the changes you have made: re-read them, check they do '
+        'what was asked, and say plainly what you checked and what you '
+        'did not.',
+    'vscode',
   ),
   AgentAsk(
-    'run the tests',
-    'Run the test suite and report the result verbatim, including any failures.',
+    'run-tests',
+    'Run the test suite and report the result verbatim, including '
+        'any failures.',
+    'python',
   ),
   AgentAsk(
-    'commit',
-    'Commit the current changes with a message that says why, not just what.',
+    'commit-changes',
+    'Commit the current changes with a message that says why, not '
+        'just what.',
+    'git',
   ),
   AgentAsk(
-    'push to GitHub',
-    'Push the committed changes to the remote on GitHub. Do not push to any '
-        'upstream remote.',
+    'push-github',
+    'Push the committed changes to the remote on GitHub. Do not '
+        'push to any upstream remote.',
+    'github',
   ),
   AgentAsk(
-    'open a PR',
-    'Open a pull request for this branch against the default branch, with a '
-        'description of what changed and how it was checked.',
+    'open-pr',
+    'Open a pull request for this branch against the default '
+        'branch, with a description of what changed and how it was '
+        'checked.',
+    'gitlab',
   ),
   AgentAsk(
-    'what changed?',
-    'Summarise what you have changed so far, file by file, and what is left.',
+    'what-changed',
+    'Summarise what you have changed so far, file by file, and what '
+        'is left.',
+    'rss',
   ),
   AgentAsk(
-    'fix the failures',
-    'Find out why the failing tests fail and fix the cause, not the test.',
+    'fix-failures',
+    'Find out why the failing tests fail and fix the cause, not the '
+        'test.',
+    'jira',
   ),
-  AgentAsk('carry on', 'Carry on with what you were doing.'),
+  AgentAsk('carry-on', 'Carry on with what you were doing.', 'claude'),
 ];
 
 /// A Claude session started by hand in another terminal (`GET /v1/live`),

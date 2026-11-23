@@ -35,7 +35,7 @@ void main() {
     expect(find.byKey(const Key('asks-grid')), findsNothing);
     await openAsks(tester);
     expect(find.byKey(const Key('asks-grid')), findsOneWidget);
-    expect(find.text('verify changes'), findsOneWidget);
+    expect(find.text('verify-changes'), findsOneWidget);
     await tester.pumpAndSettle();
   });
 
@@ -45,8 +45,8 @@ void main() {
     await card(tester);
     await openAsks(tester);
     // A grid, not a slider: more than one is on the screen at once.
-    expect(find.text('verify changes'), findsOneWidget);
-    expect(find.text('run the tests'), findsOneWidget);
+    expect(find.text('verify-changes'), findsOneWidget);
+    expect(find.text('run-tests'), findsOneWidget);
 
     // The last one is reachable by scrolling, not by swiping through the rest.
     await tester.scrollUntilVisible(
