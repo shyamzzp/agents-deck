@@ -363,8 +363,9 @@ class _DeckAppState extends State<DeckApp> {
         color: DeckHud.bg,
         child: SafeArea(
           child: switch ((source, _looked)) {
-            // backButton: a phone has no Esc and no edge swipe of its own,
-            // so without it an opened agent card is a one-way door.
+            // backButton: false. Dragging the card to the right goes back
+            // (agent_detail's own gesture), so the "<" was only taking 63
+            // points of a 357 point row off "focus terminal".
             //
             // 5x5 rather than the panel's 4x4: a tablet has the room for 25
             // agents at once, and paging through a long deck four at a time is
@@ -373,7 +374,7 @@ class _DeckAppState extends State<DeckApp> {
             // is its number over the page size.
             (final AgentsSource s, _) => AgentsApp(
               source: s,
-              backButton: true,
+              backButton: false,
               pageShapes: _layout.pageShapes,
               attentionShape: _layout.attentionShape,
               contextRingWidth: _layout.ring,

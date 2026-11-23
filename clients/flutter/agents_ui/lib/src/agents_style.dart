@@ -198,12 +198,18 @@ class AgentButton extends StatelessWidget {
         height: h,
         alignment: alignLeft ? Alignment.centerLeft : Alignment.center,
         // 22 points each side of a 160pt button is a quarter of it spent on
-        // air, and the label is what gets cut for it.
-        padding: EdgeInsets.symmetric(horizontal: tight ? 12 : 22),
+        // air, and the label is what gets cut for it. 8 on a phone, where
+        // "remove from deck" has to fit in what the row leaves it.
+        padding: EdgeInsets.symmetric(horizontal: tight ? 8 : 22),
         decoration: BoxDecoration(
           color: pressed ? pressedFill : fill,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: pressed ? pressedFill : outline, width: 2),
+          // A 2pt outline round a 49pt button is a frame; one point is an
+          // edge, which is all it has to be.
+          border: Border.all(
+            color: pressed ? pressedFill : outline,
+            width: tight ? 1 : 2,
+          ),
         ),
         child: Text(
           label,
