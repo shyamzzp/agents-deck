@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -27,37 +28,71 @@ func sshConfig(args []string) error {
 		return errors.New("usage: agentctl config --ssh [user@host|--clear]")
 	}
 	var info hostInfo
-	if len(args) == 2 {
-		host := args[1]
-		if host == "--clear" {
-			host = ""
-		}
-		if err := call("POST", sshEndpoint, map[string]string{"host": host}, &info); err != nil {
-			return err
-		}
-	} else if err := call("GET", sshEndpoint, nil, &info); err != nil {
+	if err := call("GET", sshEndpoint, nil, &info); err != nil {
 		return err
 	}
-	// Scripts can read the current target without an interactive prompt.
-	if len(args) == 1 && isTerminal() {
-		if st, err := os.Stdin.Stat(); err == nil && st.Mode()&os.ModeCharDevice != 0 {
-			if info.Host == "" {
-				fmt.Fprint(os.Stderr, "Enter your SSH username@hostname (or SSH alias): ")
-			} else {
-				fmt.Fprintf(os.Stderr, "SSH host [%s] (Enter to keep): ", info.Host)
+	st, err := os.Stdin.Stat()
+	interactive := err == nil && st.Mode()&os.ModeCharDevice != 0 && isTerminal()
+	host := info.Host
+	configure := len(args) == 2
+	if configure {
+		host = strings.TrimSpace(args[1])
+		if host == "--clear" {
+			host = ""
+		} else if host == "" {
+			return errors.New("enter username@hostname or use --clear")
+		}
+	} else if interactive {
+		if host == "" {
+			fmt.Fprint(os.Stderr, "Enter your SSH username@hostname (or SSH alias): ")
+		} else {
+			fmt.Fprintf(os.Stderr, "SSH host [%s] (Enter to sign in): ", host)
+		}
+		scanner := bufio.NewScanner(os.Stdin)
+		if scanner.Scan() {
+			if input := strings.TrimSpace(scanner.Text()); input != "" {
+				host = input
 			}
-			scanner := bufio.NewScanner(os.Stdin)
-			if scanner.Scan() {
-				value := strings.TrimSpace(scanner.Text())
-				if value != "" {
-					if err := call("POST", sshEndpoint, map[string]string{"host": value}, &info); err != nil {
-						return err
-					}
-				}
-			}
-			if err := scanner.Err(); err != nil {
+			configure = host != ""
+		}
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+	}
+	if configure {
+		previous := info.Host
+		if host != "" {
+			cmd, err := sshdeck.Login(context.Background(), host, interactive)
+			if err != nil {
 				return err
 			}
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0700); err != nil {
+				return err
+			}
+			if interactive {
+				fmt.Fprintln(os.Stderr, "Signing in with SSH. Enter your password or key passphrase if prompted.")
+			}
+			cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("SSH login to %s failed: %w", host, err)
+			}
+		}
+		if err := call("POST", sshEndpoint, map[string]string{"host": host}, &info); err != nil {
+			if previous != host {
+				sshdeck.StopLogin(host)
+			}
+			return err
+		}
+		if previous != host {
+			sshdeck.StopLogin(previous)
+		}
+		if host != "" {
+			fmt.Printf("Signed in to %s.\n", host)
+			return nil
 		}
 	}
 	if info.Host == "" {

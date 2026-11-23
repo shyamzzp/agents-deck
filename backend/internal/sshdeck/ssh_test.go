@@ -21,3 +21,23 @@ func TestSSHArguments(t *testing.T) {
 		t.Fatal("interactive SSH lacks its TTY or stdin")
 	}
 }
+
+func TestLoginAndReaderShareSocket(t *testing.T) {
+	login, err := Login(context.Background(), "test-box", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := Command(context.Background(), "test-box", "watch", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{login.Args, reader.Args} {
+		if !strings.Contains(strings.Join(args, " "), controlPath) {
+			t.Fatal("missing shared socket")
+		}
+	}
+	if !strings.Contains(strings.Join(login.Args, " "), "-oBatchMode=no") ||
+		!strings.Contains(strings.Join(reader.Args, " "), "-oBatchMode=yes") {
+		t.Fatal("only interactive login should prompt")
+	}
+}

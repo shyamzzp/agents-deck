@@ -319,8 +319,11 @@ Install the helper at
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./cmd/agents-deck-codex-reader
 ```
 
-The service opens a separate noninteractive SSH connection. It needs working
-key or agent authentication and a trusted key in the usual known_hosts file.
+The service opens a separate noninteractive SSH connection. For first-time setup, run `agentctl config --ssh` in a terminal. OpenSSH
+verifies the host and handles password, key-passphrase or MFA prompts. Deck
+saves the destination and reuses the authenticated SSH connection. After 15
+minutes with no open channels, OpenSSH closes it. Run setup again if the
+connection expires and your host requires interactive authentication.
 The helper uses the remote account's Codex data directory and the same
 six-hour activity window as the default local deck. The dashboard receives thread details including the last prompt, working
 folder, model, activity and usage when Codex records them. The helper exits when its SSH connection closes.

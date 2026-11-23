@@ -49,9 +49,9 @@
       <p class="sub">Where the deck looks for agents on this computer.</p>
       <form id="ssh-form">
         <label for="ssh-host">Codex SSH host</label>
-        <input id="ssh-host" autocomplete="off" placeholder="user@host" maxlength="253">
+        <input id="ssh-host" autocomplete="off" placeholder="username@hostname" maxlength="253">
         <button type="submit">Save host</button>
-        <p>Enter the host where the Deck reader is installed. Clear to disconnect.</p>
+        <p>Enter the host where the Deck reader is installed. For password or MFA sign-in, run <code>agentctl config --ssh</code> in a terminal. Clear to disconnect.</p>
         <p id="ssh-feedback" role="status"></p>
       </form>
       <div class="body" id="agents-body" aria-busy="true"></div>
