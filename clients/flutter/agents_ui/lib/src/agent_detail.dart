@@ -441,6 +441,39 @@ class _AgentDetailState extends State<AgentDetail> {
               ],
             ),
           ),
+          // The deck can only type into a session it started itself. A watched
+          // one, running in someone else's terminal, refuses with 422 and
+          // explains why -- so say it here rather than on every tap.
+          if (_shown?.$2 case final a? when !a.canBeTold)
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(tight ? 18 : 36, 8, tight ? 18 : 36, 8),
+                child: Column(
+                  key: const Key('asks-refused'),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'this one cannot be told',
+                      style: DeckHud.rm(tight ? 18 : 22, DeckHud.accent, weight: 700),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'It is a session someone started in their own terminal '
+                      'and added to the deck. Nothing can type into another '
+                      'app\u2019s terminal, so the deck refuses rather than '
+                      'pretending.\n\nStart an agent with agentctl new, or '
+                      'start_agent over MCP, and it can be given tasks from '
+                      'here.',
+                      style: DeckHud.mono(
+                        size: tight ? 13 : 15,
+                        color: DeckHud.dim,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
           Expanded(
             child: GridView.builder(
               key: const Key('asks-grid'),
@@ -531,7 +564,13 @@ class _AgentDetailState extends State<AgentDetail> {
       _busy = true;
       _note = null;
     });
-    final r = await widget.source.prompt(widget.agentId, agentAsks[i].text);
+    // "now": typed into the session and entered, rather than queued behind
+    // whatever it is doing.
+    final r = await widget.source.prompt(
+      widget.agentId,
+      agentAsks[i].text,
+      mode: 'now',
+    );
     if (!mounted) return;
     setState(() {
       _busy = false;
