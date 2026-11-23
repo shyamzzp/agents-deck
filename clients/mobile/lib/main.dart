@@ -40,6 +40,51 @@ Future<String> configPath() async =>
 (AgentsConfig?, String?) Function() bundleLoader(String path) =>
     () => AgentsConfig.load(env: const {}, paths: [path]);
 
+/// What the config page remembers, beside the bundle.
+const _settingsFile = 'settings.json';
+
+/// How wide and tall a page may be set. Below 2 a page is not a grid; above 6
+/// the tiles stop being readable on a tablet, let alone a phone.
+const gridRange = [2, 3, 4, 5, 6];
+
+/// The deck as it is shaped before anyone says otherwise: a tablet has the
+/// room for 25 at once, and the last page's shape repeats for the rest.
+const defaultShapes = [DeckShape(5, 5)];
+
+List<DeckShape> _shapesFromJson(Object? j) {
+  if (j is! List || j.isEmpty) return defaultShapes;
+  final out = <DeckShape>[];
+  for (final row in j) {
+    if (row is! List || row.length != 2) continue;
+    final c = row[0], r = row[1];
+    if (c is int && r is int && gridRange.contains(c) && gridRange.contains(r)) {
+      out.add(DeckShape(c, r));
+    }
+  }
+  return out.isEmpty ? defaultShapes : out;
+}
+
+Future<List<DeckShape>> loadShapes(String docs) async {
+  try {
+    final j = jsonDecode(await File('$docs/$_settingsFile').readAsString());
+    return _shapesFromJson(j is Map ? j['pages'] : null);
+  } catch (_) {
+    return defaultShapes; // not written yet, or unreadable
+  }
+}
+
+Future<void> saveShapes(String docs, List<DeckShape> shapes) async {
+  final f = File('$docs/$_settingsFile');
+  await f.parent.create(recursive: true);
+  await f.writeAsString(
+    jsonEncode({
+      'pages': [
+        for (final s in shapes) [s.columns, s.rows],
+      ],
+    }),
+  );
+}
+
 class DeckApp extends StatefulWidget {
   const DeckApp({super.key});
 
@@ -50,8 +95,10 @@ class DeckApp extends StatefulWidget {
 class _DeckAppState extends State<DeckApp> {
   AgentsSource? _source;
   String? _path;
+  String? _docs;
   String? _reason;
   bool _looked = false;
+  List<DeckShape> _shapes = defaultShapes;
 
   @override
   void initState() {
@@ -62,15 +109,41 @@ class _DeckAppState extends State<DeckApp> {
   /// Reads the bundle before connecting, so an unpaired app shows the pairing
   /// screen rather than a deck that can never arrive.
   Future<void> _check() async {
-    final path = _path ?? await configPath();
+    final docs = _docs ?? (await getApplicationDocumentsDirectory()).path;
+    final path = '$docs/${AgentsConfig.fileName}';
+    final shapes = await loadShapes(docs);
     final (cfg, why) = AgentsConfig.load(env: const {}, paths: [path]);
     if (!mounted) return;
     setState(() {
+      _docs = docs;
       _path = path;
+      _shapes = shapes;
       _reason = why;
       _looked = true;
       if (cfg != null) _source ??= HttpAgentsClient(loadConfig: bundleLoader(path));
     });
+  }
+
+  /// Sets page [i]'s shape, lengthening the list when a later page is given
+  /// one of its own (every page up to it has to be written down first, since
+  /// the list is read in order).
+  Future<void> _setShape(int i, DeckShape shape) async {
+    final docs = _docs;
+    if (docs == null) return;
+    final next = [
+      for (var p = 0; p <= (i > _shapes.length - 1 ? i : _shapes.length - 1); p++)
+        p == i ? shape : deckShapeOf(_shapes, p),
+    ];
+    setState(() => _shapes = next);
+    await saveShapes(docs, next);
+  }
+
+  /// The deck this device is paired with, for the config page to name.
+  String? _deckName() {
+    final path = _path;
+    if (path == null) return null;
+    final (cfg, _) = AgentsConfig.load(env: const {}, paths: [path]);
+    return cfg == null ? null : '${cfg.name} \u00b7 ${cfg.url.host}';
   }
 
   @override
@@ -94,8 +167,15 @@ class _DeckAppState extends State<DeckApp> {
             (final AgentsSource s, _) => AgentsApp(
               source: s,
               backButton: true,
-              gridColumns: 5,
-              gridRows: 5,
+              pageShapes: _shapes,
+              // A phone has no menu bar to hang settings off, so they get a
+              // page of their own at the far left. The deck still opens.
+              leadingPage: ConfigPage(
+                shapes: _shapes,
+                onShape: _setShape,
+                deck: _deckName(),
+                source: s,
+              ),
             ),
             // Until the directory has been asked for there is nothing to say:
             // showing "not paired yet" first would be a lie on every launch.
@@ -295,6 +375,212 @@ class _Button extends StatelessWidget {
             label,
             style: DeckHud.mono(size: 14, color: filled ? DeckHud.bg : DeckHud.ink),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The page at the far left of the deck: what a menu bar would hold on a
+/// desktop. The deck opens on its own first page, so this is somewhere you go
+/// rather than somewhere you land.
+///
+/// Each page of the deck gets its own shape here. A page holds as many agents
+/// as it has cells, so changing one moves where the later pages begin; the
+/// agents keep their places.
+class ConfigPage extends StatelessWidget {
+  const ConfigPage({
+    super.key,
+    required this.shapes,
+    required this.onShape,
+    required this.source,
+    this.deck,
+  });
+
+  final List<DeckShape> shapes;
+  final void Function(int page, DeckShape shape) onShape;
+
+  /// Watched for how many pages the deck currently needs.
+  final AgentsSource source;
+
+  /// The paired deck, named for confirmation; null before it is read.
+  final String? deck;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<AgentsSnapshot>(
+      valueListenable: source.snapshot,
+      builder: (context, snap, _) {
+        final slots = snap.state?.agents.map((a) => a.slot) ?? const <int>[];
+        final used = deckPageCount(shapes, slots);
+        // One more than the deck needs, so the next page can be shaped before
+        // an agent ever lands on it.
+        final listed = (used + 1).clamp(shapes.length + 1, 8);
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+          children: [
+            Text('settings', style: DeckHud.rm(22, DeckHud.ink, weight: 700)),
+            const SizedBox(height: 4),
+            Text(
+              deck == null ? 'not paired' : 'paired with $deck',
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
+            ),
+            const SizedBox(height: 22),
+            Text(
+              'agents per page',
+              style: DeckHud.mono(size: 14, color: DeckHud.ink),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Each page of the deck is drawn in its own grid. A page holds as '
+              'many agents as it has cells, so changing one moves where the '
+              'pages after it begin. An agent keeps its place either way. The '
+              'desk panel and the boards always draw 4 x 4.',
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
+            ),
+            const SizedBox(height: 16),
+            for (var i = 0; i < listed; i++) ...[
+              if (i > 0) const SizedBox(height: 8),
+              _PageRow(
+                page: i,
+                shape: deckShapeOf(shapes, i),
+                inUse: i < used,
+                onShape: (sh) => onShape(i, sh),
+              ),
+            ],
+            const SizedBox(height: 22),
+            Text(
+              'Swipe right for the deck. The page before its first one holds '
+              'the agents that need you.',
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// One page's shape: its columns and its rows, each a stepper.
+class _PageRow extends StatelessWidget {
+  const _PageRow({
+    required this.page,
+    required this.shape,
+    required this.inUse,
+    required this.onShape,
+  });
+
+  final int page;
+  final DeckShape shape;
+
+  /// False for a page no agent has reached yet: shown, but dimmed.
+  final bool inUse;
+  final void Function(DeckShape) onShape;
+
+  @override
+  Widget build(BuildContext context) {
+    final ink = inUse ? DeckHud.ink : DeckHud.dim;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      color: DeckHud.panel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'page ${page + 1}',
+                  style: DeckHud.mono(size: 13, color: ink),
+                ),
+              ),
+              Text(
+                '${shape.cells} agents',
+                style: DeckHud.mono(
+                  size: 12,
+                  color: inUse ? DeckHud.accent : DeckHud.dim,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _Stepper(
+                label: 'cols',
+                value: shape.columns,
+                onChange: (v) => onShape(DeckShape(v, shape.rows)),
+              ),
+              const SizedBox(width: 14),
+              _Stepper(
+                label: 'rows',
+                value: shape.rows,
+                onChange: (v) => onShape(DeckShape(shape.columns, v)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Stepper extends StatelessWidget {
+  const _Stepper({
+    required this.label,
+    required this.value,
+    required this.onChange,
+  });
+
+  final String label;
+  final int value;
+  final void Function(int) onChange;
+
+  @override
+  Widget build(BuildContext context) {
+    final lo = gridRange.first, hi = gridRange.last;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: DeckHud.mono(size: 12, color: DeckHud.dim)),
+        const SizedBox(width: 6),
+        _Tap(
+          glyph: '\u2212',
+          on: value > lo,
+          onTap: () => onChange(value - 1),
+        ),
+        Container(
+          width: 34,
+          alignment: Alignment.center,
+          child: Text('$value', style: DeckHud.rm(15, DeckHud.ink)),
+        ),
+        _Tap(glyph: '+', on: value < hi, onTap: () => onChange(value + 1)),
+      ],
+    );
+  }
+}
+
+class _Tap extends StatelessWidget {
+  const _Tap({required this.glyph, required this.on, required this.onTap});
+
+  final String glyph;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: on ? onTap : null,
+      child: Container(
+        width: 34,
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border.all(color: on ? DeckHud.dim : DeckHud.panel),
+        ),
+        child: Text(
+          glyph,
+          style: DeckHud.rm(16, on ? DeckHud.ink : DeckHud.dim),
         ),
       ),
     );

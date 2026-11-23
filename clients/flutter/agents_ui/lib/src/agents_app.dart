@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -38,12 +37,9 @@ class AgentsApp extends StatefulWidget {
     this.pairingCard,
     this.visible,
     this.backButton = false,
-    this.gridColumns = DeckGrid.defaultColumns,
-    this.gridRows = DeckGrid.defaultRows,
-  }) : assert(
-         gridColumns > 0 && gridRows > 0,
-         'the deck needs at least one cell',
-       ),
+    this.pageShapes = const [DeckShape.panel],
+    this.leadingPage,
+  }) : assert(pageShapes.length > 0, 'the deck needs a shape'),
        assert(
          (openCard == null) == (cardHost == null),
          'openCard and cardHost come together',
@@ -60,13 +56,21 @@ class AgentsApp extends StatefulWidget {
   /// A back button on agent cards, for hosts without an edge swipe.
   final bool backButton;
 
-  /// The deck's page: 4x4 as the desk panel and the boards draw it, which is
-  /// also how slots are numbered. A bigger page fits more agents on a screen
-  /// that has the room, at the cost of its page boundaries no longer lining up
-  /// with the panel's. The "Needs you" screen is not affected: the protocol
-  /// fixes it at sixteen spots.
-  final int gridColumns;
-  final int gridRows;
+  /// A page of the host's own, before the "Needs you" screen: somewhere to
+  /// put settings on a device that has no menu bar to hang them off. Null
+  /// leaves the deck as it was, opening on its first page.
+  final Widget? leadingPage;
+
+  /// The shape of each page in turn; the last one repeats for any page beyond
+  /// it, so a single entry shapes the whole deck. 4 x 4 is what the desk panel
+  /// and the boards draw.
+  ///
+  /// Pages need not match each other. A page holds as many agents as it has
+  /// cells, so where a page begins is the sum of the ones before it rather
+  /// than a multiple: a deck of 5 x 5 then 4 x 4 starts its second page at
+  /// slot 25 and its third at 41. An agent keeps its slot through all of it;
+  /// only which page shows it moves.
+  final List<DeckShape> pageShapes;
 
   /// Whether anyone can see the board (a menu bar window that hides): the
   /// critters stop animating while false. Null = always visible.
@@ -89,10 +93,28 @@ class _AgentsAppState extends State<AgentsApp> {
     ..running = false;
 
   /// The view shown: 0 = "Needs you", 1 + n = page n. Opens on page 0.
-  int _view = 1;
-  final _pager = PageController(initialPage: 1);
+  /// 0 is the leading page when there is one, then the "Needs you" screen,
+  /// then the deck's pages. The deck is what opens, not either of them.
+  int get _lead => widget.leadingPage == null ? 0 : 1;
+  late int _view = 1 + _lead;
+  late final _pager = PageController(initialPage: 1 + _lead);
 
-  int get _cells => widget.gridColumns * widget.gridRows;
+  /// The shape of page [i], the last entry standing in for the rest.
+  DeckShape _shape(int i) => deckShapeOf(widget.pageShapes, i);
+
+  /// The slot page [i] begins at: the cells of every page before it.
+  int _start(int i) {
+    var n = 0;
+    for (var p = 0; p < i; p++) {
+      n += _shape(p).cells;
+    }
+    return n;
+  }
+
+  int _pageOf(int slot) => deckPageOf(widget.pageShapes, slot);
+
+  int _pageCount(Iterable<int> slots) =>
+      deckPageCount(widget.pageShapes, slots);
 
   @override
   void dispose() {
@@ -151,10 +173,11 @@ class _AgentsAppState extends State<AgentsApp> {
   void _reportView(AgentsState state) {
     final m = state.magic;
     if (m == null || !m.giver || m.taken || _view < 1) return;
-    final start = (_view - 1) * _cells;
+    final page = _view - 1 - _lead;
+    final start = _start(page), end = start + _shape(page).cells;
     final ids = [
       for (final a in state.agents)
-        if (a.slot >= start && a.slot < start + _cells) a.id,
+        if (a.slot >= start && a.slot < end) a.id,
     ];
     final key = ids.join(',');
     final now = DateTime.now();
@@ -344,12 +367,11 @@ class _AgentsAppState extends State<AgentsApp> {
   Widget _deck(AgentsState state) {
     _watchFlights(state);
     _reportView(state);
-    final last = state.agents.map((a) => a.slot).fold(0, math.max);
-    final pages = last ~/ _cells + 1;
-    if (_view > pages) _view = pages;
+    final pages = _pageCount(state.agents.map((a) => a.slot));
+    if (_view > pages + _lead) _view = pages + _lead;
     final hot = {
       for (final a in state.agents)
-        if (a.needsYou) a.slot ~/ _cells,
+        if (a.needsYou) _pageOf(a.slot),
     };
     final needsYou = NeedsYou.of(state);
     return Focus(
@@ -362,7 +384,7 @@ class _AgentsAppState extends State<AgentsApp> {
           _ => 0,
         };
         if (step == 0) return KeyEventResult.ignored;
-        _goTo((_view + step).clamp(0, pages));
+        _goTo((_view + step).clamp(0, pages + _lead));
         return KeyEventResult.handled;
       },
       child: Padding(
@@ -373,11 +395,15 @@ class _AgentsAppState extends State<AgentsApp> {
               child: PageView.builder(
                 key: const Key('agents-pages'),
                 controller: _pager,
-                itemCount: pages + 1,
+                itemCount: pages + 1 + _lead,
                 onPageChanged: (v) => setState(() => _view = v),
-                itemBuilder: (context, v) => v == 0
+                itemBuilder: (context, v) => v < _lead
+                    ? widget.leadingPage!
+                    : v == _lead
                     ? AttentionScreen(
                         needsYou: needsYou,
+                        columns: _shape(0).columns,
+                        rows: _shape(0).rows,
                         tile: (a) => AgentTile(
                           key: ValueKey('attention-tile-${a.id}'),
                           agent: a,
@@ -386,10 +412,10 @@ class _AgentsAppState extends State<AgentsApp> {
                         ),
                       )
                     : DeckGrid(
-                        cells: _cellsFor(state, v - 1),
+                        cells: _cellsFor(state, v - 1 - _lead),
                         square: false,
-                        columns: widget.gridColumns,
-                        rows: widget.gridRows,
+                        columns: _shape(v - 1 - _lead).columns,
+                        rows: _shape(v - 1 - _lead).rows,
                       ),
               ),
             ),
@@ -397,11 +423,11 @@ class _AgentsAppState extends State<AgentsApp> {
               height: _barsHeight,
               child: _PageBars(
                 pages: pages,
-                current: _view - 1,
+                current: _view - 1 - _lead,
                 hot: hot,
                 attention: needsYou.count,
-                onTap: (p) => _goTo(p + 1),
-                onAttention: () => _goTo(0),
+                onTap: (p) => _goTo(p + 1 + _lead),
+                onAttention: () => _goTo(_lead),
               ),
             ),
           ],
@@ -424,7 +450,8 @@ class _AgentsAppState extends State<AgentsApp> {
   List<Widget> _cellsFor(AgentsState state, int page) {
     final bySlot = {for (final a in state.agents) a.slot: a};
     final leftFrom = {for (final a in _leaving) a.slot: a};
-    final start = page * _cells;
+    final shape = _shape(page);
+    final start = _start(page);
     // The order the tiles fly in: by place, as on the board.
     final order = <String, int>{};
     for (final a in [
@@ -435,17 +462,17 @@ class _AgentsAppState extends State<AgentsApp> {
     }
     Widget fly(Agent a, int slot, Widget tile, {required bool leave}) => _Fly(
       key: ValueKey('fly-$_flight-${a.id}'),
-      col: (slot - start) % widget.gridColumns,
-      row: (slot - start) ~/ widget.gridColumns,
-      columns: widget.gridColumns,
-      rows: widget.gridRows,
+      col: (slot - start) % shape.columns,
+      row: (slot - start) ~/ shape.columns,
+      columns: shape.columns,
+      rows: shape.rows,
       leave: leave,
       corner: leave ? _leaveCorner : _arriveCorner,
       delay: Duration.zero, // all at once: a swarm
       child: tile,
     );
     return [
-      for (var slot = start; slot < start + _cells; slot++)
+      for (var slot = start; slot < start + shape.cells; slot++)
         if (bySlot[slot] case final a?)
           _swapCell(
             state,
