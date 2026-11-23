@@ -43,9 +43,16 @@ Future<String> configPath() async =>
 /// What the config page remembers, beside the bundle.
 const _settingsFile = 'settings.json';
 
-/// How wide and tall a page may be set. Below 2 a page is not a grid; above 6
-/// the tiles stop being readable on a tablet, let alone a phone.
-const gridRange = [2, 3, 4, 5, 6];
+/// How wide and tall a page may be set, as far as a saved file is concerned.
+/// Below 2 a page is not a grid; 8 x 8 is 64 tiles, which only a tablet has
+/// the room for.
+const gridRange = [2, 3, 4, 5, 6, 7, 8];
+
+/// The most a page may be set to on this device: 8 on a tablet, 6 on a phone,
+/// where a seventh column leaves a tile too small to read. 600 points of
+/// shortest side is the usual line between the two.
+int gridMax(BuildContext context) =>
+    MediaQuery.sizeOf(context).shortestSide >= 600 ? 8 : 6;
 
 /// A tablet has the room for 25 agents at once.
 const defaultShape = DeckShape(5, 5);
@@ -893,6 +900,7 @@ class _ShapeRow extends StatelessWidget {
                 key: const Key('cols'),
                 label: 'cols',
                 value: shape.columns,
+                max: gridMax(context),
                 onChange: (v) => onShape(DeckShape(v, shape.rows)),
               ),
               const SizedBox(width: 14),
@@ -900,6 +908,7 @@ class _ShapeRow extends StatelessWidget {
                 key: const Key('rows'),
                 label: 'rows',
                 value: shape.rows,
+                max: gridMax(context),
                 onChange: (v) => onShape(DeckShape(shape.columns, v)),
               ),
             ],
@@ -916,15 +925,19 @@ class _Stepper extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onChange,
+    required this.max,
   });
 
   final String label;
   final int value;
   final void Function(int) onChange;
 
+  /// The largest this device allows (gridMax), not what a file may hold.
+  final int max;
+
   @override
   Widget build(BuildContext context) {
-    final lo = gridRange.first, hi = gridRange.last;
+    final lo = gridRange.first, hi = max;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
