@@ -22,6 +22,22 @@ final class Dictation: NSObject, FlutterStreamHandler {
   private var task: SFSpeechRecognitionTask?
   private var sink: FlutterEventSink?
 
+  /// Speech recognition hands back a finished sentence as soon as it hears a
+  /// pause, and that ends its task. Thinking mid-sentence is not the end of
+  /// what someone has to say, so each finished piece is kept here and the
+  /// next task starts on a clean request; what the app shows is this plus
+  /// whatever the current task has heard.
+  private var kept = ""
+
+  /// Set while the microphone is deliberately closed (pause) or finished, so
+  /// a task ending does not start another one.
+  private var paused = false
+  private var stopped = true
+
+  /// When the last task was started, to tell "ended on a pause, start the
+  /// next one" from "ends immediately, every time".
+  private var startedAt = Date.distantPast
+
   // MARK: channels
 
   static func register(with registrar: FlutterPluginRegistrar) {
@@ -53,6 +69,25 @@ final class Dictation: NSObject, FlutterStreamHandler {
       result(recognizer?.isAvailable == true)
     case "start":
       start(result)
+    case "pause":
+      // The words stay; the microphone closes until resume.
+      paused = true
+      closeAudio()
+      endTask(keepText: true)
+      send(["text": text(""), "final": false, "paused": true])
+      result(nil)
+    case "resume":
+      guard let recognizer, !stopped else {
+        result(nil)
+        return
+      }
+      paused = false
+      do {
+        try listen(recognizer)
+        result(true)
+      } catch {
+        result(FlutterError(code: "failed", message: error.localizedDescription, details: nil))
+      }
     case "stop":
       finish()
       result(nil)
@@ -111,7 +146,9 @@ final class Dictation: NSObject, FlutterStreamHandler {
   }
 
   private func listen(_ recognizer: SFSpeechRecognizer) throws {
-    finish() // whatever was running before
+    endTask(keepText: true)
+    stopped = false
+    startedAt = Date()
 
     let session = AVAudioSession.sharedInstance()
     try session.setCategory(.record, mode: .measurement, options: .duckOthers)
@@ -126,42 +163,88 @@ final class Dictation: NSObject, FlutterStreamHandler {
     task = recognizer.recognitionTask(with: request) { [weak self] result, error in
       guard let self else { return }
       if let result {
-        self.send([
-          "text": result.bestTranscription.formattedString,
-          "final": result.isFinal,
-        ])
-        if result.isFinal { self.finish() }
+        let heard = result.bestTranscription.formattedString
+        self.send(["text": self.text(heard), "final": false])
+        if result.isFinal {
+          // A pause, not the end: keep what was said and listen on.
+          self.keep(heard)
+          self.again()
+        }
         return
       }
-      if let error {
-        // A stop with nothing said ends the task with an error; the app has
-        // the text already, so it is reported and not treated as a failure.
-        self.send(["error": error.localizedDescription])
-        self.finish()
+      if error != nil {
+        self.again()
       }
     }
 
     let input = engine.inputNode
-    input.removeTap(onBus: 0)
-    input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) {
-      buffer, _ in
-      request.append(buffer)
+    if !engine.isRunning {
+      input.removeTap(onBus: 0)
+      // The tap reads self.request rather than this one, so a task that ends
+      // on a pause can be replaced without the microphone missing a word.
+      input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) {
+        [weak self] buffer, _ in
+        self?.request?.append(buffer)
+      }
+      engine.prepare()
+      try engine.start()
     }
-    engine.prepare()
-    try engine.start()
   }
 
-  /// Stops the microphone and lets the recogniser finish what it has.
+  /// Everything said so far: the pieces already finished, and the piece being
+  /// spoken now.
+  private func text(_ current: String) -> String {
+    if kept.isEmpty { return current }
+    if current.isEmpty { return kept }
+    return kept + " " + current
+  }
+
+  private func keep(_ piece: String) {
+    let trimmed = piece.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    kept = kept.isEmpty ? trimmed : kept + " " + trimmed
+  }
+
+  /// Starts the next recognition task after one ended on a pause. A task that
+  /// ends at once, over and over, is a real failure and is reported.
+  private func again() {
+    guard !paused, !stopped, let recognizer else { return }
+    if Date().timeIntervalSince(startedAt) < 0.5 {
+      send(["error": "speech recognition stopped; hold the tile again"])
+      finish()
+      return
+    }
+    do {
+      try listen(recognizer)
+    } catch {
+      send(["error": error.localizedDescription])
+      finish()
+    }
+  }
+
+  /// Stops listening for good: the microphone closes and the text is cleared,
+  /// since the next hold is a new thing to say.
   private func finish() {
+    stopped = true
+    paused = false
+    closeAudio()
+    endTask(keepText: false)
+  }
+
+  private func closeAudio() {
     if engine.isRunning {
       engine.stop()
       engine.inputNode.removeTap(onBus: 0)
     }
+    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+  }
+
+  private func endTask(keepText: Bool) {
     request?.endAudio()
     request = nil
     task?.finish()
     task = nil
-    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    if !keepText { kept = "" }
   }
 
   private func send(_ event: [String: Any]) {

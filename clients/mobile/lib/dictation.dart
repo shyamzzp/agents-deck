@@ -11,13 +11,22 @@ import 'package:flutter/services.dart';
 
 /// What has been heard so far, or why listening stopped.
 class Heard {
-  const Heard({this.text = '', this.done = false, this.error});
+  const Heard({
+    this.text = '',
+    this.done = false,
+    this.paused = false,
+    this.error,
+  });
 
   /// Everything recognised in this turn of speaking, not just the latest word.
   final String text;
 
-  /// The recogniser considers this the finished sentence.
+  /// Kept for hosts that want it; the sheet no longer ends on it, because a
+  /// pause in the middle of a sentence is not the end of what was being said.
   final bool done;
+
+  /// The microphone is closed and waiting to be resumed.
+  final bool paused;
 
   /// Set instead of text when listening ended badly (or was stopped with
   /// nothing said, which the recogniser also reports as an error).
@@ -39,6 +48,12 @@ class Dictation {
   /// Closes the microphone and lets the recogniser finish its sentence.
   static Future<void> stop() => _methods.invokeMethod<void>('stop');
 
+  /// Closes the microphone but keeps what has been said, for [resume].
+  static Future<void> pause() => _methods.invokeMethod<void>('pause');
+
+  /// Opens it again and carries on the same sentence.
+  static Future<void> resume() => _methods.invokeMethod<void>('resume');
+
   /// What is being heard, as it arrives.
   static Stream<Heard> listen() => _events.receiveBroadcastStream().map((e) {
     final m = (e as Map).cast<Object?, Object?>();
@@ -47,6 +62,7 @@ class Dictation {
     return Heard(
       text: m['text'] as String? ?? '',
       done: m['final'] as bool? ?? false,
+      paused: m['paused'] as bool? ?? false,
     );
   });
 }
