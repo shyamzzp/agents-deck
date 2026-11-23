@@ -117,9 +117,6 @@ const inApp = (a) => !!a.app; // runs in another app (Orca, herdr): answer, inte
 
 const needsYou = (a) => a.status === 'waiting' || a.status === 'error';
 
-// Finished a turn nobody has reviewed yet: hungry until its terminal is focused.
-const hungry = (a) => a.status === 'idle' && a.unseen;
-
 // Claude's turn is over and only its subagents work: "3 subagents", not the
 // main thread at a tool (the service sets this activity line for it).
 function subsOnly(a) {
@@ -697,7 +694,7 @@ function wireDrag(el, id) {
 }
 
 function updateTile(t, a) {
-  const cls = `tile st-${a.status} tool-${a.tool}` + (hungry(a) ? ' hungry' : '') + (a.focused ? ' focused' : '') + (a.id === selectedId ? ' selected' : '');
+  const cls = `tile st-${a.status} tool-${a.tool}` + (a.focused ? ' focused' : '') + (a.id === selectedId ? ' selected' : '');
   if (t.cls !== cls) { t.el.className = cls; t.cls = cls; }
   setSprite(t.spr, poseOf(a), a.tool, a.hat);
   const used = a.context?.window > 0 ? Math.min(100, (a.context.used / a.context.window) * 100) : 0;
@@ -1115,10 +1112,11 @@ function renderPageBar(pages, hot) {
   const key = `${pages}|${panelPage}|${[...hot].join(',')}|${onAttn}|${n}|${asking}|${panelOn()}`;
   if (bar.dataset.key === key) return;
   bar.dataset.key = key;
+  const countLabel = n ? n + (n === 1 ? ' agent' : ' agents') : 'nothing right now';
   const mark = h('button', {
     type: 'button', class: `page attn-mark${onAttn ? ' on' : ''}${asking ? ' hot' : ''}`,
-    'aria-label': `needs you: ${n ? `${n} agent${n === 1 ? '' : 's'} at work or asking` : 'nothing right now'}`,
-    title: n ? `${n} agent${n === 1 ? '' : 's'} at work or asking you something (←)` : 'needs you: nothing right now (←)',
+    'aria-label': `needs you: ${countLabel}`,
+    title: `needs you: ${countLabel} (←)`,
   }, h('span', { class: 'attn-chev', 'aria-hidden': 'true', text: '‹' }), n ? h('span', { class: 'attn-n', text: String(n) }) : null);
   mark.addEventListener('click', () => goView('attn'));
   const label = (p) => (panelOn() ? `page ${p + 1} of ${pages}` : 'the deck');
@@ -1832,7 +1830,7 @@ function buildInfo(a, loc, linkPanes) {
     if (!loc && a.sshTerminal && a.status !== 'offline') actions.append(actionButton(a, 'Open in '+(terminals.preferred || 'Terminal'), 'focus', 'solid', note));
     if (linkPanes.length) actions.append(paneLinkPicker(a, linkPanes, note));
   } else {
-    if (!loc && a.status !== 'exited') actions.append(actionButton(a, codexThread(a) ? (terminals.preferred ? 'Open in '+terminals.preferred : 'Open Codex session') : inApp(a) ? `open in ${a.app}` : hungry(a) ? 'review in terminal' : 'focus terminal', 'focus', 'solid', note));
+    if (!loc && a.status !== 'exited') actions.append(actionButton(a, codexThread(a) ? (terminals.preferred ? 'Open in '+terminals.preferred : 'Open Codex session') : inApp(a) ? `open in ${a.app}` : 'focus terminal', 'focus', 'solid', note));
     else if (!loc && a.resumable) actions.append(actionButton(a, 'resume', 'resume', 'solid', note));
     if (a.status === 'running' && (!a.external || inApp(a))) actions.append(actionButton(a, 'interrupt', 'interrupt', 'narrow', note));
     else actions.append(removeButton(a, note));
