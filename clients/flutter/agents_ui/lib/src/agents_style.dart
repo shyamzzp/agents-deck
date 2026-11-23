@@ -189,7 +189,7 @@ class AgentButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 22),
         decoration: BoxDecoration(
           color: pressed ? pressedFill : fill,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.zero,
           border: Border.all(color: pressed ? pressedFill : outline, width: 2),
         ),
         child: Text(

@@ -60,7 +60,7 @@ class _LivePickerState extends State<LivePicker> {
       key: const Key('live-picker'),
       decoration: BoxDecoration(
         color: DeckHud.bg,
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.zero,
       ),
       padding: const EdgeInsets.fromLTRB(36, 34, 36, 30),
       child: Column(
@@ -143,7 +143,7 @@ class _LivePickerState extends State<LivePicker> {
         padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
         decoration: BoxDecoration(
           color: pressed ? DeckHud.ink : DeckHud.panel,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.zero,
         ),
         child: Row(
           children: [

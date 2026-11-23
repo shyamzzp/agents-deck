@@ -1291,12 +1291,17 @@ function header(a) {
   const ai = h('span', { class: 'd-ai' });
   const chip = h('span', { class: 'chip', title: a.tool, 'aria-label': `tool: ${a.tool}`, role: 'img' });
   const acct = acctLabel(chip);
+  // Status pill sits beside the close button on the top bar so the title below
+  // it gets the full panel width.
   const el = h('div', { class: 'd-top' },
-    h('div', { class: 'd-id' }, h('div', { class: 'd-mascots' }, spr, crew), h('h2', { class: 'd-title', id: 'd-title', tabindex: '-1', text: a.title }), ai),
-    h('div', { class: 'd-right' },
-      h('button', { type: 'button', class: 'd-close', 'aria-label': 'close panel (esc)', onclick: closeDetail }, closeIcon()),
-      h('div', { class: `d-pillrow tool-${a.tool}` }, chip, pill),
-      acct.el));
+    h('div', { class: 'd-bar' },
+      h('div', { class: 'd-mascots' }, spr, crew),
+      h('div', { class: 'd-right' },
+        h('div', { class: 'd-meta' },
+          h('div', { class: `d-pillrow tool-${a.tool}` }, chip, pill),
+          acct.el),
+        h('button', { type: 'button', class: 'd-close', 'aria-label': 'close panel (esc)', onclick: closeDetail }, closeIcon()))),
+    h('div', { class: 'd-id' }, h('h2', { class: 'd-title', id: 'd-title', tabindex: '-1', text: a.title }), ai));
   setSprite(spr, poseOf(a), a.tool, a.hat);
   crewUpdate(crew, a);
   // Click the mascot to pick its hat.

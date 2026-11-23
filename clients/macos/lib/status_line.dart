@@ -126,7 +126,7 @@ class StatusLine extends StatelessWidget {
         padding: const EdgeInsets.only(left: 10, right: 3),
         decoration: BoxDecoration(
           color: DeckHud.panel,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.zero,
         ),
         child: Row(
           children: [
@@ -205,7 +205,7 @@ class _PinButton extends StatelessWidget {
               padding: const EdgeInsets.only(left: 6, right: 8),
               decoration: BoxDecoration(
                 color: filled ? DeckHud.ink : null,
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.zero,
                 border: Border.all(color: filled ? DeckHud.ink : DeckHud.dim),
               ),
               child: Row(
@@ -326,7 +326,7 @@ class _Part extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: _partPadding),
         decoration: BoxDecoration(
           color: pressed ? agentsFocusedFill : null,
-          borderRadius: BorderRadius.circular(5),
+          borderRadius: BorderRadius.zero,
         ),
         child: Text(
           text,
@@ -363,7 +363,7 @@ class _SettingsButton extends StatelessWidget {
             padding: const EdgeInsets.only(left: 7, right: 8),
             decoration: BoxDecoration(
               color: pressed ? DeckHud.ink : null,
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.zero,
               border: Border.all(color: pressed ? DeckHud.ink : DeckHud.dim),
             ),
             child: Row(

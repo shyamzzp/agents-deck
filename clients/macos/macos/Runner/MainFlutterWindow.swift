@@ -23,7 +23,7 @@ class MainFlutterWindow: NSWindow {
     isReleasedWhenClosed = false
 
     flutter.view.wantsLayer = true
-    flutter.view.layer?.cornerRadius = 14
+    flutter.view.layer?.cornerRadius = 0
     flutter.view.layer?.masksToBounds = true
 
     RegisterGeneratedPlugins(registry: flutter)

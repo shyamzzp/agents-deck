@@ -14,9 +14,6 @@ import 'critter.dart';
 const _mascotHeight = 54 * 13 / 18;
 const _titleHeight = 30.0;
 
-/// Matches the morph card's landed corner radius (the morph lerps to 26).
-const _cardRadius = 26.0;
-
 /// How long the "sent" invert holds before the card closes itself.
 const _sentHold = Duration(milliseconds: 600);
 
@@ -348,7 +345,7 @@ class _AgentDetailState extends State<AgentDetail> {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: fill,
-        borderRadius: BorderRadius.circular(_cardRadius),
+        borderRadius: BorderRadius.zero,
         border: border == null ? null : Border.all(color: border, width: 3),
       ),
       child: Padding(
@@ -429,7 +426,7 @@ class _AgentDetailState extends State<AgentDetail> {
                     height: 80,
                     decoration: BoxDecoration(
                       color: pressed ? DeckHud.ink : DeckHud.panel,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.zero,
                       border: Border.all(
                         color: shape == hat.shape && !hat.auto
                             ? DeckHud.ink
@@ -464,7 +461,7 @@ class _AgentDetailState extends State<AgentDetail> {
                     height: 44,
                     decoration: BoxDecoration(
                       color: hatColor(color).$1,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.zero,
                       border: Border.all(
                         color: color == hat.color && !hat.auto || pressed
                             ? DeckHud.ink
@@ -635,7 +632,7 @@ class _AgentDetailState extends State<AgentDetail> {
                       ),
                       decoration: BoxDecoration(
                         color: pillFill,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.zero,
                       ),
                       child: Text(
                         agentPillLabel(a, state),
@@ -692,7 +689,7 @@ class _AgentDetailState extends State<AgentDetail> {
               ? null
               : BoxDecoration(
                   color: fill,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.zero,
                 ),
           child: Text(
             _flashKey == 'focus' && _flash == _Flash.sent
@@ -1083,7 +1080,7 @@ class _AgentDetailState extends State<AgentDetail> {
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
               decoration: BoxDecoration(
                 color: DeckHud.bg,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.zero,
               ),
               child: Text(
                 p.detail,
@@ -1305,7 +1302,7 @@ class _AgentDetailState extends State<AgentDetail> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
             color: ink ? DeckHud.ink : DeckHud.panel,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.zero,
             border: Border.all(color: ink ? DeckHud.ink : agentsRowOutline),
           ),
           child: Row(
@@ -1406,7 +1403,7 @@ class _AgentDetailState extends State<AgentDetail> {
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
               decoration: BoxDecoration(
                 color: DeckHud.panel,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.zero,
               ),
               child: Text(
                 p.detail,
@@ -1661,7 +1658,7 @@ class CardBackButton extends StatelessWidget {
           height: 68,
           decoration: BoxDecoration(
             color: pressed ? pressedFill : null,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.zero,
             border: Border.all(
               color: pressed ? pressedFill : outline,
               width: 2,

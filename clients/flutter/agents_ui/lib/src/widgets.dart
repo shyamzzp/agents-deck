@@ -319,7 +319,7 @@ class CardMorphState extends State<CardMorph>
                   return Positioned.fromRect(
                     rect: r,
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(6 + 20 * v),
+                      borderRadius: BorderRadius.zero,
                       child: ColoredBox(
                         color: _fill,
                         child: Opacity(
