@@ -165,7 +165,14 @@ func listSSH(args []string, sortBy string, asJSON bool) error {
 	if err := printList(model.State{Agents: agents}, sortBy, inv.Remote); err != nil {
 		return err
 	}
+	matched := map[string]bool{}
+	for _, p := range inv.Remote {
+		matched[p.Key()] = true
+	}
 	for _, p := range inv.HostPanes {
+		if matched[p.Key()] {
+			continue
+		}
 		fmt.Printf("\nCodebox SSH connection (thread unidentified): %s\n", p.Label())
 	}
 	return nil
