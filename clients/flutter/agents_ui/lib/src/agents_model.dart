@@ -390,12 +390,14 @@ class Agent {
   /// deck: watched (status, context, cost), answered in its own terminal.
   bool get watched => external && tool == 'claude' && app.isEmpty;
 
-  /// Whether the deck can type into this session at all.
+  /// Whether the deck can be expected to type into this session.
   ///
-  /// It can only type into what it started itself, in its own tmux. A session
-  /// running in someone else's terminal, or inside another app, cannot be
-  /// typed into by anything -- the service refuses with 422 and says so.
-  bool get canBeTold => !external;
+  /// It types into what it started itself, and into a Claude session watched
+  /// in iTerm, through iTerm's own API. What it cannot reach is a thread in
+  /// the Codex app or an agent living inside another app, which the service
+  /// refuses -- so only those are ruled out here. Anything else is tried, and
+  /// the service's answer is what the card reports.
+  bool get canBeTold => !codexThread && app.isEmpty;
 
   /// A Claude agent whose conversation can continue in another account
   /// (`POST /v1/agents/{id}/handoff`): the deck's own, or one watched in a

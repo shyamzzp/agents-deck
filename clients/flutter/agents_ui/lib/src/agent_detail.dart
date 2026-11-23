@@ -458,12 +458,10 @@ class _AgentDetailState extends State<AgentDetail> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'It is a session someone started in their own terminal '
-                      'and added to the deck. Nothing can type into another '
-                      'app\u2019s terminal, so the deck refuses rather than '
-                      'pretending.\n\nStart an agent with agentctl new, or '
-                      'start_agent over MCP, and it can be given tasks from '
-                      'here.',
+                      'It runs inside another app, which the deck cannot type '
+                      'into. Give it tasks where it lives.\n\nA session in a '
+                      'terminal is fine, including one you started yourself: '
+                      'the deck types into iTerm through iTerm.',
                       style: DeckHud.mono(
                         size: tight ? 13 : 15,
                         color: DeckHud.dim,
