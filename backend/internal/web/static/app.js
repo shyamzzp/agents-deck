@@ -5,15 +5,19 @@
 import { needsYou as needsYouScreen, packed, simulate, SPOTS } from './attention.js';
 
 import { followThemeChanges } from './theme.js';
-import { titleSize, titleSizeKey } from './layout.js';
+import { drawerFont, tileFont, fontSize } from './layout.js';
 
-function applyTitleSize() {
-  document.documentElement.style.setProperty('--drawer-title-size', titleSize() + 'px');
+function applyFontSizes() {
+  const style = document.documentElement.style;
+  style.setProperty('--drawer-title-size', fontSize(drawerFont) + 'px');
+  const tile = fontSize(tileFont);
+  if (tile) style.setProperty('--tile-name-size', tile + 'px');
+  else style.removeProperty('--tile-name-size');
 }
-applyTitleSize();
-addEventListener('pageshow', applyTitleSize);
+applyFontSizes();
+addEventListener('pageshow', applyFontSizes);
 addEventListener('storage', e => {
-  if (e.key === titleSizeKey || e.key === null) applyTitleSize();
+  if (e.key === null || e.key === drawerFont.key || e.key === tileFont.key) applyFontSizes();
 });
 
 const $ = (id) => document.getElementById(id);
