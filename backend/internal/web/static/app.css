@@ -488,7 +488,7 @@ body.offline .main { opacity: 0.4; }
 .hatpick-foot { display: flex; align-items: center; gap: 12px; }
 .hatpick-foot .toggle:disabled { opacity: 0.5; cursor: default; }
 .hatpick-note { color: var(--accent); font-size: 13px; }
-.d-id { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.d-id { width: var(--drawer-title-width, 95%); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .d-spr { width: 54px; flex-shrink: 0; line-height: 0; }
 .d-spr svg { width: 100%; height: auto; overflow: visible; }
 .d-mascots { display: flex; align-items: flex-end; gap: 14px; }

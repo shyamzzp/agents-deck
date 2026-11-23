@@ -5,6 +5,16 @@
 import { needsYou as needsYouScreen, packed, simulate, SPOTS } from './attention.js';
 
 import { followThemeChanges } from './theme.js';
+import { titleWidth, titleWidthKey } from './layout.js';
+
+function applyTitleWidth() {
+  document.documentElement.style.setProperty('--drawer-title-width', titleWidth() + '%');
+}
+applyTitleWidth();
+addEventListener('pageshow', applyTitleWidth);
+addEventListener('storage', e => {
+  if (e.key === titleWidthKey || e.key === null) applyTitleWidth();
+});
 
 const $ = (id) => document.getElementById(id);
 followThemeChanges(); // Settings is another page: pick its theme change up live
