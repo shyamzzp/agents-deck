@@ -34,9 +34,14 @@ final class Dictation: NSObject, FlutterStreamHandler {
   private var paused = false
   private var stopped = true
 
-  /// When the last task was started, to tell "ended on a pause, start the
-  /// next one" from "ends immediately, every time".
+  /// When the last task was started, to tell a pause from a recogniser that
+  /// fails the moment it is asked.
   private var startedAt = Date.distantPast
+
+  /// Which task's results count. A task that has handed back its sentence can
+  /// still deliver a late partial of the same words, which would be added to
+  /// the kept text and read as the words appearing twice.
+  private var generation = 0
 
   // MARK: channels
 
@@ -71,10 +76,7 @@ final class Dictation: NSObject, FlutterStreamHandler {
       start(result)
     case "pause":
       // The words stay; the microphone closes until resume.
-      paused = true
-      closeAudio()
-      endTask(keepText: true)
-      send(["text": text(""), "final": false, "paused": true])
+      holdOn()
       result(nil)
     case "resume":
       guard let recognizer, !stopped else {
@@ -160,20 +162,31 @@ final class Dictation: NSObject, FlutterStreamHandler {
     request.requiresOnDeviceRecognition = true
     self.request = request
 
+    generation += 1
+    let gen = generation
     task = recognizer.recognitionTask(with: request) { [weak self] result, error in
-      guard let self else { return }
+      guard let self, gen == self.generation else { return } // a late word
       if let result {
         let heard = result.bestTranscription.formattedString
-        self.send(["text": self.text(heard), "final": false])
         if result.isFinal {
-          // A pause, not the end: keep what was said and listen on.
+          // Stopped speaking: keep the sentence and close the microphone,
+          // rather than listen on or end the whole thing. Resume carries on.
           self.keep(heard)
-          self.again()
+          self.holdOn()
+          return
         }
+        self.send(["text": self.text(heard), "final": false])
         return
       }
       if error != nil {
-        self.again()
+        // A recogniser that fails the instant it is asked is a real failure;
+        // otherwise this is the same silence, reported the other way.
+        if Date().timeIntervalSince(self.startedAt) < 0.5, self.kept.isEmpty {
+          self.send(["error": "speech recognition stopped; hold the tile again"])
+          self.finish()
+          return
+        }
+        self.holdOn()
       }
     }
 
@@ -205,21 +218,15 @@ final class Dictation: NSObject, FlutterStreamHandler {
     kept = kept.isEmpty ? trimmed : kept + " " + trimmed
   }
 
-  /// Starts the next recognition task after one ended on a pause. A task that
-  /// ends at once, over and over, is a real failure and is reported.
-  private func again() {
-    guard !paused, !stopped, let recognizer else { return }
-    if Date().timeIntervalSince(startedAt) < 0.5 {
-      send(["error": "speech recognition stopped; hold the tile again"])
-      finish()
-      return
-    }
-    do {
-      try listen(recognizer)
-    } catch {
-      send(["error": error.localizedDescription])
-      finish()
-    }
+  /// Waits, with the words kept: the microphone closes and the app shows
+  /// "paused", so resume picks the sentence up where it was left.
+  private func holdOn() {
+    guard !stopped else { return }
+    paused = true
+    generation += 1 // nothing more from the task that just ended
+    closeAudio()
+    endTask(keepText: true)
+    send(["text": text(""), "final": false, "paused": true])
   }
 
   /// Stops listening for good: the microphone closes and the text is cleared,

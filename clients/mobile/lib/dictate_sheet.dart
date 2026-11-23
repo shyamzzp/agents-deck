@@ -101,8 +101,13 @@ class _DictateSheetState extends State<DictateSheet> {
     }
   }
 
-  /// Focus the terminal, then type the text into it. A busy agent takes it
-  /// through the deck's queue instead, so nothing is lost while it works.
+  /// Focus the terminal, then put the text in it and press Enter: the same
+  /// as pasting it there yourself.
+  ///
+  /// "now" is that, for an agent that can take it. An agent in the middle of
+  /// a turn refuses it, so "type" puts it in anyway, which is typing ahead in
+  /// its chat; one that is waiting on a question refuses both, and then it is
+  /// queued and goes in when that turn ends.
   Future<void> _send() async {
     final text = _text.trim();
     if (text.isEmpty) return;
@@ -110,8 +115,9 @@ class _DictateSheetState extends State<DictateSheet> {
     await Dictation.stop();
     await widget.source.focus(widget.agent.id);
     var sent = await widget.source.prompt(widget.agent.id, text, mode: 'now');
-    if (!sent.isOk) {
-      sent = await widget.source.prompt(widget.agent.id, text, mode: 'queue');
+    for (final mode in ['type', 'queue']) {
+      if (sent.isOk) break;
+      sent = await widget.source.prompt(widget.agent.id, text, mode: mode);
     }
     if (!mounted) return;
     setState(() {
