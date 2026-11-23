@@ -87,11 +87,30 @@ func AllThreads() ([]Thread, error) {
 }
 
 func queryThreads(bin, db, tail string) ([]Thread, error) {
-	q := "select id, rollout_path, cwd, coalesce(title,'') as title, coalesce(name,'') as name, " +
-		"coalesce(git_branch,'') as git_branch, coalesce(model,'') as model, coalesce(updated_at_ms,0) as updated_at_ms " +
-		"from threads where coalesce(archived,0)=0" + tail
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+	// Older Codex indexes do not have both source fields. Apply the available
+	// predicates before LIMIT so reviews cannot crowd real sessions off the deck.
+	columns := exec.CommandContext(ctx, bin, "-readonly", "-noheader", db,
+		"select name from pragma_table_info('threads') where name in ('source','thread_source')")
+	proc.NoWindow(columns)
+	names, err := columns.Output()
+	if err != nil {
+		return nil, err
+	}
+	var filter string
+	for _, name := range strings.Fields(string(names)) {
+		switch name {
+		case "thread_source":
+			filter += " and thread_source is not 'guardian_review'"
+		case "source":
+			// Ordinary sources such as cli are plain text, not JSON.
+			filter += " and (case when json_valid(source) then json_extract(source,'$.subagent.other') end) is not 'guardian'"
+		}
+	}
+	q := "select id, rollout_path, cwd, coalesce(title,'') as title, coalesce(name,'') as name, " +
+		"coalesce(git_branch,'') as git_branch, coalesce(model,'') as model, coalesce(updated_at_ms,0) as updated_at_ms " +
+		"from threads where coalesce(archived,0)=0" + filter + tail
 	cmd := exec.CommandContext(ctx, bin, "-readonly", "-json", db, q)
 	proc.NoWindow(cmd)
 	out, err := cmd.Output()
