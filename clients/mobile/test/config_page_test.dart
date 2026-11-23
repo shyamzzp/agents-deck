@@ -21,6 +21,7 @@ void main() {
             source: FakeAgentsSource.demo(),
             onPage: (p, sh) => log.add('page $p -> $sh'),
             onFallback: (sh) => log.add('all -> $sh'),
+            onAttention: (sh) => log.add('needs you -> $sh'),
           ),
         ),
       ),
@@ -82,9 +83,14 @@ void main() {
     expect(titles(tester), ['page 1']);
   });
 
+  /// The note inside one row, so two rows reading "as above" cannot be
+  /// mistaken for each other.
+  Finder noteIn(String row, String text) =>
+      find.descendant(of: find.byKey(Key(row)), matching: find.text(text));
+
   testWidgets('a page with its own grid says so', (tester) async {
     await pump(tester, const DeckLayout(fallback: DeckShape(5, 5)));
-    expect(find.text('as above'), findsOneWidget);
+    expect(noteIn('shape-row-page-0', 'as above'), findsOneWidget);
 
     await pump(
       tester,
@@ -92,6 +98,37 @@ void main() {
         fallback: DeckShape(5, 5),
       ).withPage(0, const DeckShape(3, 3)),
     );
-    expect(find.text('its own'), findsOneWidget);
+    expect(noteIn('shape-row-page-0', 'its own'), findsOneWidget);
+  });
+
+  group('the Needs you screen is a page too', () {
+    testWidgets('it is listed, and follows the default until set', (
+      tester,
+    ) async {
+      await pump(tester, const DeckLayout(fallback: DeckShape(5, 5)));
+      expect(find.text('needs you'), findsOneWidget);
+      expect(noteIn('shape-row-attention', 'as above'), findsOneWidget);
+    });
+
+    testWidgets('its row asks for it alone', (tester) async {
+      final log = await pump(
+        tester,
+        const DeckLayout(fallback: DeckShape(5, 5)),
+      );
+      await tester.tap(step('shape-row-attention', '\u2212'));
+      await tester.pump();
+      expect(log, ['needs you -> 4x5']);
+    });
+
+    testWidgets('once set, it says it has its own', (tester) async {
+      await pump(
+        tester,
+        const DeckLayout(
+          fallback: DeckShape(5, 5),
+        ).withAttention(const DeckShape(4, 4)),
+      );
+      expect(noteIn('shape-row-attention', 'its own'), findsOneWidget);
+      expect(noteIn('shape-row-page-0', 'as above'), findsOneWidget);
+    });
   });
 }

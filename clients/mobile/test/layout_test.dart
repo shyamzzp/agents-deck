@@ -70,6 +70,50 @@ void main() {
     });
   });
 
+  group('the Needs you screen', () {
+    test('follows the default until given its own', () {
+      const l = DeckLayout(fallback: DeckShape(5, 5));
+      expect(l.attention, isNull);
+      expect(l.attentionShape, const DeckShape(5, 5));
+
+      final own = l.withAttention(const DeckShape(4, 4));
+      expect(own.attentionShape, const DeckShape(4, 4));
+      expect(own.shapeOf(0), const DeckShape(5, 5), reason: 'the deck is not');
+    });
+
+    test('set back to the default stops being its own', () {
+      final l = const DeckLayout(
+        fallback: DeckShape(5, 5),
+      ).withAttention(const DeckShape(4, 4));
+      expect(l.withAttention(const DeckShape(5, 5)).attention, isNull);
+    });
+
+    test('a default that matches it clears it, so it is not pinned', () {
+      final l = const DeckLayout(
+        fallback: DeckShape(5, 5),
+      ).withAttention(const DeckShape(3, 3));
+      final moved = l.withFallback(const DeckShape(3, 3));
+      expect(moved.attention, isNull);
+      expect(
+        moved.withFallback(const DeckShape(6, 6)).attentionShape,
+        const DeckShape(6, 6),
+      );
+    });
+
+    test('it survives a round trip, and is left out when unset', () {
+      final own = const DeckLayout(
+        fallback: DeckShape(5, 5),
+      ).withAttention(const DeckShape(2, 6));
+      expect(own.toJson()['needsYou'], [2, 6]);
+      expect(DeckLayout.fromJson(own.toJson()).attention,
+          const DeckShape(2, 6));
+      expect(
+        const DeckLayout(fallback: DeckShape(5, 5)).toJson().containsKey('needsYou'),
+        isFalse,
+      );
+    });
+  });
+
   group('what is stored', () {
     test('survives a round trip', () {
       final l = const DeckLayout(
