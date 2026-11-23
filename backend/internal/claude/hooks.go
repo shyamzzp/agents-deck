@@ -417,28 +417,160 @@ func ToolDetail(tool string, input json.RawMessage, cwd string) string {
 	}
 	switch tool {
 	case "Bash":
-		return clip(oneLine(field(input, "command")), 160)
-	case "Edit", "MultiEdit", "Write", "Read", "NotebookEdit":
-		if p := field(input, "file_path"); p != "" {
-			return rel(p)
+		cmd := clip(oneLine(field(input, "command")), 160)
+		// Claude sends its own short description of what the command is for;
+		// "npm run build" reads better with "build the site" beside it.
+		if d := oneLine(field(input, "description")); d != "" && !strings.EqualFold(d, cmd) {
+			if cmd == "" {
+				return clip(d, 120)
+			}
+			cmd += " · " + clip(d, 80)
 		}
-		return rel(field(input, "notebook_path"))
-	case "Grep", "Glob":
-		return clip(field(input, "pattern"), 120)
+		if boolField(input, "run_in_background") {
+			cmd += " · in the background"
+		}
+		return cmd
+	case "Read":
+		p := rel(field(input, "file_path"))
+		// Which part of it: a read of lines 400-600 is a different thing from
+		// a read of the file.
+		off, lim := intField(input, "offset"), intField(input, "limit")
+		switch {
+		case off > 0 && lim > 0:
+			return fmt.Sprintf("%s:%d-%d", p, off, off+lim-1)
+		case off > 0:
+			return fmt.Sprintf("%s:%d-", p, off)
+		case lim > 0:
+			return fmt.Sprintf("%s:1-%d", p, lim)
+		}
+		if pages := field(input, "pages"); pages != "" {
+			return p + " pp. " + clip(pages, 20)
+		}
+		return p
+	case "Edit":
+		p := rel(field(input, "file_path"))
+		if boolField(input, "replace_all") {
+			return p + " · every match"
+		}
+		return p
+	case "MultiEdit":
+		p := rel(field(input, "file_path"))
+		if n := countField(input, "edits"); n > 0 {
+			return fmt.Sprintf("%s · %d edits", p, n)
+		}
+		return p
+	case "Write":
+		p := rel(field(input, "file_path"))
+		if lines := strings.Count(field(input, "content"), "\n") + 1; lines > 1 {
+			return fmt.Sprintf("%s · %d lines", p, lines)
+		}
+		return p
+	case "NotebookEdit":
+		p := rel(field(input, "notebook_path"))
+		if id := field(input, "cell_id"); id != "" {
+			return p + " · cell " + clip(id, 24)
+		}
+		return p
+	case "Grep":
+		pat := clip(field(input, "pattern"), 120)
+		// Where it is looking, and for what kind of answer: counting matches
+		// is not the same job as reading the lines.
+		if where := field(input, "path"); where != "" {
+			pat += " in " + rel(where)
+		}
+		if g := field(input, "glob"); g != "" {
+			pat += " · " + clip(g, 40)
+		}
+		if mode := field(input, "output_mode"); mode != "" && mode != "files_with_matches" {
+			pat += " · " + mode
+		}
+		return pat
+	case "Glob":
+		pat := clip(field(input, "pattern"), 120)
+		if where := field(input, "path"); where != "" {
+			pat += " in " + rel(where)
+		}
+		return pat
 	case "WebFetch":
 		return clip(field(input, "url"), 160)
 	case "WebSearch":
 		return clip(field(input, "query"), 120)
 	case "Task", "Agent":
-		return clip(field(input, "description"), 120)
+		d := clip(field(input, "description"), 120)
+		// Which kind of agent was sent: Explore and a fork of itself are
+		// different amounts of work.
+		if kind := field(input, "subagent_type"); kind != "" {
+			if d == "" {
+				return clip(kind, 40)
+			}
+			d += " · " + clip(kind, 40)
+		}
+		return d
 	case "TodoWrite":
 		var in struct {
-			Todos []json.RawMessage `json:"todos"`
+			Todos []struct {
+				Content    string `json:"content"`
+				Status     string `json:"status"`
+				ActiveForm string `json:"activeForm"`
+			} `json:"todos"`
 		}
 		_ = json.Unmarshal(input, &in)
+		// The step it is on says more than the number of them.
+		done := 0
+		doing := ""
+		for _, t := range in.Todos {
+			switch t.Status {
+			case "completed":
+				done++
+			case "in_progress":
+				if doing == "" {
+					doing = t.ActiveForm
+					if doing == "" {
+						doing = t.Content
+					}
+				}
+			}
+		}
+		if doing != "" {
+			return fmt.Sprintf("%d/%d · %s", done, len(in.Todos), clip(oneLine(doing), 100))
+		}
 		return fmt.Sprintf("planning %d steps", len(in.Todos))
 	}
 	return ""
+}
+
+func boolField(raw json.RawMessage, key string) bool {
+	var m map[string]any
+	if json.Unmarshal(raw, &m) != nil {
+		return false
+	}
+	b, _ := m[key].(bool)
+	return b
+}
+
+func intField(raw json.RawMessage, key string) int {
+	var m map[string]any
+	if json.Unmarshal(raw, &m) != nil {
+		return 0
+	}
+	f, ok := m[key].(float64)
+	if !ok {
+		return 0
+	}
+	return int(f)
+}
+
+// countField is the length of an array field (how many edits, how many todos).
+func countField(raw json.RawMessage, key string) int {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(raw, &m) != nil {
+		return 0
+	}
+	var list []json.RawMessage
+	if json.Unmarshal(m[key], &list) != nil {
+		return 0
+	}
+	return len(list)
 }
 
 func field(raw json.RawMessage, key string) string {

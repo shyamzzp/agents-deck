@@ -94,7 +94,10 @@ The full state is small (≤ a few KB per agent), so there are no deltas.
   "branch": "main",               // may be ""
   "model": "claude-opus-5-5",     // may be ""
   "modelLabel": "opus 5.5",       // short display form
-  "activity": { "tool": "Edit", "detail": "src/auth/session.ts" }, // or null; only while running. Besides
+  "activity": { "tool": "Edit", "detail": "src/auth/session.ts" }, // or null; only while running. detail is
+                                  // what the call touches, with what the tool was given: a command and the
+                                  // agent's own description of it, a path with the lines read, a pattern and
+                                  // where it looks, a plan's step. Besides
                                   // Claude's tools: "Compact" while compacting, "Task" for subagents at work
   "lastPrompt": "fix the refresh-token race in session.ts …",      // truncated to 1000 chars (boards: 160)
   "waiting": null,                // Prompt, only when status == "waiting"
