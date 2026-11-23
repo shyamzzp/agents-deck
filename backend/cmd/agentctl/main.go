@@ -58,7 +58,7 @@ const usage = `agentctl: runs and controls agents deck
   agentctl handoff <agent> <account>
                                  continue a Claude session in another account (out of usage)
   agentctl set hat <agent|folder> <shape> [colour] | auto
-  agentctl live                  Claude sessions started by hand in other terminals
+  agentctl live                  list local sessions available to the deck
   agentctl add <session>         put one of them on the deck (watched)
   agentctl reopen                iTerm tabs for every agent no terminal shows (after a crash)
   agentctl resume <agent or session>... [-d] [--force]
@@ -551,33 +551,43 @@ func hatsCmd() error {
 	return nil
 }
 
-// liveCmd lists Claude sessions started by hand in other terminals.
+// liveCmd lists discovered local sessions, including saved Codex threads.
 func liveCmd() error {
 	var res struct {
+		Warning  string
 		Sessions []struct {
-			SessionID, Title, Folder string
-			OnBoard, Background      bool
+			SessionID, Title, Folder, Tool, App, Status string
+			OnBoard, Background                         bool
 		}
 	}
-	if err := call("GET", "/v1/live", nil, &res); err != nil {
+	if err := call("GET", "/v1/live?catalog=all", nil, &res); err != nil {
 		return err
 	}
+	if res.Warning != "" {
+		fmt.Fprintln(os.Stderr, res.Warning)
+	}
 	if len(res.Sessions) == 0 {
-		fmt.Println("no other Claude sessions running in your terminals")
+		fmt.Println("no local sessions found")
 		return nil
 	}
 	tw := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(tw, "SESSION\tTITLE\tFOLDER\tKIND\tDECK")
+	fmt.Fprintln(tw, "SESSION\tTITLE\tFOLDER\tSOURCE\tDECK")
 	for _, s := range res.Sessions {
 		deck := "-"
 		if s.OnBoard {
 			deck = "on the deck"
 		}
-		kind := "terminal"
-		if s.Background {
-			kind = "background"
+		source := s.Tool
+		if source == "" {
+			source = "claude"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", s.SessionID[:8], s.Title, s.Folder, kind, deck)
+		if s.App != "" {
+			source += " · " + s.App
+		}
+		if s.Background {
+			source += " · background"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", termText(s.SessionID), termText(s.Title), termText(s.Folder), termText(source), deck)
 	}
 	if err := tw.Flush(); err != nil {
 		return err
@@ -593,7 +603,7 @@ func addCmd(args []string) error {
 	if err := call("POST", "/v1/live/"+url.PathEscape(args[0])+"/add", nil, nil); err != nil {
 		return err
 	}
-	fmt.Println("on the deck · watched: status, context and cost; answer it in its own terminal")
+	fmt.Println("on the deck")
 	return nil
 }
 

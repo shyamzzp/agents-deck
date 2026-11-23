@@ -9,12 +9,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/brushknight/agents-deck/backend/internal/codex"
+	"github.com/brushknight/agents-deck/backend/internal/configfile"
 	"github.com/brushknight/agents-deck/backend/internal/deskterm"
 	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/brushknight/agents-deck/backend/internal/paths"
 	"github.com/brushknight/agents-deck/backend/internal/proc"
 	"github.com/brushknight/agents-deck/backend/internal/store"
 )
@@ -33,6 +36,7 @@ func externalErr(e store.Entry) error {
 // codexWatch mirrors recent Codex app/CLI threads onto the board.
 type codexWatch struct {
 	mu     sync.Mutex
+	pins   []string
 	hidden map[string]int64 // thread id -> updated_at_ms when hidden
 }
 
@@ -58,23 +62,30 @@ func (d *Daemon) WatchCodex() {
 	}
 	logged := false
 	for {
-		threads, err := codex.RecentThreads(d.codexWindow())
+		err := d.refreshCodex()
 		if err != nil && !logged {
 			log.Printf("codex: %v", err)
 			logged = true
 		}
-		d.syncCodex(threads)
 		time.Sleep(2 * time.Second)
 	}
 }
 
-func (d *Daemon) syncCodex(threads []codex.Thread) {
+func (d *Daemon) refreshCodex() error {
 	d.codex.mu.Lock()
-	hidden := d.codex.hidden
-	d.codex.mu.Unlock()
+	defer d.codex.mu.Unlock()
+	threads, err := codex.RecentThreads(d.codexWindow())
+	if err != nil {
+		return err
+	}
+	pins, err := codex.ThreadsByID(d.codex.pins)
+	if err != nil {
+		return err
+	}
+	threads = append(threads, pins...)
 	want := map[string]codex.Thread{}
 	for _, t := range threads {
-		if t.RolloutPath == "" || hidden[t.ID] >= t.UpdatedAtMs && hidden[t.ID] != 0 {
+		if t.RolloutPath == "" || d.codex.hidden[t.ID] >= t.UpdatedAtMs && d.codex.hidden[t.ID] != 0 {
 			continue
 		}
 		want[codex.AgentID(t.ID)] = t
@@ -87,34 +98,40 @@ func (d *Daemon) syncCodex(threads []codex.Thread) {
 			}
 		}
 	}
-	for id, t := range want {
-		if _, ok := d.Store.Get(id); !ok {
-			e := &store.Entry{External: true, SessionID: t.ID, Transcript: t.RolloutPath}
-			e.A = model.Agent{ID: id, Tool: "codex", External: true, Status: model.Idle,
-				Title: t.DisplayTitle(), Cwd: t.Cwd, Folder: filepath.Base(t.Cwd), Branch: t.Branch, Model: t.Model}
-			d.Store.Add(e)
+	for _, t := range want {
+		d.updateCodex(t)
+	}
+	return nil
+}
+
+func (d *Daemon) updateCodex(t codex.Thread) {
+	id := codex.AgentID(t.ID)
+	if _, ok := d.Store.Get(id); !ok {
+		e := &store.Entry{External: true, SessionID: t.ID, Transcript: t.RolloutPath}
+		e.A = model.Agent{ID: id, Tool: "codex", External: true, Status: model.Idle,
+			Title: t.DisplayTitle(), Cwd: t.Cwd, Folder: filepath.Base(t.Cwd), Branch: t.Branch, Model: t.Model}
+		d.Store.Add(e)
+	}
+	d.Store.Update(id, func(e *store.Entry) bool {
+		changed := codex.Tail(e)
+		if t.UpdatedAtMs > 0 && e.MarkActiveStep(time.UnixMilli(t.UpdatedAtMs)) { // Codex's own time
+			changed = true
 		}
-		d.Store.Update(id, func(e *store.Entry) bool {
-			changed := codex.Tail(e)
-			if t.UpdatedAtMs > 0 && e.MarkActiveStep(time.UnixMilli(t.UpdatedAtMs)) { // Codex's own time
+		if title := t.DisplayTitle(); title != e.A.Title {
+			e.A.Title, changed = title, true
+		}
+		if t.Branch != "" && t.Branch != e.A.Branch {
+			e.A.Branch, changed = t.Branch, true
+		}
+		// The app was closed mid-turn: nothing written for a while means it isn't working.
+		if e.A.Status == model.Running || e.A.Status == model.Waiting {
+			if st, err := os.Stat(e.Transcript); err == nil && time.Since(st.ModTime()) > 10*time.Minute {
+				e.SetStatus(model.Idle)
 				changed = true
 			}
-			if title := t.DisplayTitle(); title != e.A.Title {
-				e.A.Title, changed = title, true
-			}
-			if t.Branch != "" && t.Branch != e.A.Branch {
-				e.A.Branch, changed = t.Branch, true
-			}
-			// The app was closed mid-turn: nothing written for a while means it isn't working.
-			if e.A.Status == model.Running || e.A.Status == model.Waiting {
-				if st, err := os.Stat(e.Transcript); err == nil && time.Since(st.ModTime()) > 10*time.Minute {
-					e.SetStatus(model.Idle)
-					changed = true
-				}
-			}
-			return changed
-		})
-	}
+		}
+		return changed
+	})
 }
 
 // Focus an existing CLI pane or resume the thread in a new terminal on macOS.
@@ -166,12 +183,61 @@ func (d *Daemon) focusExternal(e store.Entry) error {
 }
 
 // hideExternal keeps a Codex thread off the board until it has new activity.
-func (d *Daemon) hideExternal(e store.Entry) {
+func (d *Daemon) hideExternal(e store.Entry) error {
 	d.codex.mu.Lock()
+	defer d.codex.mu.Unlock()
+	if err := d.setCodexPin(e.SessionID, false); err != nil {
+		return err
+	}
 	if d.codex.hidden == nil {
 		d.codex.hidden = map[string]int64{}
 	}
 	d.codex.hidden[e.SessionID] = time.Now().UnixMilli()
-	d.codex.mu.Unlock()
 	d.Store.Remove(e.A.ID)
+	return nil
+}
+
+// Caller holds the Codex lock so a refresh cannot age out a newly added thread.
+func (d *Daemon) setCodexPin(id string, pin bool) error {
+	if slices.Contains(d.codex.pins, id) == pin {
+		return nil
+	}
+	pins := slices.Clone(d.codex.pins)
+	if pin {
+		pins = append(pins, id)
+	} else {
+		pins = slices.DeleteFunc(pins, func(x string) bool { return x == id })
+	}
+	if err := configfile.Edit(paths.Config(), func(cfg map[string]any) error {
+		cfg["codexPins"] = pins
+		return nil
+	}); err != nil {
+		return err
+	}
+	d.codex.pins = pins
+	return nil
+}
+
+func (d *Daemon) addCodexThread(id string, slot int) error {
+	if !deskterm.ValidID(id) || (d.Cfg.Codex != nil && !*d.Cfg.Codex) {
+		return errors.New("Codex session unavailable")
+	}
+	d.codex.mu.Lock()
+	defer d.codex.mu.Unlock()
+	threads, err := codex.ThreadsByID([]string{id})
+	if err != nil {
+		return err
+	}
+	if len(threads) != 1 || threads[0].RolloutPath == "" {
+		return errors.New("Codex session is archived or unavailable")
+	}
+	if err = d.setCodexPin(id, true); err != nil {
+		return err
+	}
+	delete(d.codex.hidden, id)
+	d.updateCodex(threads[0])
+	if slot >= 0 {
+		d.Store.Place(codex.AgentID(id), slot)
+	}
+	return nil
 }

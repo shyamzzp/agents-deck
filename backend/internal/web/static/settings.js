@@ -427,10 +427,10 @@ function drawAgents() {
     ]));
   }
 
-  out.push(lab('running here, not on the deck'));
+  out.push(lab('Claude sessions available to add'));
   const live = (S.live?.sessions || []).filter((s) => !s.onBoard);
   if (S.errors.live) out.push(h('p', { class: 'note' }, `Couldn't list them: ${S.errors.live.message}`));
-  else if (!live.length) out.push(h('p', { class: 'note' }, 'Nothing: every Claude session on this computer is on the deck.'));
+  else if (!live.length) out.push(h('p', { class: 'note' }, 'No additional running Claude sessions.'));
   for (const s of live) {
     const where = s.background ? 'in the background' : 'in a terminal';
     out.push(row(s.title || s.folder || 'Claude session', `Claude Code · started ${ago(s.started)} · ${where}`, [
