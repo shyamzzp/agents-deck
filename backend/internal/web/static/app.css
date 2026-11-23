@@ -191,6 +191,7 @@ a.toggle { display: inline-block; text-decoration: none; }
   padding-bottom: 6px;
   border-bottom: 1px solid var(--line-2);
 }
+[data-group-drop] { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .group-line:first-child { margin-top: 0; }
 .group-name {
   flex: 0 1 auto;

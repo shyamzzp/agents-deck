@@ -383,7 +383,7 @@ admin package checks this table against its own routes (`TestDocsListEveryCall`)
 | POST | `/admin/v1/cli` | `{"installed": true\|false}` | adds or removes `~/.local/bin/agentctl` (a link to this agentctl; never a file it didn't make) |
 | POST | `/admin/v1/open-data-folder` | – | `204`: shows the data folder in the file manager on this computer |
 | GET | `/admin/v1/ssh-codex/sessions` | Session catalog from the configured host, using the same reader as `agentctl ls --ssh`. |
-| POST | `/admin/v1/ssh-codex/pins` | Add or remove a saved thread from the selected host’s deck. Returns the pin flag and updated SSH dashboard state. |
+| POST | `/admin/v1/ssh-codex/pins` | Add or remove a saved thread from the selected host’s deck. Optional `groupSlot` assigns a pinned thread to an existing divider. Zero clears the assignment. Returns the pin flag and updated SSH dashboard state, including `groupSlots` by thread ID. |
 | POST | `/admin/v1/ssh-codex/attach` | Open a recent remote session in macOS Terminal using its host and exact thread ID. |
 | GET | `/admin/v1/terminals` | Terminal locations for local and configured SSH sessions on this Mac. |
 | POST | `/admin/v1/terminals/link` | Link or unlink an identified thread and an existing interactive SSH pane for the life of that connection. |

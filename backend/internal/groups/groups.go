@@ -13,8 +13,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/brushknight/agents-deck/backend/internal/configfile"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -134,47 +134,43 @@ func (b *Book) Set(slot int, name string) error {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	cfg := map[string]any{}
-	if raw, err := os.ReadFile(b.Path); err == nil {
-		if err := json.Unmarshal(raw, &cfg); err != nil {
-			return fmt.Errorf("config.json is not valid JSON: %v", err)
+	return configfile.Edit(b.Path, func(cfg map[string]any) error {
+		var all []model.Group
+		if raw, err := json.Marshal(cfg["groups"]); err == nil {
+			_ = json.Unmarshal(raw, &all)
 		}
-	}
-	var all []model.Group
-	if raw, err := json.Marshal(cfg["groups"]); err == nil {
-		_ = json.Unmarshal(raw, &all)
-	}
-	kept := make([]model.Group, 0, len(all)+1)
-	for _, g := range all {
-		if g.Slot != slot {
-			g.Name = CleanName(g.Name)
-			kept = append(kept, g)
+		kept := make([]model.Group, 0, len(all)+1)
+		for _, g := range all {
+			if g.Slot != slot {
+				g.Name = CleanName(g.Name)
+				kept = append(kept, g)
+			}
 		}
-	}
-	all = kept
-	if !remove {
-		if len(all) >= Max {
-			return fmt.Errorf("a deck holds at most %d groups", Max)
+		all = kept
+		if !remove {
+			if len(all) >= Max {
+				return fmt.Errorf("a deck holds at most %d groups", Max)
+			}
+			all = append(all, model.Group{Slot: slot, Name: name})
 		}
-		all = append(all, model.Group{Slot: slot, Name: name})
-	}
-	sort.Slice(all, func(i, j int) bool { return all[i].Slot < all[j].Slot })
-	if len(all) == 0 {
-		delete(cfg, "groups")
-	} else {
-		cfg["groups"] = all
-	}
-	out, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(b.Path), 0o700); err != nil {
-		return err
-	}
-	tmp := b.Path + ".tmp"
-	if err := os.WriteFile(tmp, append(out, '\n'), 0o600); err != nil {
-		return err
-	}
-	b.list = nil // re-read on the next lookup
-	return os.Rename(tmp, b.Path)
+		sort.Slice(all, func(i, j int) bool { return all[i].Slot < all[j].Slot })
+		if len(all) == 0 {
+			delete(cfg, "groups")
+		} else {
+			cfg["groups"] = all
+		}
+		if remove {
+			assignments, _ := cfg["sshDeckGroups"].(map[string]any)
+			for key, value := range assignments {
+				if value == float64(slot) {
+					delete(assignments, key)
+				}
+			}
+			if len(assignments) == 0 {
+				delete(cfg, "sshDeckGroups")
+			}
+		}
+		b.list = nil
+		return nil
+	})
 }

@@ -2,7 +2,7 @@ package admin
 
 import (
 	"encoding/json"
-	"fmt"
+	"github.com/brushknight/agents-deck/backend/internal/configfile"
 	"os"
 	"path/filepath"
 	"sync"
@@ -26,27 +26,7 @@ func (a *Admin) readConfig() map[string]any {
 func (a *Admin) editConfig(fn func(cfg map[string]any) error) error {
 	a.cfgMu.Lock()
 	defer a.cfgMu.Unlock()
-	cfg := map[string]any{}
-	if b, err := os.ReadFile(a.Config); err == nil {
-		if err := json.Unmarshal(b, &cfg); err != nil {
-			return fmt.Errorf("config.json is not valid JSON: %v", err)
-		}
-	}
-	if err := fn(cfg); err != nil {
-		return err
-	}
-	b, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(a.Config), 0o700); err != nil {
-		return err
-	}
-	tmp := a.Config + ".tmp"
-	if err := os.WriteFile(tmp, append(b, '\n'), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, a.Config)
+	return configfile.Edit(a.Config, fn)
 }
 
 func str(cfg map[string]any, key, def string) string {

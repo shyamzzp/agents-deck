@@ -697,14 +697,14 @@ function renderGrid() {
   for (const [id, t] of tiles) if (!seen.has(id)) { t.el.remove(); tiles.delete(id); }
   const lines = new Set(groupLines().map((g) => g.slot));
   for (const slot of dividers.keys()) if (!lines.has(slot)) dividers.delete(slot);
+  renderSSH();
   const want = panelOn() ? panelCells(list) : needsFirst || onPhone() ? list.map((a) => tiles.get(a.id).el) : boardCells(list);
   // Reconcile in place so running animations aren't restarted needlessly.
   reconcile(grid, want);
   const onAttn = view === 'attn';
   $('empty').hidden = list.length > 0 || sshState.sessions.length > 0 || !state || panelOn() || onAttn;
-  grid.hidden = (list.length === 0 && !panelOn()) || onAttn;
+  grid.hidden = !want.length || onAttn;
   renderAttention();
-  renderSSH();
   renderPageBar(panelOn() ? panelPageCount(list) : 1, panelOn() ? new Set(list.filter(needsYou).map((a) => Math.floor(a.slot / 16))) : new Set());
 }
 
@@ -718,12 +718,18 @@ function renderSSH() {
   const box = $('ssh-deck');
   box.hidden = !sshState.host || view === 'attn';
   const list = sshState.sessions;
-  const nodes = list.map(a => {
+  const groups = panelOn() || needsFirst || onPhone() ? [] : groupLines();
+  const nodes = [];
+  for (const a of list) {
     let t = sshTiles.get(a.id);
-    if (!t) { t = makeTile(a, null); sshTiles.set(a.id, t); }
+    if (!t) {
+      t = makeTile(a, null);
+      wireSSHDrag(t.el, a);
+      sshTiles.set(a.id, t);
+    }
     updateTile(t, a);
-    return t.el;
-  });
+    if (!groups.some(g => g.slot === sshState.groupSlots?.[a.threadID])) nodes.push(t.el);
+  }
   for (const id of sshTiles.keys()) {
     if (!list.some(a => a.id === id)) sshTiles.delete(id);
   }
@@ -734,6 +740,73 @@ function renderSSH() {
     status += ' · Last seen ' + new Date(sshState.lastSeen).toLocaleTimeString();
   }
   setText($('ssh-status'), status);
+}
+
+// Remote IDs have no local board slot. Save their group on the configured host.
+let draggedSSH = null;
+function wireSSHDrag(el, agent) {
+  el.draggable = true;
+  el.addEventListener('dragstart', e => {
+    draggedSSH = agent;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', agent.id);
+  });
+  el.addEventListener('dragend', () => {
+    draggedSSH = null;
+    clearSSHDrop();
+  });
+}
+
+let sshDropTarget;
+function clearSSHDrop() {
+  if (sshDropTarget) delete sshDropTarget.dataset.groupDrop;
+  sshDropTarget = null;
+}
+
+function sshDropZone(event, container) {
+  if (container === $('ssh-deck')) return container;
+  let cell = event.target.closest('#grid > *');
+  while (cell && !cell.hasAttribute('data-group-slot')) cell = cell.previousElementSibling;
+  return cell;
+}
+
+async function moveSSHToGroup(agent, slot, note) {
+  const {sshHost:host, threadID:id} = agent;
+  if (sshState.host !== host || (sshState.groupSlots?.[id] || 0) === slot) return;
+  const r = await api('/admin/v1/ssh-codex/pins', {host, id, pinned:true, groupSlot:slot}, true);
+  if (sshState.host !== host) return;
+  if (!r.ok) { setText(note, 'Could not move session · ' + r.error); return; }
+  ++sshRevision;
+  applySSHState(r.data.state);
+  setText(note, '');
+  render();
+}
+
+for (const container of [$('grid'), $('ssh-deck')]) {
+  for (const type of ['dragover', 'drop']) {
+    container.addEventListener(type, event => {
+      if (!draggedSSH) return;
+      // A text input in a divider should accept the tile as a group move.
+      event.preventDefault();
+      event.stopPropagation();
+      const zone = sshDropZone(event, container);
+      clearSSHDrop();
+      event.dataTransfer.dropEffect = zone ? 'move' : 'none';
+      if (!zone) return;
+      if (type === 'dragover') {
+        sshDropTarget = zone;
+        zone.dataset.groupDrop = '';
+      } else {
+        const agent = draggedSSH;
+        draggedSSH = null;
+        const slot = Number(zone.dataset.groupSlot || 0);
+        moveSSHToGroup(agent, slot, zone.querySelector('.group-note') || $('ssh-group-note'));
+      }
+    }, true);
+  }
+  container.addEventListener('dragleave', e => {
+    if (!container.contains(e.relatedTarget)) clearSSHDrop();
+  });
 }
 
 function applySSHState(data) {
@@ -793,23 +866,29 @@ function emptyCell(slot) {
 // with free cells so there's always somewhere to drop, with a group's line
 // across the grid wherever one is anchored (groupLines below).
 function boardCells(list) {
-  if (!list.length) return [];
+  const lines = groupLines();
+  if (!list.length && !lines.length) return [];
   const bySlot = new Map(list.map((a) => [a.slot, a]));
   const cols = Math.max(1, getComputedStyle($('grid')).gridTemplateColumns.split(' ').length);
-  const lines = groupLines();
-  const last = Math.max(...bySlot.keys());
+  const last = Math.max(0, ...bySlot.keys());
   // A line is drawn even where no agent has reached it yet, so a new group has
   // free cells under it to drop into.
   const lastLine = lines.length ? lines[lines.length - 1].slot + GROUP_ROW - 1 : 0;
   const n = Math.min(MAX_SLOT + 1, Math.ceil((Math.max(last, lastLine) + 1) / cols) * cols);
   const byLine = new Map(lines.map((g) => [g.slot, g]));
   const cells = [];
+  let remote = [];
   for (let s = 0; s < n; s++) {
     const g = byLine.get(s);
-    if (g) cells.push(dividerCell(g));
-    cells.push(bySlot.has(s) ? tiles.get(bySlot.get(s).id).el : emptyCell(s));
+    if (g) {
+      cells.push(...remote, dividerCell(g));
+      remote = sshState.sessions.filter(a => sshState.groupSlots?.[a.threadID] === s)
+        .map(a => sshTiles.get(a.id).el);
+    }
+    // Keep local agents in their slots and use free cells for Codebox tiles.
+    cells.push(bySlot.has(s) ? tiles.get(bySlot.get(s).id).el : remote.shift() || emptyCell(s));
   }
-  return cells;
+  return cells.concat(remote);
 }
 
 // ------------------------------------------------------------------- groups
@@ -855,7 +934,7 @@ function makeDivider(slot) {
     'aria-label': `remove the group line above tile ${slot + 1}`,
     onclick: () => setGroup(slot, '', note),
   });
-  const el = h('div', { class: 'group-line', role: 'separator' }, name, note, del);
+  const el = h('div', { class: 'group-line', role: 'separator', 'data-group-slot':slot }, name, note, del);
   return { el, name, note };
 }
 
