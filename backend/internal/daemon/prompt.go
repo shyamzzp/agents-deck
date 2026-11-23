@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -43,6 +44,14 @@ func (d *Daemon) prompt(id, text string, interrupt, ahead bool) error {
 	}
 	h, inHarness := d.harnessOf(e)
 	if !inHarness && e.External {
+		// A watched Claude session runs in iTerm, which has an API for typing
+		// into one of its own sessions. That is the terminal doing it, not a
+		// synthetic keystroke at the window server, so it needs no
+		// Accessibility permission -- only the automation permission the deck
+		// already uses to bring the tab to the front.
+		if e.A.Tool == "claude" && e.LiveTTY != "" {
+			return d.typeLive(e, text)
+		}
 		return readOnlyErr(e)
 	}
 	// Claude started here (hooks) and agents in an app (the app says) have a
@@ -146,6 +155,20 @@ func bracketed(text string) string {
 		return text
 	}
 	return "\x1b[200~" + text + "\x1b[201~"
+}
+
+// typeLive types into a session the deck only watches, through iTerm's own
+// API. The text is submitted with a carriage return, the way pressing Enter
+// in that terminal would.
+func (d *Daemon) typeLive(e store.Entry, text string) error {
+	if err := d.iterm.typeTTY(e.LiveTTY, bracketed(text)+"\r"); err != nil {
+		if errors.Is(err, errNotShown) {
+			return fmt.Errorf("%w: its terminal is not an iTerm session the deck can see", server.ErrReadOnly)
+		}
+		return fmt.Errorf("could not type into %s: %w", e.A.ID, err)
+	}
+	log.Printf("prompt %s (live): %d bytes typed into %s", e.A.ID, len(text), e.LiveTTY)
+	return nil
 }
 
 // readOnlyErr says why the deck can't type into an external session.

@@ -53,6 +53,44 @@ func (l *itermLink) selectTTY(tty string) error {
 	return errors.New("iTerm API: connection lost")
 }
 
+// typeTTY types text into the iTerm session whose tty is tty. It reconnects
+// once on a stale connection, as selectTTY does.
+func (l *itermLink) typeTTY(tty, text string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for attempt := 0; attempt < 2; attempt++ {
+		if l.conn == nil {
+			if err := l.dial(); err != nil {
+				return err
+			}
+		}
+		err := l.sendText(tty, text)
+		if err == nil || errors.Is(err, errNotShown) {
+			return err
+		}
+		l.conn.Close()
+		l.conn = nil
+	}
+	return errors.New("iTerm API: connection lost")
+}
+
+func (l *itermLink) sendText(tty, text string) error {
+	ss, err := l.conn.Sessions()
+	if err != nil {
+		return err
+	}
+	for _, s := range ss {
+		t, err := l.conn.Variable(s.ID, "tty")
+		if err != nil {
+			return err
+		}
+		if t == tty {
+			return l.conn.SendText(s.ID, text)
+		}
+	}
+	return errNotShown
+}
+
 var errNotShown = errors.New("no iTerm session shows that terminal")
 
 func (l *itermLink) activate(tty string) error {
