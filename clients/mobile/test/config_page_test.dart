@@ -98,13 +98,18 @@ void main() {
     final rows = tester
         .widgetList<Text>(find.byType(Text))
         .map((w) => w.data ?? '')
-        .where((t) => t == 'all pages' || t == 'needs you' || t.startsWith('page '))
+        .where(
+          (t) =>
+              t == 'all pages' ||
+              t == '\u201cneeds you\u201d page' ||
+              t.startsWith('page '),
+        )
         .toList();
     expect(rows.first, 'all pages');
     expect(
-      rows.indexOf('page 1') < rows.lastIndexOf('needs you'),
+      rows.indexOf('page 1') < rows.lastIndexOf('\u201cneeds you\u201d page'),
       isTrue,
-      reason: 'the deck pages come before the needs you screen',
+      reason: 'the deck pages come before the needs you page',
     );
 
     // The heading above the page rows names the deck, not the screens.
