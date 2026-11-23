@@ -197,7 +197,9 @@ class AgentButton extends StatelessWidget {
       builder: (context, pressed) => Container(
         height: h,
         alignment: alignLeft ? Alignment.centerLeft : Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 22),
+        // 22 points each side of a 160pt button is a quarter of it spent on
+        // air, and the label is what gets cut for it.
+        padding: EdgeInsets.symmetric(horizontal: tight ? 12 : 22),
         decoration: BoxDecoration(
           color: pressed ? pressedFill : fill,
           borderRadius: BorderRadius.zero,
@@ -207,10 +209,7 @@ class AgentButton extends StatelessWidget {
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: DeckHud.mono(
-            size: fs,
-            color: pressed ? pressedInk : ink,
-          ),
+          style: DeckHud.mono(size: fs, color: pressed ? pressedInk : ink),
         ),
       ),
     );
