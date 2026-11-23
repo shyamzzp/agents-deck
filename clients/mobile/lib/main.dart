@@ -50,11 +50,12 @@ const gridRange = [2, 3, 4, 5, 6];
 /// A tablet has the room for 25 agents at once.
 const defaultShape = DeckShape(5, 5);
 
-/// How thick the border around an agent card may be, in points. The browser
-/// deck offers the same steps (agents.tileBorderWidth) and, like it, this
-/// belongs to the device showing the deck rather than to the service.
-const borderWidths = [0.0, 0.5, 1.0, 2.0, 3.0];
-const defaultBorderWidth = 0.5;
+/// How thick the context gauge around an agent card may be drawn, in points.
+/// That line is the card's border and its context meter at once: the orange
+/// fills it as the agent's context fills up. Belongs to the device showing
+/// the deck rather than to the service.
+const ringWidths = [1.0, 2.0, 3.0, 4.0, 6.0, 8.0];
+const defaultRingWidth = 4.0;
 
 /// The deck's shape: one shape for every page, and any page that wants its
 /// own.
@@ -68,7 +69,7 @@ class DeckLayout {
     this.fallback = defaultShape,
     this.perPage = const {},
     this.attention,
-    this.border = defaultBorderWidth,
+    this.ring = defaultRingWidth,
   });
 
   /// Every page that has not been given its own shape.
@@ -82,8 +83,8 @@ class DeckLayout {
   /// The "Needs you" screen's own shape, or null to follow [fallback].
   final DeckShape? attention;
 
-  /// The border around each agent card, in points; 0 draws none.
-  final double border;
+  /// How thick the context gauge around each card is drawn, in points.
+  final double ring;
 
   DeckShape shapeOf(int page) => perPage[page] ?? fallback;
 
@@ -95,14 +96,14 @@ class DeckLayout {
     fallback: fallback,
     perPage: perPage,
     attention: shape == fallback ? null : shape,
-    border: border,
+    ring: ring,
   );
 
-  DeckLayout withBorder(double width) => DeckLayout(
+  DeckLayout withRing(double width) => DeckLayout(
     fallback: fallback,
     perPage: perPage,
     attention: attention,
-    border: borderWidths.contains(width) ? width : border,
+    ring: ringWidths.contains(width) ? width : ring,
   );
 
   /// With a page set to [shape], or back to the default when they are equal.
@@ -117,7 +118,7 @@ class DeckLayout {
       fallback: fallback,
       perPage: next,
       attention: attention,
-      border: border,
+      ring: ring,
     );
   }
 
@@ -130,7 +131,7 @@ class DeckLayout {
         if (e.value != shape) e.key: e.value,
     },
     attention: attention == shape ? null : attention,
-    border: border,
+    ring: ring,
   );
 
   /// The shapes [AgentsApp] wants: one per page, the last repeating. The
@@ -144,7 +145,7 @@ class DeckLayout {
   Map<String, Object?> toJson() => {
     'default': [fallback.columns, fallback.rows],
     if (attention case final a?) 'needsYou': [a.columns, a.rows],
-    'border': border,
+    'ring': ring,
     'pages': {
       for (final e in perPage.entries)
         '${e.key}': [e.value.columns, e.value.rows],
@@ -174,14 +175,14 @@ class DeckLayout {
       }
     }
     final att = _shape(j['needsYou']);
-    final b = j['border'];
+    final r = j['ring'];
     return DeckLayout(
       fallback: fallback,
       perPage: pages,
       attention: att == fallback ? null : att,
-      border: b is num && borderWidths.contains(b.toDouble())
-          ? b.toDouble()
-          : defaultBorderWidth,
+      ring: r is num && ringWidths.contains(r.toDouble())
+          ? r.toDouble()
+          : defaultRingWidth,
     );
   }
 }
@@ -254,8 +255,8 @@ class _DeckAppState extends State<DeckApp> {
   Future<void> _setAttention(DeckShape shape) =>
       _store(_layout.withAttention(shape));
 
-  /// Sets the border drawn around every agent card.
-  Future<void> _setBorder(double width) => _store(_layout.withBorder(width));
+  /// Sets how thick the context gauge around every card is drawn.
+  Future<void> _setRing(double width) => _store(_layout.withRing(width));
 
   Future<void> _store(DeckLayout layout) async {
     final docs = _docs;
@@ -295,7 +296,7 @@ class _DeckAppState extends State<DeckApp> {
               backButton: true,
               pageShapes: _layout.pageShapes,
               attentionShape: _layout.attentionShape,
-              cardBorderWidth: _layout.border,
+              contextRingWidth: _layout.ring,
               // A phone has no menu bar to hang settings off, so they get a
               // page of their own at the far left. The deck still opens.
               leadingPage: ConfigPage(
@@ -303,7 +304,7 @@ class _DeckAppState extends State<DeckApp> {
                 onPage: _setPage,
                 onFallback: _setFallback,
                 onAttention: _setAttention,
-                onBorder: _setBorder,
+                onRing: _setRing,
                 deck: _deckName(),
                 source: s,
               ),
@@ -522,7 +523,7 @@ class ConfigPage extends StatelessWidget {
     required this.onPage,
     required this.onFallback,
     required this.onAttention,
-    required this.onBorder,
+    required this.onRing,
     required this.source,
     this.deck,
   });
@@ -531,7 +532,7 @@ class ConfigPage extends StatelessWidget {
   final void Function(int page, DeckShape shape) onPage;
   final void Function(DeckShape shape) onFallback;
   final void Function(DeckShape shape) onAttention;
-  final void Function(double width) onBorder;
+  final void Function(double width) onRing;
 
   /// Watched for how many pages the deck currently has.
   final AgentsSource source;
@@ -619,18 +620,18 @@ class ConfigPage extends StatelessWidget {
             ),
             const SizedBox(height: 22),
             Text(
-              'card border',
+              'context gauge',
               style: DeckHud.mono(size: 14, color: DeckHud.ink),
             ),
             const SizedBox(height: 6),
             Text(
-              'A line around each agent card. The browser deck has the same '
-              'setting; both belong to the screen showing the deck, not to '
-              'the service.',
+              'The line around each card is its context meter: the orange '
+              'fills it as the agent\u2019s context fills up. This is how '
+              'thick that line is drawn.',
               style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
             const SizedBox(height: 12),
-            _BorderRow(width: layout.border, onWidth: onBorder),
+            _RingRow(width: layout.ring, onWidth: onRing),
             const SizedBox(height: 22),
             Text(
               'Swipe right for the deck.',
@@ -778,15 +779,14 @@ class _Tap extends StatelessWidget {
 }
 
 
-/// The card border: the same steps the browser deck offers.
-class _BorderRow extends StatelessWidget {
-  const _BorderRow({required this.width, required this.onWidth});
+/// How thick the context gauge is drawn.
+class _RingRow extends StatelessWidget {
+  const _RingRow({required this.width, required this.onWidth});
 
   final double width;
   final void Function(double) onWidth;
 
-  static String _label(double w) =>
-      w == 0 ? 'none' : (w % 1 == 0 ? '${w.toInt()} pt' : '$w pt');
+  static String _label(double w) => '${w.toInt()}';
 
   @override
   Widget build(BuildContext context) {
@@ -805,7 +805,7 @@ class _BorderRow extends StatelessWidget {
                 ),
               ),
               Text(
-                _label(width),
+                '${_label(width)} pt',
                 style: DeckHud.mono(size: 12, color: DeckHud.accent),
               ),
             ],
@@ -813,11 +813,11 @@ class _BorderRow extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              for (final w in borderWidths) ...[
-                if (w != borderWidths.first) const SizedBox(width: 8),
+              for (final w in ringWidths) ...[
+                if (w != ringWidths.first) const SizedBox(width: 6),
                 Expanded(
                   child: GestureDetector(
-                    key: Key('border-$w'),
+                    key: Key('ring-$w'),
                     onTap: () => onWidth(w),
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 11),
