@@ -1043,7 +1043,7 @@ class _AgentDetailState extends State<AgentDetail> {
                   ].indexed)
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                        padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
                         decoration: BoxDecoration(
                           border: i == 0
                               ? null
@@ -1060,11 +1060,14 @@ class _AgentDetailState extends State<AgentDetail> {
                           children: [
                             _label(label, DeckHud.dim),
                             const SizedBox(height: 6),
+                            // 18, not 22: four of these across a phone was
+                            // the widest thing on the card, and "3.1m" does
+                            // not need to be read from across the desk.
                             Text(
                               value,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: DeckHud.rm(22, DeckHud.ink, weight: 600),
+                              style: DeckHud.rm(18, DeckHud.ink, weight: 600),
                             ),
                           ],
                         ),
