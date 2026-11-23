@@ -797,7 +797,11 @@ body:not(.panel-mode) .pagebar { position: sticky; bottom: 0; margin-top: 8px; b
 
 #ssh-deck { width: 100%; margin-block: 1.5rem; }
 #ssh-deck h2 { font-size: 1rem; }
-#ssh-status { overflow-wrap: anywhere; }
+.ssh-heading { display: flex; align-items: center; gap: .45rem; position: relative; }
+.ssh-info button { border: 0; background: transparent; color: var(--dim); cursor: help; padding: .25rem; }
+#ssh-status { position: absolute; z-index: 3; left: 0; top: 100%; width: max-content; max-width: 100%; overflow-wrap: anywhere; padding: .45rem .65rem; background: var(--panel); color: var(--ink); border: 1px solid var(--line); visibility: hidden; }
+.ssh-info:hover #ssh-status, .ssh-info:focus-within #ssh-status { visibility: visible; }
+#ssh-refresh { width: 3rem; height: .3rem; accent-color: var(--accent); }
 .ssh-command { overflow-wrap: anywhere; font-size: .8rem; }
 .tile.st-offline { --body: var(--dim); --label: var(--dim); }
 

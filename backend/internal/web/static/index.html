@@ -67,7 +67,12 @@
       <p>no agents running · start one with <code>agentctl new</code></p>
     </div>
     <nav id="pagebar" class="pagebar" aria-label="pages" hidden></nav>
-    <section id="ssh-deck" hidden aria-label="Remote Codex sessions"><h2>Codebox</h2><p id="ssh-status"></p><span id="ssh-group-note" class="group-note" role="status"></span><div id="ssh-sessions" class="grid" aria-label="SSH agent tiles"></div></section>
+    <section id="ssh-deck" hidden aria-label="Remote Codex sessions"><div class="ssh-heading">
+      <h2>Codebox</h2>
+      <span class="ssh-info"><button type="button" aria-label="Codebox connection information" aria-describedby="ssh-status">ⓘ</button>
+        <span id="ssh-status" role="tooltip"></span></span>
+      <progress id="ssh-refresh" aria-label="Refreshing Codebox sessions" hidden></progress>
+    </div><span id="ssh-group-note" class="group-note" role="status"></span><div id="ssh-sessions" class="grid" aria-label="SSH agent tiles"></div></section>
   </main>
   <aside id="detail" class="detail" aria-label="agent detail" hidden></aside>
 </div>

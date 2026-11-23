@@ -862,9 +862,16 @@ function applySSHState(data) {
   })) };
 }
 
+let sshRefreshes = 0;
+function markSSHRefresh(change) {
+  sshRefreshes += change;
+  $('ssh-refresh').hidden = sshRefreshes === 0;
+}
+
 async function refreshSSH() {
   if (expired) return;
   const revision = sshRevision;
+  markSSHRefresh(1);
   try {
     const r = await fetch('/admin/v1/ssh-codex', { cache: 'no-store' });
     if (r.status === 401) { showExpired(); return; }
@@ -880,7 +887,7 @@ async function refreshSSH() {
       sshState.connection = 'offline';
       sshState.sessions = sshState.sessions.map(a => ({ ...a, status: 'offline' }));
     }
-  }
+  } finally { markSSHRefresh(-1); }
   render();
   setTimeout(refreshSSH, 5000);
 }
@@ -1308,6 +1315,7 @@ async function openPicker(slot = -1, host = '') {
 // Warm on connection and share an in-flight refresh across picker opens.
 function refreshCatalog(catalog) {
   if (catalog.pending || expired) return;
+  markSSHRefresh(1);
   catalog.pending = fetch('/admin/v1/ssh-codex/sessions?host=' + encodeURIComponent(catalog.host), {cache:'no-store'})
     .then(async r => {
       if (catalog !== sshCatalog || expired) return;
@@ -1332,7 +1340,7 @@ function refreshCatalog(catalog) {
         setText($('picker-sub'), 'Could not refresh. Showing the last list from ' + catalog.host + '.');
       } else pickerMessage(err.message);
     })
-    .finally(() => { catalog.pending = null; });
+    .finally(() => { catalog.pending = null; markSSHRefresh(-1); });
 }
 
 function closePicker() {
