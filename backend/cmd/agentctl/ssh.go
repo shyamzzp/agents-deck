@@ -41,7 +41,11 @@ func sshConfig(args []string) error {
 	// Scripts can read the current target without an interactive prompt.
 	if len(args) == 1 && isTerminal() {
 		if st, err := os.Stdin.Stat(); err == nil && st.Mode()&os.ModeCharDevice != 0 {
-			fmt.Fprintf(os.Stderr, "SSH host [%s] (Enter to keep): ", info.Host)
+			if info.Host == "" {
+				fmt.Fprint(os.Stderr, "Enter your SSH username@hostname (or SSH alias): ")
+			} else {
+				fmt.Fprintf(os.Stderr, "SSH host [%s] (Enter to keep): ", info.Host)
+			}
 			scanner := bufio.NewScanner(os.Stdin)
 			if scanner.Scan() {
 				value := strings.TrimSpace(scanner.Text())
@@ -57,7 +61,7 @@ func sshConfig(args []string) error {
 		}
 	}
 	if info.Host == "" {
-		fmt.Println("No SSH host configured. Set one with agentctl config --ssh user@host.")
+		fmt.Println("No SSH host configured. Set one with agentctl config --ssh username@hostname.")
 	} else {
 		fmt.Printf("%s (%s)\n", info.Host, info.Connection)
 	}
