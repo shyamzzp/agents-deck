@@ -343,20 +343,17 @@ body.offline .main { opacity: 0.4; }
 .c { fill: var(--cut); }
 .cx { stroke: var(--cut); fill: none; }
 .zt { fill: var(--body); font-family: var(--f-label); }
-.fl { fill: var(--ink); } /* the finish flag's light squares */
 
 @keyframes la { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
 @keyframes lb { 0%, 49% { opacity: 0 } 50%, 100% { opacity: 1 } }
 @keyframes bob { 0%, 49% { transform: translateY(0) } 50%, 100% { transform: translateY(-0.5px) } }
 @keyframes blink { 0%, 59% { opacity: 1 } 60%, 100% { opacity: 0.15 } }
 @keyframes dots { 0% { opacity: .2 } 50% { opacity: 1 } 100% { opacity: .2 } }
-@keyframes zz { 0%, 100% { transform: translateY(0); opacity: .9 } 50% { transform: translateY(-0.6px); opacity: .4 } }
 .la { animation: la .5s infinite; }
 .lb { animation: lb .5s infinite; }
 .bob { animation: bob .5s infinite; }
 .blink { animation: blink 1s infinite; }
 .dots { animation: dots 1.2s steps(3) infinite; }
-.zz { animation: zz 2.4s steps(4) infinite; }
 /* working poses (mirrors critter.dart on the panel) */
 .fast { animation-duration: .2s !important; }
 .slow { animation-duration: .8s !important; }
@@ -371,19 +368,12 @@ body.offline .main { opacity: 0.4; }
 @keyframes tick0 { 0%, 24% { opacity: 1 } 25%, 100% { opacity: 0 } }
 @keyframes tick1 { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
 @keyframes tick2 { 0%, 74% { opacity: 1 } 75%, 100% { opacity: 0 } }
-@keyframes hop { 0%, 49% { transform: translateY(0) } 50%, 100% { transform: translateY(-1.5px) } }
-@keyframes spark { 0%, 33% { opacity: 1 } 34%, 100% { opacity: .45 } }
 .glance { animation: glance 1.2s infinite; }
 .scan { animation: scan 1.2s infinite; }
 .t1 { animation: rise1 1.2s infinite; } .t2 { animation: rise2 1.2s infinite; } .t3 { animation: rise3 1.2s infinite; }
 .tapA { animation: tapA .3s infinite; } .tapB { animation: tapB .3s infinite; }
 .cursor { animation: cursor 1s infinite; }
 .tick0 { animation: tick0 2s infinite; } .tick1 { animation: tick1 2s infinite; } .tick2 { animation: tick2 2s infinite; }
-.hop { animation: hop .4s infinite; }
-.spark { animation: spark .6s infinite; }
-@keyframes bobc { 0%, 49% { transform: translateY(0) } 50%, 100% { transform: translateY(0.6px) } }
-.bobc { animation: bobc .6s infinite; }
-.s1 { animation-delay: .2s; } .s2 { animation-delay: .4s; }
 /* hat frames while working: frame i of n shows during slot i of each n x ms cycle */
 @keyframes hf2 { 0%, 49.99% { opacity: 1 } 50.00%, 100% { opacity: 0 } }
 @keyframes hf3 { 0%, 33.32% { opacity: 1 } 33.33%, 100% { opacity: 0 } }
@@ -778,11 +768,10 @@ body.panel-mode.paged .grid { aspect-ratio: auto; height: calc(var(--pv) - 30px)
 .pagebar .page.hot { background: var(--accent); }
 .pagebar .page.on { width: 56px; background: var(--ink); }
 
-/* hungry: finished, not yet reviewed — sliding orange zebra stripes */
+/* hungry: finished, not yet reviewed — static stripes mark an unread result */
 .tile.hungry { --body: var(--accent); --meta: var(--accent); --label: var(--ink);
   background-image: repeating-linear-gradient(135deg, var(--zebra) 0 12px, transparent 12px 24px);
-  background-size: 34px 34px; animation: zebra 0.6s steps(6) infinite; }
-@keyframes zebra { from { background-position: 0 0 } to { background-position: 34px 0 } }
+  background-size: 34px 34px; }
 
 /* ---------- "needs you": one screen left of the deck's first page ----------
    Drawn as a page of the deck: the same grid, tiles and free cells. Only the

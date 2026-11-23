@@ -95,8 +95,6 @@ const verb = (tool) => { const t = (tool || '').toLowerCase(); return VERBS[t] |
 
 // status → sprite pose
 const POSE = { running: 'run', waiting: 'wait', error: 'err', idle: 'idle', starting: 'start', exited: 'exit' };
-// A running agent's pose follows its tool; a just-finished one hops for a bit.
-const CELEBRATE_MS = 6000;
 const TOOL_POSE = {
   read: 'read', grep: 'read', glob: 'read', ls: 'read',
   edit: 'write', write: 'write', multiedit: 'write', notebookedit: 'write',
@@ -108,8 +106,6 @@ const poseOf = (a) => {
     const tool = (a.activity?.tool || '').toLowerCase();
     return tool ? TOOL_POSE[tool] || 'run' : 'think';
   }
-  if (a.status === 'idle' && a.statusSince && now() - Date.parse(a.statusSince) < CELEBRATE_MS) return 'celebrate';
-  if (hungry(a)) return 'hungry';
   return POSE[a.status] || 'idle';
 };
 
@@ -134,7 +130,7 @@ function subsOnly(a) {
 
 function tileMeta(a) {
   if (a.sshHost && a.status === 'idle') return lastActive(a) || 'idle';
-  if (hungry(a)) return 'hungry · feed me';
+  if (hungry(a)) return 'done · unreviewed';
   switch (a.status) {
     case 'running': return `${subsOnly(a) || verb(a.activity?.tool)} · ${ctxPct(a)}% ctx`;
     case 'waiting': {
@@ -160,7 +156,7 @@ function pillText(a) {
   switch (a.status) {
     case 'running': return `running · ${since}`;
     case 'waiting': return a.waiting?.kind === 'question' && a.waiting.context ? a.waiting.context : `needs you · ${since}`;
-    case 'idle': return a.unseen ? `hungry · ${since}` : `idle · ${since}`;
+    case 'idle': return a.unseen ? `idle · unreviewed · ${since}` : `idle · ${since}`;
     case 'error': return `error · ${since}`;
     case 'exited': return a.lost ? `lost with tmux · ${since}` : `exited · ${since}`;
     default: return a.status;
@@ -445,7 +441,7 @@ function hatSVG(hat, oni, faded, animate = false) {
 // Poses of a working agent: its hat animates; every other pose keeps it still.
 const WORKING_POSES = new Set(['run', 'think', 'read', 'write', 'bash', 'web', 'plan', 'delegate', 'compact']);
 
-const SLEEP_MARK = '<text class="zt zz" x="14.8" y="-0.6" font-size="3.2">z</text><text class="zt zz" x="16.6" y="-2.4" font-size="2.3">z</text>';
+const SLEEP_MARK = '<text class="zt" x="14.8" y="-0.6" font-size="3.2">z</text><text class="zt" x="16.6" y="-2.4" font-size="2.3">z</text>';
 
 function spriteSVG(pose, species = 'claude', hat = null, opts = {}) {
   const bot = species === 'codex';
@@ -457,7 +453,7 @@ function spriteSVG(pose, species = 'claude', hat = null, opts = {}) {
   const arm = (l, r, cls = '') => bot
     ? `<rect class="b ${cls}" x="1" y="${l - 1}" width="1" height="2"/><rect class="b ${cls}" x="12" y="${r - 1}" width="1" height="2"/>`
     : `<rect class="b ${cls}" x="0" y="${l}" width="1" height="2"/><rect class="b ${cls}" x="13" y="${r}" width="1" height="2"/>`;
-  let arms = arm(2, 2), held = '';
+  let arms = arm(2, 2);
   switch (pose) {
     case 'think':
       eyes = `<g class="glance">${eyesOpenAt(1, 1.5)}</g>`; arms = arm(2, 1);
@@ -485,25 +481,6 @@ function spriteSVG(pose, species = 'claude', hat = null, opts = {}) {
       eyes = eyesOpen(2); feet = legs(LEGS_A, 'la') + legs(LEGS_B, 'lb'); grp = 'bob'; arms = arm(2, 1, 'la') + arm(1, 2, 'lb');
       bubble = MINI(14.4, 3.2, 0.26);
       break;
-    case 'hungry':
-      // Eyes up at a bobbing cookie; the mouth chomps open and shut.
-      eyes = '<rect class="c" x="4.6" y="1" width="1" height="2"/><rect class="c" x="9.6" y="1" width="1" height="2"/>' +
-        (bot ? '<rect class="c la slow" x="6.2" y="3.4" width="1.6" height="1.4"/><rect class="c lb slow" x="6.2" y="4" width="1.6" height="0.5"/>'
-          : '<rect class="c la slow" x="6.2" y="4.2" width="2.2" height="1.6"/><rect class="c lb slow" x="6.2" y="4.8" width="2.2" height="0.5"/>');
-      bubble = `<g class="bobc">${pixels(['.###.', '##.##', '#####', '#.###', '.###.'], 14.3, 0.75, '', 0.75, -4.2)}</g>`;
-      break;
-    case 'celebrate': {
-      eyes = [4.5, 9.5].map((x) => `<path class="cx" stroke-width="0.55" d="M${x - 1} 3.3 L${x} 2.2 L${x + 1} 3.3"/>`).join('');
-      grp = 'hop'; feet = `<g class="hop">${legs(LEGS_A)}</g>`; arms = arm(0, 0);
-      // The finish flag in the raised hand: a pole and a 3×2 checker that waves
-      // by swapping its squares.
-      const checker = (phase, cls) => `<g class="${cls}">` + [0, 1, 2].flatMap((cx) => [0, 1].map((cy) =>
-        `<rect class="${(cx + cy + phase) % 2 ? 'c' : 'fl'}" x="${15 + cx}" y="${-4 + cy}" width="1" height="1"/>`)).join('') + '</g>';
-      held = `<rect class="fl" x="14" y="-4" width="1" height="6"/>${checker(0, 'la')}${checker(1, 'lb')}`;
-      const plus = (x, y, i) => `<g class="spark s${i}"><rect class="b" x="${x - 0.5}" y="${y}" width="1.5" height="0.5"/><rect class="b" x="${x}" y="${y - 0.5}" width="0.5" height="1.5"/></g>`;
-      bubble = plus(16.4, -6.2, 0) + plus(18.2, -4.4, 1);
-      break;
-    }
     case 'run':
       eyes = eyesOpen(2); feet = legs(LEGS_A, 'la') + legs(LEGS_B, 'lb'); bubble = DOTS; grp = 'bob'; arms = arm(2, 1, 'la') + arm(1, 2, 'lb'); break;
     case 'wait':
@@ -535,7 +512,7 @@ function spriteSVG(pose, species = 'claude', hat = null, opts = {}) {
   const face = bot ? eyes : `<g transform="translate(0 -0.5)">${eyes}</g>`;
   const hatG = hat ? hatSVG(hat, bot, pose === 'exit', working) : '';
   if (opts.bubble === false) bubble = '';
-  return `<svg viewBox="0 -4 18 13" shape-rendering="crispEdges" aria-hidden="true" focusable="false"><g class="${grp}">${body}${arms}${face}${hatG}${held}</g>${feet}${bubble}</svg>`;
+  return `<svg viewBox="0 -4 18 13" shape-rendering="crispEdges" aria-hidden="true" focusable="false"><g class="${grp}">${body}${arms}${face}${hatG}</g>${feet}${bubble}</svg>`;
 }
 
 // ---------------------------------------------------------------- dom helpers
@@ -2351,10 +2328,6 @@ async function start() {
   tickClock();
   setInterval(tickClock, 1000);
   setInterval(() => state && render(), 15000); // refresh relative times
-  // End "just finished" hops on time (cheap: only re-renders when one is due).
-  setInterval(() => {
-    if (state?.agents.some((a) => a.status === 'idle' && a.statusSince && now() - Date.parse(a.statusSince) < CELEBRATE_MS + 1500)) renderGrid();
-  }, 1000);
   if (FIXTURE) return startFixture();
   refreshSSH();
   setConn('connecting');
