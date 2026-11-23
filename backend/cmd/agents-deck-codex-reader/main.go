@@ -67,7 +67,10 @@ func match(threads []codex.Thread, id string) (codex.Thread, error) {
 func run(args []string) error {
 	enc := json.NewEncoder(os.Stdout)
 	if len(args) == 0 {
-		return watch(enc)
+		return watch(enc, nil)
+	}
+	if args[0] == "watch" {
+		return watch(enc, args[1:])
 	}
 	if len(args) == 1 && args[0] == "terminals" {
 		return terminalLinks()
@@ -109,16 +112,24 @@ func run(args []string) error {
 	}
 }
 
-func watch(enc *json.Encoder) error {
+func watch(enc *json.Encoder, pins []string) error {
 	cache := map[string]*store.Entry{}
 	for {
 		threads, err := codex.RecentThreads(6 * time.Hour)
 		if err != nil {
 			return err
 		}
+		pinned, err := codex.ThreadsByID(pins)
+		if err != nil {
+			return err
+		}
+		threads = append(threads, pinned...)
 		next := map[string]*store.Entry{}
 		agents := make([]model.Agent, 0, len(threads))
 		for _, t := range threads {
+			if _, seen := next[t.ID]; seen {
+				continue
+			}
 			e := cache[t.ID]
 			if e == nil || e.Transcript != t.RolloutPath {
 				e = entry(t)

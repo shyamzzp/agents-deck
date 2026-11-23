@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,7 @@ import (
 )
 
 type sshState struct {
+	Pinned     []string      `json:"pinned,omitempty"`
 	Terminal   bool          `json:"terminal"`
 	Host       string        `json:"host"`
 	Connection string        `json:"connection"`
@@ -55,15 +57,20 @@ func (a *Admin) sshDashboard(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	host := str(a.readConfig(), "sshCodexHost", "")
-	if host != m.state.Host {
+	cfg := a.readConfig()
+	host := str(cfg, "sshCodexHost", "")
+	pins := sshPins(cfg, host)
+	if host != m.state.Host || !slices.Equal(pins, m.state.Pinned) {
 		if m.cancel != nil {
 			m.cancel()
 		}
 		m.generation++
 		m.cancel = nil
 		m.retry = time.Time{}
-		m.state = sshState{Host: host}
+		if host != m.state.Host {
+			m.state = sshState{Host: host}
+		}
+		m.state.Pinned = pins
 	}
 	if host != "" && sshdeck.ValidHost(host) && m.cancel == nil && !time.Now().Before(m.retry) && !a.Demo {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -71,7 +78,7 @@ func (a *Admin) sshDashboard(w http.ResponseWriter, r *http.Request) {
 		if m.state.Connection == "" {
 			m.state.Connection = "connecting"
 		}
-		go m.run(ctx, host, m.generation)
+		go m.run(ctx, host, m.generation, pins)
 	}
 	state := m.state
 	state.Terminal = runtime.GOOS == "darwin"
@@ -81,9 +88,9 @@ func (a *Admin) sshDashboard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, state)
 }
 
-func (m *sshWatch) run(ctx context.Context, host string, generation uint64) {
+func (m *sshWatch) run(ctx context.Context, host string, generation uint64, pins []string) {
 	// No inherited tunnels, agent forwarding or interactive prompts.
-	cmd, cmdErr := sshdeck.Command(ctx, host, "watch", "")
+	cmd, cmdErr := sshdeck.Command(ctx, host, "watch", strings.Join(pins, " "))
 	defer func() {
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -109,7 +116,7 @@ func (m *sshWatch) run(ctx context.Context, host string, generation uint64) {
 	scanner.Buffer(make([]byte, 4096), 2<<20)
 	for scanner.Scan() {
 		var sessions []model.Agent
-		if err := json.Unmarshal(scanner.Bytes(), &sessions); err != nil || len(sessions) > 32 {
+		if err := json.Unmarshal(scanner.Bytes(), &sessions); err != nil || len(sessions) > 32+len(pins) {
 			break
 		}
 		for i := range sessions {

@@ -799,3 +799,13 @@ body:not(.panel-mode) .pagebar { position: sticky; bottom: 0; margin-top: 8px; b
 #ssh-status { overflow-wrap: anywhere; }
 .ssh-command { overflow-wrap: anywhere; font-size: .8rem; }
 .tile.st-offline { --body: var(--dim); --label: var(--dim); }
+
+#ssh-sessions .ssh-add {
+  display: grid; place-items: center; border: 1px dashed var(--empty-edge);
+  color: var(--dim); font-size: 1.4rem; background: transparent;
+}
+#ssh-sessions .ssh-add:hover { color: var(--ink); border-color: currentColor; }
+#picker-filter { width: 100%; margin-bottom: .75rem; padding: .5rem; }
+@media (max-width: 640px) {
+  body:not(.panel-mode) #ssh-sessions .ssh-add { aspect-ratio: auto; min-height: 3rem; }
+}

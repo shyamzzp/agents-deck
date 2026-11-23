@@ -86,6 +86,22 @@ func AllThreads() ([]Thread, error) {
 	return queryThreads(bin, db, " order by updated_at_ms desc, id")
 }
 
+// ThreadsByID applies the history visibility rules to explicitly pinned threads.
+func ThreadsByID(ids []string) ([]Thread, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	bin, db := sqlite3(), stateDB()
+	if bin == "" || db == "" {
+		return nil, fmt.Errorf("Codex session index is unavailable")
+	}
+	values := make([]string, 0, len(ids))
+	for _, id := range ids {
+		values = append(values, "'"+strings.ReplaceAll(id, "'", "''")+"'")
+	}
+	return queryThreads(bin, db, " and id in ("+strings.Join(values, ",")+") order by updated_at_ms desc, id")
+}
+
 func queryThreads(bin, db, tail string) ([]Thread, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

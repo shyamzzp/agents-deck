@@ -158,6 +158,8 @@ func (a *Admin) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/v1/cli", a.cli)
 	mux.HandleFunc("POST /admin/v1/open-data-folder", a.openData)
 
+	mux.HandleFunc("GET /admin/v1/ssh-codex/sessions", a.sshSessions)
+	mux.HandleFunc("POST /admin/v1/ssh-codex/pins", a.sshPin)
 	mux.HandleFunc("POST /admin/v1/ssh-codex/attach", a.sshAttach)
 	mux.HandleFunc("GET /admin/v1/terminals", a.terminals)
 	mux.HandleFunc("POST /admin/v1/terminals/link", a.linkTerminal)

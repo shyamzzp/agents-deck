@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os/exec"
 	"regexp"
+	"strings"
 )
 
 var hostPattern = regexp.MustCompile(`^([A-Za-z0-9_][A-Za-z0-9_.-]*@)?[A-Za-z0-9][A-Za-z0-9.-]*$`)
@@ -53,6 +54,15 @@ func Command(ctx context.Context, host, action, id string) (*exec.Cmd, error) {
 	command := `exec "$HOME/.local/bin/agents-deck-codex-reader"`
 	switch action {
 	case "watch":
+		if id != "" {
+			ids := strings.Fields(id)
+			for _, v := range ids {
+				if len(v) != 36 || !idPattern.MatchString(v) {
+					return nil, errors.New("invalid pinned session ID")
+				}
+			}
+			command += " watch " + strings.Join(ids, " ")
+		}
 	case "list", "terminals":
 		command += " " + action
 	case "show", "attach":

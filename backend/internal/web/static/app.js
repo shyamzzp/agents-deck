@@ -699,6 +699,10 @@ function renderGrid() {
 
 // SSH sessions use the same tile and drawer as local agents. Their identities
 // include the host so a host switch cannot attach an old selection elsewhere.
+const sshAddTile = h('button', {type:'button', class:'tile-empty ssh-add',
+  'aria-label':'Add a Codebox session', title:'Add a Codebox session', text:'＋',
+  onclick: () => openPicker(-1, sshState.host)});
+
 function renderSSH() {
   const box = $('ssh-deck');
   box.hidden = !sshState.host || view === 'attn';
@@ -712,7 +716,7 @@ function renderSSH() {
   for (const id of sshTiles.keys()) {
     if (!list.some(a => a.id === id)) sshTiles.delete(id);
   }
-  reconcile($('ssh-sessions'), nodes);
+  reconcile($('ssh-sessions'), [...nodes, sshAddTile]);
   let status = sshState.host + ' · ' + sshState.connection;
   if (sshState.connection === 'online' && !list.length) status += ' · No sessions in the last six hours.';
   if (sshState.connection === 'offline' && list.length && sshState.lastSeen) {
@@ -1101,24 +1105,92 @@ function makeEmptyCell(slot) {
 // Claude sessions started by hand in other terminals (GET /v1/live); adding
 // one puts it on the deck, in the free cell it was opened from.
 let pickerSlot = -1;
+let pickerHost = '';
+let pickerGeneration = 0;
+let sshChoices = [];
+let pickerPins = new Set();
+const localPickerText = $('picker-sub').textContent;
+const pickerRow = (title, meta, button) => h('li', {},
+  h('span', {class:'picker-name', text:title}),
+  h('span', {class:'picker-meta', text:meta}), button);
+const pickerMessage = text => $('picker-list').replaceChildren(
+  h('li', {class:'picker-empty', text}));
 
-async function openPicker(slot = -1) {
+async function openPicker(slot = -1, host = '') {
+  const generation = ++pickerGeneration;
+  pickerHost = host;
+  setText($('picker-title'), host ? 'Add a Codebox session' : 'add a running session');
+  setText($('picker-sub'), host ? 'Choose a session from ' + host + '.' : localPickerText);
+  $('picker-filter').hidden = !host;
+  $('picker-filter').value = '';
+  sshChoices = [];
   pickerSlot = slot;
   if (!$('picker-close').firstElementChild) $('picker-close').replaceChildren(closeIcon());
   $('picker').hidden = false;
-  $('picker-close').focus();
-  await refreshPicker();
+  (host ? $('picker-filter') : $('picker-close')).focus();
+  pickerMessage('Loading sessions…');
+  if (!host) { await refreshPicker(generation); return; }
+  pickerPins = new Set(sshState.pinned || []);
+  try {
+    const r = await fetch('/admin/v1/ssh-codex/sessions?host=' + encodeURIComponent(host), {cache:'no-store'});
+    const data = await r.json();
+    if (generation !== pickerGeneration) return;
+    if (!r.ok) throw new Error(data.error || 'Could not list Codebox sessions.');
+    sshChoices = data || [];
+    renderSSHChoices();
+  } catch (err) {
+    if (generation === pickerGeneration) pickerMessage(err.message);
+  }
 }
 
-function closePicker() { $('picker').hidden = true; }
+function closePicker() {
+  ++pickerGeneration;
+  $('picker').hidden = true;
+  if (pickerHost) sshAddTile.focus();
+  pickerHost = '';
+}
 
-async function refreshPicker() {
+function renderSSHChoices() {
+  if (!pickerHost) return;
+  const host = pickerHost;
+  const generation = pickerGeneration;
+  const filter = $('picker-filter').value.trim().toLowerCase();
+  const visible = sshChoices.filter(s =>
+    [s.title, s.folder, s.id].some(v => (v || '').toLowerCase().includes(filter)));
+  if (!visible.length) {
+    pickerMessage(filter ? 'No matching sessions.' : 'No unarchived Codex sessions on this host.');
+    return;
+  }
+  const onDeck = new Set(sshState.sessions.map(s => s.threadID));
+  $('picker-list').replaceChildren(...visible.map(s => {
+    const pinned = pickerPins.has(s.id);
+    const already = !pinned && onDeck.has(s.id);
+    const btn = h('button', {type:'button', class:'toggle', disabled:already,
+      text:pinned ? 'unpin' : already ? 'on the deck' : 'add'});
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = pinned ? 'removing…' : 'adding…';
+      const r = await api('/admin/v1/ssh-codex/pins', {host, id:s.id, pinned:!pinned});
+      if (generation !== pickerGeneration) return;
+      if (!r.ok) { btn.disabled = false; btn.textContent = r.error; return; }
+      if (pinned) pickerPins.delete(s.id); else pickerPins.add(s.id);
+      closePicker();
+    });
+    return pickerRow(s.title || s.folder || s.id,
+      [s.status, lastActive(s), s.context?.window ? ctxPct(s) + '% context' : '',
+        s.folder, s.id].filter(Boolean).join(' · '), btn);
+  }));
+}
+$('picker-filter').addEventListener('input', renderSSHChoices);
+
+async function refreshPicker(generation) {
   const list = $('picker-list');
   let sessions = [];
   try {
     const r = FIXTURE ? { ok: true, json: async () => ({ sessions: fixtureLive }) } : await fetch('/v1/live', { credentials: 'same-origin', cache: 'no-store' });
     if (r.ok) sessions = (await r.json()).sessions || [];
   } catch { /* offline: empty list */ }
+  if (generation !== pickerGeneration) return;
   if (!sessions.length) {
     list.replaceChildren(h('li', { class: 'picker-empty', text: 'No Claude Code session is running outside the deck right now. Start one in a terminal with claude, or on the deck with agentctl new.' }));
     return;
@@ -1130,10 +1202,8 @@ async function refreshPicker() {
       const r = await api(`/v1/live/${encodeURIComponent(s.sessionId)}/add`, pickerSlot >= 0 ? { slot: pickerSlot } : {});
       if (r.ok) closePicker(); else { btn.disabled = false; btn.textContent = `failed · ${r.error}`; }
     });
-    return h('li', {},
-      h('span', { class: 'picker-name', text: s.title || s.folder }),
-      h('span', { class: 'picker-meta', text: `${s.folder}${s.background ? ' · background' : ''} · started ${rel(s.started)} ago` }),
-      btn);
+    return pickerRow(s.title || s.folder,
+      `${s.folder}${s.background ? ' · background' : ''} · started ${rel(s.started)} ago`, btn);
   }));
 }
 
@@ -1663,7 +1733,7 @@ const dialogIn = (t) => t instanceof HTMLElement && !!t.closest('#picker, #detai
 // are the only way to rename or remove a group without a mouse.
 const cycleTiles = () =>
   [...document.querySelectorAll(
-    '#grid > .tile, #grid > .group-line .group-name, #grid > .group-line .group-del, #attn-grid > .tile, #ssh-sessions > .tile',
+    '#grid > .tile, #grid > .group-line .group-name, #grid > .group-line .group-del, #attn-grid > .tile, #ssh-sessions > .tile, #ssh-sessions > .ssh-add',
   )].filter((el) => el.offsetParent);
 
 // Returns false when there is nothing to walk, so Tab stays the browser's.
