@@ -217,11 +217,19 @@ class AgentButton extends StatelessWidget {
             width: tight ? 1 : 2,
           ),
         ),
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: DeckHud.mono(size: fs, color: pressed ? pressedInk : ink),
+        // Scaled down rather than cut: a button says what it does, and
+        // "review in terminal" read as "review in te..." whenever the row gave
+        // it less than its words. It shrinks only when it has to, so a short
+        // label keeps its full size.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: alignLeft ? Alignment.centerLeft : Alignment.center,
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: DeckHud.mono(size: fs, color: pressed ? pressedInk : ink),
+          ),
         ),
       ),
     );
