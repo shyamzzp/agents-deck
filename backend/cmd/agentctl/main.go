@@ -73,6 +73,8 @@ const usage = `agentctl: runs and controls agents deck
                                  running is brought back first (it asks)
   agentctl focus [--ssh] [--tab] ID   focus the existing pane or its tab
   agentctl focus --ssh --host-pane | --host-tab   focus the codebox connection
+  agentctl focus --ssh --link-pane [--location W:T:P] ID   link an open SSH shell
+  agentctl focus --ssh --unlink-pane ID                    forget its pane link
   agentctl config --ssh [user@host|--clear]   show, set or clear the SSH host
   agentctl ls --ssh [--json] [ID]   list unarchived remote Codex threads, or inspect one
   agentctl attach --ssh ID        open the selected thread in Codex on the SSH host

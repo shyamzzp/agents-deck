@@ -1380,8 +1380,8 @@ function header(a) {
 function postAction(a, path, body) {
   if (path.startsWith('terminal:')) {
     const [,mode,...key] = path.split(':');
-    const path = mode === 'link' || mode === 'unlink' ? '/admin/v1/terminals/link' : '/admin/v1/terminals/focus';
-    return api(path, {id:a.threadID || a.id,
+    const endpoint = mode === 'link' || mode === 'unlink' ? '/admin/v1/terminals/link' : '/admin/v1/terminals/focus';
+    return api(endpoint, {id:a.threadID || a.id,
       host:a.sshHost || '', mode, key:key.join(':')});
   }
   if (a.sshHost) {
