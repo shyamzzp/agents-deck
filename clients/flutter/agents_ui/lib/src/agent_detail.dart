@@ -267,6 +267,9 @@ class _AgentDetailState extends State<AgentDetail> {
           ? 'tap again to stop'
           : 'stop',
       onTap: _busy ? null : () => _dismiss(a),
+      // Sized by its label on a phone, so the points it does not spend on air
+      // go to "focus terminal" beside it.
+      padX: 6,
       fill: flash?.$1 ?? (armed ? DeckHud.accent : const Color(0x00000000)),
       ink: flash?.$2 ?? (armed ? DeckHud.bg : DeckHud.ink),
       outline: flash?.$1 ?? (armed ? DeckHud.accent : DeckHud.dim),
@@ -957,8 +960,12 @@ class _AgentDetailState extends State<AgentDetail> {
     // 60 points, most of which is its own padding. There the row is divided
     // by share instead, three parts to two.
     final tight = DeckCompact.of(context);
+    // On a phone the second action is as wide as its own label and no wider,
+    // and the main action takes everything that leaves. Flexible rather than
+    // a bare child so a long label ("tap again to stop") still shrinks rather
+    // than running the row off the card.
     Widget second(Widget button) => tight
-        ? Expanded(flex: 2, child: button)
+        ? Flexible(fit: FlexFit.loose, child: button)
         : SizedBox(width: 200, child: button);
     return _card(
       fill: DeckHud.bg,
@@ -1183,7 +1190,6 @@ class _AgentDetailState extends State<AgentDetail> {
               ),
               if (!exited)
                 Expanded(
-                  flex: tight ? 3 : 1,
                   child: AgentButton(
                     key: const Key('agent-focus'),
                     label: _flashKey == 'focus' && _flash == _Flash.sent
@@ -1221,7 +1227,6 @@ class _AgentDetailState extends State<AgentDetail> {
                 ),
               ] else if (exited && a.resumable) ...[
                 Expanded(
-                  flex: tight ? 3 : 1,
                   child: AgentButton(
                     key: const Key('agent-resume'),
                     label: _flashKey == 'resume' && _flash == _Flash.sent

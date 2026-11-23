@@ -168,6 +168,7 @@ class AgentButton extends StatelessWidget {
     required this.pressedInk,
     this.height = 68,
     this.fontSize = 19,
+    this.padX,
     this.alignLeft = false,
   });
 
@@ -182,6 +183,11 @@ class AgentButton extends StatelessWidget {
   final Color pressedInk;
   final double height;
   final double fontSize;
+
+  /// Points each side of the label where the card is compact; null is 8.
+  /// A button that is sized by its label rather than by a share of the row
+  /// gives every point it saves here to the one beside it.
+  final double? padX;
   final bool alignLeft;
 
   @override
@@ -200,7 +206,7 @@ class AgentButton extends StatelessWidget {
         // 22 points each side of a 160pt button is a quarter of it spent on
         // air, and the label is what gets cut for it. 8 on a phone, where
         // "remove from deck" has to fit in what the row leaves it.
-        padding: EdgeInsets.symmetric(horizontal: tight ? 8 : 22),
+        padding: EdgeInsets.symmetric(horizontal: tight ? (padX ?? 8) : 22),
         decoration: BoxDecoration(
           color: pressed ? pressedFill : fill,
           borderRadius: BorderRadius.zero,
