@@ -1151,6 +1151,7 @@ async function openPicker(slot = -1, host = '') {
   setText($('picker-title'), host ? 'Add a Codebox session' : 'add a running session');
   setText($('picker-sub'), host ? 'Choose a session from ' + host + '.' : localPickerText);
   $('picker-filter').hidden = !host;
+  $('picker-issues-label').hidden = !host;
   $('picker-filter').value = '';
   pickerSlot = slot;
   if (!$('picker-close').firstElementChild) $('picker-close').replaceChildren(closeIcon());
@@ -1214,10 +1215,12 @@ function renderSSHChoices() {
   const host = pickerHost;
   const generation = pickerGeneration;
   const filter = $('picker-filter').value.trim().toLowerCase();
+  const issuesOnly = $('picker-issues').checked;
   const visible = sshCatalog.sessions.filter(s =>
+    (!issuesOnly || /^\s*\d{6}(?!\d)/.test(s.title || '')) &&
     [s.title, s.folder, s.id].some(v => (v || '').toLowerCase().includes(filter)));
   if (!visible.length) {
-    pickerMessage(filter ? 'No matching sessions.' : 'No unarchived Codex sessions on this host.');
+    pickerMessage(filter || issuesOnly ? 'No matching sessions.' : 'No unarchived Codex sessions on this host.');
     return;
   }
   const onDeck = new Set(sshState.sessions.map(s => s.threadID));
@@ -1254,6 +1257,7 @@ function renderSSHChoices() {
   }));
 }
 $('picker-filter').addEventListener('input', renderSSHChoices);
+$('picker-issues').addEventListener('change', renderSSHChoices);
 
 async function refreshPicker(generation) {
   const list = $('picker-list');

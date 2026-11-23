@@ -806,6 +806,7 @@ body:not(.panel-mode) .pagebar { position: sticky; bottom: 0; margin-top: 8px; b
   color: var(--dim); font-size: 1.4rem; background: transparent;
 }
 #ssh-sessions .ssh-add:hover { color: var(--ink); border-color: currentColor; }
+#picker-issues-label { align-self: flex-start; margin-bottom: .75rem; font-size: 14px; cursor: pointer; }
 #picker-filter { width: 100%; margin-bottom: .75rem; padding: .5rem; }
 @media (max-width: 640px) {
   body:not(.panel-mode) #ssh-sessions .ssh-add { aspect-ratio: auto; min-height: 3rem; }

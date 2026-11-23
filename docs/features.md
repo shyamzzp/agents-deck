@@ -307,7 +307,7 @@ on this computer only, never on the network.
 
 In the browser, open Settings → Agents and enter an SSH alias or user@host
 under **Codex SSH host**. The Codebox section on the dashboard shows recent
-sessions, their titles and their status. The dashed **+** tile opens the same history as `agentctl ls --ssh`. Add a saved thread to keep it on this host’s deck beyond the recent-activity window. Reopen the picker to unpin it. A dropped connection marks the last
+sessions, their titles and their status. The dashed **+** tile opens the same history as `agentctl ls --ssh`. The picker shows a cached list for up to five minutes and refreshes it in the background. Select **Filter by Issues** to show titles starting with a six-digit issue number. You can also search within those results. Add a saved thread to keep it on this host’s deck beyond the recent-activity window. Reopen the picker to unpin it. A dropped connection marks the last
 snapshot offline. The open dashboard retries automatically. Clear the host
 in Settings to stop monitoring.
 
