@@ -28,7 +28,7 @@ class DictateSheet extends StatefulWidget {
   State<DictateSheet> createState() => _DictateSheetState();
 }
 
-enum _Stage { listening, held, sending, sent, failed }
+enum _Stage { listening, paused, held, sending, sent, failed }
 
 class _DictateSheetState extends State<DictateSheet> {
   StreamSubscription<Heard>? _sub;
@@ -54,14 +54,15 @@ class _DictateSheetState extends State<DictateSheet> {
       if (!mounted) return;
       setState(() {
         if (heard.error != null) {
-          // Stopping with nothing said comes through as an error too, so it
-          // is only shown when there is no text to send.
           if (_text.isEmpty) _problem = heard.error;
           if (_stage == _Stage.listening) _stage = _Stage.held;
           return;
         }
         if (heard.text.isNotEmpty) _text = heard.text;
-        if (heard.done) _stage = _Stage.held;
+        // heard.done is a pause in the middle of a sentence, not the end of
+        // what is being said: the recogniser starts a new piece and the
+        // sheet keeps listening. Only "done", "pause" or "send" stop it.
+        if (heard.paused) _stage = _Stage.paused;
       });
     });
     try {
@@ -78,6 +79,26 @@ class _DictateSheetState extends State<DictateSheet> {
   Future<void> _hold() async {
     await Dictation.stop();
     if (mounted) setState(() => _stage = _Stage.held);
+  }
+
+  /// Takes as long as you like: the microphone closes, the words stay, and
+  /// resume carries on the same sentence.
+  Future<void> _pause() async {
+    await Dictation.pause();
+    if (mounted) setState(() => _stage = _Stage.paused);
+  }
+
+  Future<void> _resume() async {
+    setState(() => _stage = _Stage.listening);
+    try {
+      await Dictation.resume();
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _problem = e.message ?? 'the microphone could not be opened';
+        _stage = _Stage.paused;
+      });
+    }
   }
 
   /// Focus the terminal, then type the text into it. A busy agent takes it
@@ -129,6 +150,7 @@ class _DictateSheetState extends State<DictateSheet> {
                   Text(
                     switch (_stage) {
                       _Stage.listening => 'listening',
+                      _Stage.paused => 'paused',
                       _Stage.held => 'ready',
                       _Stage.sending => 'sending',
                       _Stage.sent => 'sent',
@@ -177,6 +199,25 @@ class _DictateSheetState extends State<DictateSheet> {
               ],
               Row(
                 children: [
+                  // Pause while listening, resume while paused: speaking is
+                  // not on a clock, and a long think should not end it.
+                  if (listening || _stage == _Stage.paused) ...[
+                    Flexible(
+                      fit: FlexFit.loose,
+                      child: AgentButton(
+                        key: const Key('dictate-pause'),
+                        label: listening ? 'pause' : 'resume',
+                        padX: 6,
+                        onTap: listening ? _pause : _resume,
+                        fill: const Color(0x00000000),
+                        ink: DeckHud.ink,
+                        outline: DeckHud.dim,
+                        pressedFill: DeckHud.ink,
+                        pressedInk: DeckHud.bg,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                  ],
                   Expanded(
                     child: AgentButton(
                       key: const Key('dictate-send'),
