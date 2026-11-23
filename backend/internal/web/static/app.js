@@ -5,19 +5,20 @@
 import { needsYou as needsYouScreen, packed, simulate, SPOTS } from './attention.js';
 
 import { followThemeChanges } from './theme.js';
-import { drawerFont, tileFont, fontSize } from './layout.js';
+import { drawerFont, tileFont, tileBorder, layoutValue } from './layout.js';
 
-function applyFontSizes() {
+function applyLayout() {
   const style = document.documentElement.style;
-  style.setProperty('--drawer-title-size', fontSize(drawerFont) + 'px');
-  const tile = fontSize(tileFont);
+  style.setProperty('--drawer-title-size', layoutValue(drawerFont) + 'px');
+  style.setProperty('--tile-border-width', layoutValue(tileBorder) + 'px');
+  const tile = layoutValue(tileFont);
   if (tile) style.setProperty('--tile-name-size', tile + 'px');
   else style.removeProperty('--tile-name-size');
 }
-applyFontSizes();
-addEventListener('pageshow', applyFontSizes);
+applyLayout();
+addEventListener('pageshow', applyLayout);
 addEventListener('storage', e => {
-  if (e.key === null || e.key === drawerFont.key || e.key === tileFont.key) applyFontSizes();
+  if (e.key === null || [drawerFont, tileFont, tileBorder].some(pref => pref.key === e.key)) applyLayout();
 });
 
 const $ = (id) => document.getElementById(id);

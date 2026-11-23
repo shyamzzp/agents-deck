@@ -249,7 +249,6 @@ body.offline .main { opacity: 0.4; }
   /* per-state colours; the sprite reads --body and --cut */
   --t-bg: var(--panel);
   --t-border: var(--panel);
-  --t-bw: 1px;
   --body: var(--ink);
   --cut: var(--t-bg);
   --label: var(--ink);
@@ -265,7 +264,7 @@ body.offline .main { opacity: 0.4; }
   padding: 10px 12px 12px;
   border-radius: var(--r-tile);
   background: var(--t-bg);
-  border: var(--t-bw) solid var(--t-border);
+  border: 0;
   color: var(--label);
   cursor: pointer;
   display: flex;
@@ -275,10 +274,24 @@ body.offline .main { opacity: 0.4; }
   text-align: center;
   overflow: hidden;
 }
+/* Scale the stroke after layout so the browser can paint half a CSS pixel. */
+.tile::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 200%;
+  transform-origin: top left;
+  transform: scale(0.5);
+  border: calc(2 * var(--tile-border-width, 0.5px)) solid var(--t-border);
+  border-radius: calc(2 * var(--r-tile));
+  pointer-events: none;
+}
 .tile:hover { --t-border: var(--dim); }
 .tile.st-waiting:hover { --t-border: var(--ink); }
 .tile:active { --t-bg: var(--ink); --body: var(--bg); --label: var(--bg); --meta: var(--bg); --t-border: var(--ink); }
-.tile.selected { --t-bg: var(--sel); --t-border: var(--dim); --t-bw: 2px; }
+.tile.selected { --t-bg: var(--sel); --t-border: var(--dim); }
 .tile.selected::after { content: ""; position: absolute; left: 50%; bottom: 8px; width: 24px; height: 2px; margin-left: -12px; background: var(--label); }
 /* focused (its terminal is in front on the Mac): a lifted fill */
 .tile.focused { --t-bg: var(--focus-bg); --t-border: var(--focus-bg); }
