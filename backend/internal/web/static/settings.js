@@ -4,7 +4,7 @@
 
 import { buildPicker, themes, followThemeChanges } from './theme.js';
 
-import { titleWidth, titleWidthKey, titleWidths } from './layout.js';
+import { drawerFont, tileFont, fontSize } from './layout.js';
 
 const PAGES = ['general', 'agents', 'appearance', 'layout', 'boards', 'network', 'updates', 'troubleshoot', 'about'];
 const SCOPES = [
@@ -1727,17 +1727,21 @@ function drawAppearance() {
   return buildPicker(themeList, { h, row });
 }
 
-function drawLayout() {
-  const width = titleWidth();
+function fontRow(pref, id, label, description) {
   const select = h('select', {
-    id: 'drawer-title-width',
-    onchange: e => {
-      try { localStorage.setItem(titleWidthKey, e.target.value); }
-      catch { e.target.value = String(width); toast('Could not save the title width in this browser.', true); }
+    id, onchange: e => {
+      try { localStorage.setItem(pref.key, e.target.value); }
+      catch { e.target.value = String(fontSize(pref)); toast('Could not save the font size in this browser.', true); }
     },
-  }, titleWidths.map(n => h('option', { value: n, selected: n === width }, n + '%')));
-  return row(h('label', { for: 'drawer-title-width' }, 'Session title width'),
-    'Percentage of the session drawer available to the title in this browser.', [select]);
+  }, pref.sizes.map(n => h('option', {value:n, selected:n === fontSize(pref)}, n ? n + ' px' : 'Automatic')));
+  return row(h('label', {for:id}, label), description, [select]);
+}
+
+function drawLayout() {
+  return [
+    fontRow(drawerFont, 'drawer-title-size', 'Session title font size', 'Text size of the title in the session drawer.'),
+    fontRow(tileFont, 'tile-name-size', 'Agent tile font size', 'Text size of agent names on the deck.'),
+  ];
 }
 
 const DRAW = {

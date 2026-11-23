@@ -5,15 +5,19 @@
 import { needsYou as needsYouScreen, packed, simulate, SPOTS } from './attention.js';
 
 import { followThemeChanges } from './theme.js';
-import { titleWidth, titleWidthKey } from './layout.js';
+import { drawerFont, tileFont, fontSize } from './layout.js';
 
-function applyTitleWidth() {
-  document.documentElement.style.setProperty('--drawer-title-width', titleWidth() + '%');
+function applyFontSizes() {
+  const style = document.documentElement.style;
+  style.setProperty('--drawer-title-size', fontSize(drawerFont) + 'px');
+  const tile = fontSize(tileFont);
+  if (tile) style.setProperty('--tile-name-size', tile + 'px');
+  else style.removeProperty('--tile-name-size');
 }
-applyTitleWidth();
-addEventListener('pageshow', applyTitleWidth);
+applyFontSizes();
+addEventListener('pageshow', applyFontSizes);
 addEventListener('storage', e => {
-  if (e.key === titleWidthKey || e.key === null) applyTitleWidth();
+  if (e.key === null || e.key === drawerFont.key || e.key === tileFont.key) applyFontSizes();
 });
 
 const $ = (id) => document.getElementById(id);
@@ -440,6 +444,8 @@ function hatSVG(hat, oni, faded, animate = false) {
 // Poses of a working agent: its hat animates; every other pose keeps it still.
 const WORKING_POSES = new Set(['run', 'think', 'read', 'write', 'bash', 'web', 'plan', 'delegate', 'compact']);
 
+const SLEEP_MARK = '<text class="zt zz" x="14.8" y="-0.6" font-size="3.2">z</text><text class="zt zz" x="16.6" y="-2.4" font-size="2.3">z</text>';
+
 function spriteSVG(pose, species = 'claude', hat = null, opts = {}) {
   const bot = species === 'codex';
   const working = WORKING_POSES.has(pose);
@@ -522,7 +528,7 @@ function spriteSVG(pose, species = 'claude', hat = null, opts = {}) {
       eyes = '<rect class="b" x="4" y="3" width="1" height="1"/><rect class="b" x="9" y="3" width="1" height="1"/>'; break;
     default: // idle: asleep
       eyes = eyesShut;
-      bubble = '<text class="zt zz" x="14.8" y="-0.6" font-size="3.2">z</text><text class="zt zz" x="16.6" y="-2.4" font-size="2.3">z</text>';
+      bubble = SLEEP_MARK;
   }
   // The block's face sits half a row higher than the onigiri's.
   const face = bot ? eyes : `<g transform="translate(0 -0.5)">${eyes}</g>`;
@@ -572,6 +578,61 @@ function makeRing() {
 }
 
 // wire makes it draggable: onto the deck's slots (wireDrag) or the "needs you" spots.
+let detailClick;
+let quickTarget;
+const quickForm = $('quick-message');
+function closeQuickMessage() {
+  quickForm.hidden = true;
+  quickTarget = null;
+}
+function positionQuickMessage() {
+  if (!quickTarget) return;
+  const r = quickTarget.anchor.getBoundingClientRect();
+  if (!quickTarget.anchor.isConnected || !r.width) { closeQuickMessage(); return; }
+  const w = quickForm.offsetWidth, h = quickForm.offsetHeight;
+  const right = r.right + 8;
+  const left = right + w <= innerWidth - 8 ? right : r.left - w - 8;
+  quickForm.style.left = Math.max(8, Math.min(innerWidth-w-8, left >= 8 ? left : r.left)) + 'px';
+  const top = left >= 8 ? r.top : r.bottom + 8;
+  quickForm.style.top = Math.max(8, Math.min(innerHeight-h-8, top)) + 'px';
+}
+function openQuickMessage(id, anchor) {
+  const agent = sshState.sessions.find(s => s.id === id) || state?.agents.find(s => s.id === id);
+  if (!agent) return;
+  closeDetail();
+  quickTarget = {anchor, id:agent.threadID || id, host:agent.sshHost || ''};
+  $('quick-title').textContent = 'Message ' + (agent.title || id);
+  $('quick-feedback').textContent = '';
+  $('quick-text').disabled = false;
+  $('quick-text').value = '';
+  quickForm.hidden = false;
+  positionQuickMessage();
+  $('quick-text').focus({preventScroll:true});
+}
+quickForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const target = quickTarget, input = $('quick-text');
+  if (!target || input.disabled || !input.value.trim()) return;
+  input.disabled = true;
+  setText($('quick-feedback'), 'Sending…');
+  const result = await api('/admin/v1/agents/message', {host:target.host,id:target.id,text:input.value});
+  if (target !== quickTarget) return;
+  input.disabled = false;
+  if (result.ok) input.value = '';
+  setText($('quick-feedback'), result.ok ? 'Sent' : result.error);
+  positionQuickMessage();
+  input.focus({preventScroll:true});
+});
+$('quick-close').addEventListener('click', closeQuickMessage);
+quickForm.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    event.preventDefault(); event.stopPropagation();
+    quickTarget?.anchor.focus(); closeQuickMessage();
+  }
+});
+addEventListener('resize', positionQuickMessage);
+document.addEventListener('scroll', positionQuickMessage, true);
+
 function makeTile(a, wire = wireDrag) {
   const spr = h('span', { class: 'spr' });
   const name = h('span', { class: 'name' });
@@ -582,7 +643,21 @@ function makeTile(a, wire = wireDrag) {
   const chip = h('span', { class: 'chip', 'aria-hidden': 'true' }); // the tool's colour, or its Claude account's
   const el = h('button', { type: 'button', class: 'tile', 'data-id': a.id },
     chip, subs, spr, name, meta, ring.svg, bar);
-  el.addEventListener('click', () => openDetail(a.id));
+  el.addEventListener('click', event => {
+    clearTimeout(detailClick);
+    if (!event.detail) { closeQuickMessage(); openDetail(a.id); return; }
+    if (event.detail === 1) detailClick = setTimeout(() => {
+      closeQuickMessage(); openDetail(a.id);
+    }, 350);
+  });
+  el.addEventListener('dblclick', event => {
+    event.preventDefault(); clearTimeout(detailClick); openQuickMessage(a.id, el);
+  });
+  el.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && event.shiftKey) {
+      event.preventDefault(); openQuickMessage(a.id, el);
+    }
+  });
   if (wire) {
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); openTileMenu(a.id, e.clientX, e.clientY); });
     el.addEventListener('keydown', (e) => {
@@ -1634,6 +1709,26 @@ function handoffButton(a, acc, note) {
   return b;
 }
 
+function updateStatusPill(pill, a) {
+  const label = pillText(a);
+  if (a.status !== 'idle' || !label.startsWith('idle')) {
+    pill.removeAttribute('title');
+    setText(pill, label);
+    return;
+  }
+  if (!pill.firstElementChild) {
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.setAttribute('class', 'idle-mark');
+    icon.setAttribute('viewBox', '14 -5 5 5');
+    icon.setAttribute('role', 'img');
+    icon.setAttribute('aria-label', 'Idle');
+    icon.innerHTML = SLEEP_MARK;
+    pill.replaceChildren(icon, document.createTextNode(''));
+  }
+  pill.title = 'Idle' + label.slice(4);
+  pill.lastChild.textContent = label.slice(4);
+}
+
 function header(a) {
   const spr = h('span', { class: 'd-spr' });
   const crew = h('span', { class: 'd-crew', role: 'img' });
@@ -1662,7 +1757,7 @@ function header(a) {
     spr.addEventListener('click', toggle);
     spr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
   }
-  return { el: h('div', { class: 'd-head' }, el, h('div', { class: 'd-id' }, title, ai), hats?.el), update: (x) => { setText(title, x.title); acct.update(x); setText(pill, pillText(x)); setText(ai, x.aiTitle || ''); ai.hidden = !x.aiTitle; crewUpdate(crew, x); setSprite(spr, poseOf(x), x.tool, x.hat); hats?.update(x); } };
+  return { el: h('div', { class: 'd-head' }, el, h('div', { class: 'd-id' }, title, ai), hats?.el), update: (x) => { setText(title, x.title); acct.update(x); updateStatusPill(pill, x); setText(ai, x.aiTitle || ''); ai.hidden = !x.aiTitle; crewUpdate(crew, x); setSprite(spr, poseOf(x), x.tool, x.hat); hats?.update(x); } };
 }
 
 function postAction(a, path, body) {
@@ -1919,6 +2014,7 @@ function render() {
   renderTop();
   renderGrid();
   renderDetail();
+  positionQuickMessage();
 }
 
 function applyState(s) {

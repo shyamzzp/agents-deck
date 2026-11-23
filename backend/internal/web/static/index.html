@@ -74,6 +74,12 @@
       <progress id="ssh-refresh" aria-label="Refreshing Codebox sessions" hidden></progress>
     </div><span id="ssh-group-note" class="group-note" role="status"></span><div id="ssh-sessions" class="grid" aria-label="SSH agent tiles"></div></section>
   </main>
+  <form id="quick-message" aria-label="Message session" hidden>
+    <label for="quick-text" id="quick-title"></label>
+    <button type="button" id="quick-close" aria-label="Close message box">×</button>
+    <input id="quick-text" type="text" autocomplete="off" required placeholder="Message · Enter to send">
+    <span id="quick-feedback" role="status"></span>
+  </form>
   <aside id="detail" class="detail" aria-label="agent detail" hidden></aside>
 </div>
 

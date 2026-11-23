@@ -316,7 +316,7 @@ body.offline .main { opacity: 0.4; }
 .tile .spr svg, .empty-art svg { transform: translateX(11.111%); }
 .tile .name {
   margin-top: 9%;
-  font-size: 16px; letter-spacing: 0.5px; color: var(--label);
+  font-size: var(--tile-name-size, 16px); letter-spacing: 0.5px; color: var(--label);
   max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .tile .meta {
@@ -488,7 +488,7 @@ body.offline .main { opacity: 0.4; }
 .hatpick-foot { display: flex; align-items: center; gap: 12px; }
 .hatpick-foot .toggle:disabled { opacity: 0.5; cursor: default; }
 .hatpick-note { color: var(--accent); font-size: 13px; }
-.d-id { width: var(--drawer-title-width, 95%); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.d-id { width: 100%; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .d-spr { width: 54px; flex-shrink: 0; line-height: 0; }
 .d-spr svg { width: 100%; height: auto; overflow: visible; }
 .d-mascots { display: flex; align-items: flex-end; gap: 14px; }
@@ -499,7 +499,7 @@ body.offline .main { opacity: 0.4; }
 .d-crew-n { font-family: var(--f-label); font-size: 12px; color: var(--d-dim); margin-left: 6px; white-space: nowrap; }
 .d-title:focus { outline: none; }
 .d-title {
-  margin: 0; font-family: var(--f-head); font-weight: 700; font-size: 28px; letter-spacing: -0.3px;
+  margin: 0; font-family: var(--f-head); font-weight: 700; font-size: var(--drawer-title-size, 24px); letter-spacing: -0.3px;
   overflow-wrap: anywhere;
 }
 .d-ai { color: var(--d-dim); font-size: 14px; margin-top: -4px; }
@@ -521,6 +521,7 @@ body.offline .main { opacity: 0.4; }
   font-size: 14px; padding: 4px 8px; border-radius: 8px; overflow-wrap: anywhere;
   background: var(--d-fg); color: var(--d-bg);
 }
+.idle-mark { width: 1.25em; height: 1.25em; vertical-align: middle; }
 .p-question .pill, .p-error .pill { background: var(--accent); color: var(--bg); }
 .p-dim .pill { background: transparent; color: var(--dim); box-shadow: inset 0 0 0 1px var(--dim); }
 
@@ -629,9 +630,8 @@ body.offline .main { opacity: 0.4; }
   .top-right { width: 100%; justify-content: space-between; }
   .wordmark { font-size: 20px; }
   .clock { font-size: 17px; }
-  .tile .name { font-size: 15px; }
+  .tile .name { font-size: var(--tile-name-size, 15px); }
   .tile .meta { font-size: 12px; }
-  .d-title { font-size: 24px; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .btn { font-size: 16px; }
   .btn.narrow { flex: 1 1 0; }
@@ -653,7 +653,7 @@ body.offline .main { opacity: 0.4; }
   }
   body:not(.panel-mode) .tile .spr { grid-row: 1 / span 2; width: 58px; margin: 0; }
   body:not(.panel-mode) .tile .spr svg { transform: none; }
-  body:not(.panel-mode) .tile .name { margin: 0; align-self: end; font-size: 16px; }
+  body:not(.panel-mode) .tile .name { margin: 0; align-self: end; font-size: var(--tile-name-size, 16px); }
   body:not(.panel-mode) .tile .meta { margin: 3px 0 0; align-self: start; font-size: 13px; }
   body:not(.panel-mode) .tile .ring { display: none; }
   body:not(.panel-mode) .tile .ctxbar {
@@ -728,7 +728,7 @@ body.panel-mode .grid {
   container-type: inline-size;
 }
 body.panel-mode .tile { aspect-ratio: auto; width: 100%; height: 100%; min-height: 0; padding: 4% 5%; }
-body.panel-mode .tile .name { font-size: clamp(9px, 2.2cqi, 16px); }
+body.panel-mode .tile .name { font-size: var(--tile-name-size, clamp(9px, 2.2cqi, 16px)); }
 body.panel-mode .tile .meta { font-size: clamp(8px, 1.75cqi, 12.5px); }
 /* ---------- the menu a right-click on a tile opens ---------- */
 .tilemenu {
@@ -816,3 +816,11 @@ body:not(.panel-mode) .pagebar { position: sticky; bottom: 0; margin-top: 8px; b
 @media (max-width: 640px) {
   body:not(.panel-mode) #ssh-sessions .ssh-add { aspect-ratio: auto; min-height: 3rem; }
 }
+
+#quick-message:not([hidden]) { position: fixed; z-index: 35; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; width: min(300px, calc(100vw - 16px)); padding: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+#quick-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#quick-text, #quick-feedback { grid-column: 1 / -1; min-width: 0; }
+#quick-text { padding: 8px; background: var(--bg); color: var(--ink); border: 1px solid var(--dim); }
+#quick-close { background: transparent; border: 0; color: inherit; cursor: pointer; }
+#quick-feedback { font-size: 13px; }
+#quick-feedback:empty { display: none; }

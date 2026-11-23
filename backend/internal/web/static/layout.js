@@ -1,11 +1,15 @@
-// Drawer layout preferences belong to the browser displaying the deck.
-export const titleWidthKey = 'agents.drawerTitleWidth';
-export const titleWidths = [60, 70, 80, 90, 95, 100];
+// Layout preferences belong to the browser displaying the deck.
+export const drawerFont = {
+  key: 'agents.drawerTitleSize', sizes: [16, 18, 20, 22, 24, 26, 28, 32, 36], defaultSize: 24,
+};
+export const tileFont = {
+  key: 'agents.tileNameSize', sizes: [0, 12, 14, 16, 18, 20, 22, 24, 28], defaultSize: 0,
+};
 
-export function titleWidth() {
+export function fontSize(pref) {
   try {
-    const width = Number(localStorage.getItem(titleWidthKey));
-    if (titleWidths.includes(width)) return width;
+    const saved = localStorage.getItem(pref.key);
+    if (saved !== null && pref.sizes.includes(Number(saved))) return Number(saved);
   } catch { /* use the default when storage is unavailable */ }
-  return 95;
+  return pref.defaultSize;
 }

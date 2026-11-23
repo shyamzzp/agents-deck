@@ -49,7 +49,10 @@ func Command(ctx context.Context, host, action, id string) (*exec.Cmd, error) {
 	if action == "attach" {
 		args = append(args, "-t")
 	} else {
-		args = append(args, "-T", "-n", "-oBatchMode=yes")
+		args = append(args, "-T", "-oBatchMode=yes")
+		if action != "queue" {
+			args = append(args, "-n")
+		}
 	}
 	command := `exec "$HOME/.local/bin/agents-deck-codex-reader"`
 	switch action {
@@ -63,6 +66,12 @@ func Command(ctx context.Context, host, action, id string) (*exec.Cmd, error) {
 			}
 			command += " watch " + strings.Join(ids, " ")
 		}
+	case "queue":
+		if len(id) != 36 || !idPattern.MatchString(id) {
+			return nil, errors.New("invalid Codex thread")
+		}
+		// Only the validated UUID enters the remote command. Text arrives via stdin.
+		command = `exec codex queue --thread ` + id + ` --message="$(cat)"`
 	case "list", "terminals":
 		command += " " + action
 	case "show", "attach":
