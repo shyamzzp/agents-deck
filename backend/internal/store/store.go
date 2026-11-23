@@ -52,6 +52,7 @@ type Entry struct {
 	Offset  int64               `json:"-"`
 	Usage   map[string]msgUsage `json:"-"` // message id -> last usage seen
 	Pending string              `json:"-"` // partial trailing line
+	Prompts int                 `json:"-"` // prompts counted in the transcript (hooks count their own)
 	PromptN int                 `json:"promptN"`
 	Menu    bool                `json:"-"`              // current prompt is an arrow-key menu, not numbered
 	Form    *Form               `json:"form,omitempty"` // the open question form, walked one step at a time

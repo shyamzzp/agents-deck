@@ -244,16 +244,16 @@ func TestTranscriptTurnIgnoresNotes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "s.jsonl")
 	old := time.Now().Add(-3 * time.Hour)
 	writeTo(t, path, append([]string{prompt(old, "go"), toolCall(old, "m1", "Bash"), interrupt(old, true)}, idleNotes(time.Now())...)...)
-	if running, _ := TranscriptTurn(path, 10*time.Minute); running {
+	if running, _, _ := TranscriptTurn(path, 10*time.Minute, ""); running {
 		t.Fatal("interrupted turn shown running")
 	}
 	// A prompt hours old with nothing after it: not a turn in progress either.
 	writeTo(t, path, append([]string{prompt(old, "go")}, idleNotes(time.Now())...)...)
-	if running, _ := TranscriptTurn(path, 10*time.Minute); running {
+	if running, _, _ := TranscriptTurn(path, 10*time.Minute, ""); running {
 		t.Fatal("notes count as activity")
 	}
 	writeTo(t, path, prompt(time.Now(), "go"))
-	if running, _ := TranscriptTurn(path, 10*time.Minute); !running {
+	if running, _, _ := TranscriptTurn(path, 10*time.Minute, ""); !running {
 		t.Fatal("a fresh prompt is a turn in progress")
 	}
 }

@@ -93,11 +93,11 @@ func TestTmuxActive(t *testing.T) {
 // herdr gives no times: an agent it reports working is active now.
 func TestHerdrWorkingStampsActivity(t *testing.T) {
 	e := &store.Entry{A: model.Agent{Status: model.Idle}}
-	herdrApply(e, herdr.Agent{Status: "idle"}, "", "")
+	herdrApply(e, herdr.Agent{Status: "idle"}, "", "", "")
 	if !e.A.LastActive.IsZero() {
 		t.Fatal("idle on first sight says nothing about when")
 	}
-	herdrApply(e, herdr.Agent{Status: "working"}, "", "")
+	herdrApply(e, herdr.Agent{Status: "working"}, "", "", "")
 	if time.Since(e.A.LastActive) > time.Minute {
 		t.Fatalf("working: last active %v", e.A.LastActive)
 	}

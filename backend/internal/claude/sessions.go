@@ -217,12 +217,12 @@ func ReadSession(path, id string) (SessionInfo, bool) { return readSession(path,
 // TranscriptTurn reads the end of a session transcript: whether a turn is in
 // progress (the turn isn't over, and its last message came within window or
 // a tool call is still out), and the tool of the latest call.
-func TranscriptTurn(path string, window time.Duration) (running bool, tool string) {
+func TranscriptTurn(path string, window time.Duration, cwd string) (running bool, tool, detail string) {
 	t, ok := ReadTurn(path)
 	if !ok || t.Over {
-		return false, ""
+		return false, "", ""
 	}
-	return t.InTool || time.Since(t.At) < window, t.Tool
+	return t.InTool || time.Since(t.At) < window, t.Tool, ToolDetail(t.Tool, t.Input, cwd)
 }
 
 // subagentTail reads the end of a subagent transcript: whether its last

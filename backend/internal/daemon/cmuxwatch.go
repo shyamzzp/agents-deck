@@ -141,12 +141,12 @@ func (d *Daemon) syncCmux(list []cmux.Session) {
 				e.SessionID, e.Transcript, e.Offset, e.Usage, e.Pending = s.ID, s.Transcript, 0, nil, ""
 				changed = true
 			}
-			tool, interrupted, turn := "", time.Time{}, false
+			tool, detail, interrupted, turn := "", "", time.Time{}, false
 			if e.Transcript != "" {
 				if claude.Tail(e) { // model, context, tokens, cost, title
 					changed = true
 				}
-				turn, tool = claude.TranscriptTurn(e.Transcript, 10*time.Minute)
+				turn, tool, detail = claude.TranscriptTurn(e.Transcript, 10*time.Minute, e.A.Cwd)
 				interrupted = claude.InterruptedAt(e.Transcript)
 			}
 			// cmux lists only sessions whose process is alive; when it
@@ -161,7 +161,7 @@ func (d *Daemon) syncCmux(list []cmux.Session) {
 			if s.Updated > 0 && e.MarkActiveStep(seconds(s.Updated)) { // cmux's hooks' own time
 				changed = true
 			}
-			changed = cmuxApply(e, s, tool, screen, interrupted, background) || changed
+			changed = cmuxApply(e, s, tool, detail, screen, interrupted, background) || changed
 			return claude.FollowSubagents(e) || changed
 		})
 	}
@@ -172,7 +172,7 @@ func (d *Daemon) syncCmux(list []cmux.Session) {
 // terminal's text when a new question appeared, interrupted when the
 // transcript last shows a turn interrupted (zero if not), background when
 // only its subagents work (the main thread is between turns).
-func cmuxApply(e *store.Entry, s cmux.Session, tool, screen string, interrupted time.Time, background bool) bool {
+func cmuxApply(e *store.Entry, s cmux.Session, tool, detail, screen string, interrupted time.Time, background bool) bool {
 	changed := false
 	state := s.Lifecycle
 	// No hook runs when a turn is interrupted: an interrupt after the hooks'
@@ -199,7 +199,7 @@ func cmuxApply(e *store.Entry, s cmux.Session, tool, screen string, interrupted 
 		}
 		var act *model.Activity
 		if tool != "" {
-			act = &model.Activity{Tool: tool}
+			act = &model.Activity{Tool: tool, Detail: detail}
 		}
 		if !activityEqual(act, e.A.Activity) {
 			e.A.Activity, changed = act, true

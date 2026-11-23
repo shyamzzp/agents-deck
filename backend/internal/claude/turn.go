@@ -10,10 +10,13 @@ import (
 
 // Turn is where a session's turn stands, from the end of its transcript.
 type Turn struct {
-	Over   bool      // Claude's final reply, an API error or an interrupt (Esc) ends it
-	InTool bool      // the latest message is a tool call still waiting for its result
-	Tool   string    // the tool of the latest call
-	At     time.Time // when the latest message was written (the file's time if none was found)
+	Over   bool   // Claude's final reply, an API error or an interrupt (Esc) ends it
+	InTool bool   // the latest message is a tool call still waiting for its result
+	Tool   string // the tool of the latest call
+	// Input is what that call was given, for ToolDetail: a watched session
+	// has no hook to tell us, so this is read off the transcript instead.
+	Input json.RawMessage
+	At    time.Time // when the latest message was written (the file's time if none was found)
 }
 
 const (
@@ -80,8 +83,9 @@ func ReadTurn(path string) (t Turn, ok bool) {
 		}
 		d, ends := l.turnState()
 		var blocks []struct {
-			Type string `json:"type"`
-			Name string `json:"name"`
+			Type  string          `json:"type"`
+			Name  string          `json:"name"`
+			Input json.RawMessage `json:"input"`
 		}
 		if d && l.Type == "assistant" {
 			_ = json.Unmarshal(l.Message.Content, &blocks)
@@ -97,7 +101,7 @@ func ReadTurn(path string) (t Turn, ok bool) {
 		}
 		for _, b := range blocks {
 			if b.Type == "tool_use" && found.Tool == "" {
-				found.Tool = b.Name
+				found.Tool, found.Input = b.Name, b.Input
 			}
 		}
 		return found.Tool == "" && (!decided || past < turnTool)
@@ -108,7 +112,7 @@ func ReadTurn(path string) (t Turn, ok bool) {
 		seen.turn, seen.decided = prev.turn, prev.decided
 	}
 	if hit && seen.turn.Tool == "" {
-		seen.turn.Tool = prev.turn.Tool
+		seen.turn.Tool, seen.turn.Input = prev.turn.Tool, prev.turn.Input
 	}
 	if !seen.decided {
 		seen.turn.At = st.ModTime()

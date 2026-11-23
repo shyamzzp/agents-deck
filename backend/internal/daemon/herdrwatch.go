@@ -144,12 +144,12 @@ func (d *Daemon) syncHerdr(snaps map[string]herdr.Snapshot) {
 				e.SessionID, e.Transcript, e.Offset, e.Usage, e.Pending = session.SessionID, session.Transcript, 0, nil, ""
 				changed = true
 			}
-			tool := ""
+			tool, detail := "", ""
 			if e.Transcript != "" && e.A.Tool == "claude" {
 				if claude.Tail(e) { // model, context, tokens, cost
 					changed = true
 				}
-				_, tool = claude.TranscriptTurn(e.Transcript, 10*time.Minute)
+				_, tool, detail = claude.TranscriptTurn(e.Transcript, 10*time.Minute, e.A.Cwd)
 			}
 			if t := herdrTitle(r); t != e.A.Title && e.A.AITitle == "" {
 				e.A.Title, changed = t, true
@@ -157,7 +157,7 @@ func (d *Daemon) syncHerdr(snaps map[string]herdr.Snapshot) {
 			if dir != "" && dir != e.A.Cwd {
 				e.A.Cwd, e.A.Folder, changed = dir, filepath.Base(dir), true
 			}
-			return herdrApply(e, r.a, tool, screen) || changed
+			return herdrApply(e, r.a, tool, detail, screen) || changed
 		})
 	}
 }
@@ -188,7 +188,7 @@ func (d *Daemon) herdrSession(r herdrRow) claude.Live {
 // herdrApply maps herdr's status onto the agent; tool is the tool call the
 // agent is in (from its transcript), screen (may be "") the pane's text when
 // a new prompt appeared.
-func herdrApply(e *store.Entry, a herdr.Agent, tool, screen string) bool {
+func herdrApply(e *store.Entry, a herdr.Agent, tool, detail, screen string) bool {
 	changed := false
 	switch a.Status {
 	case "working":
@@ -204,7 +204,7 @@ func herdrApply(e *store.Entry, a herdr.Agent, tool, screen string) bool {
 		}
 		var act *model.Activity
 		if tool != "" {
-			act = &model.Activity{Tool: tool}
+			act = &model.Activity{Tool: tool, Detail: detail}
 		}
 		if !activityEqual(act, e.A.Activity) {
 			e.A.Activity, changed = act, true

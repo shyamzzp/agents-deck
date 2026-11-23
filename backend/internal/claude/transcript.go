@@ -60,7 +60,7 @@ func Tail(e *store.Entry) bool {
 	}
 	defer f.Close()
 	if st, err := f.Stat(); err != nil || st.Size() < e.Offset {
-		e.Offset, e.Usage, e.Pending = 0, nil, "" // truncated or replaced
+		e.Offset, e.Usage, e.Pending, e.Prompts = 0, nil, "", 0 // truncated or replaced
 	} else if st.Size() == e.Offset {
 		return false
 	}
@@ -122,6 +122,18 @@ func Tail(e *store.Entry) bool {
 				if l.Custom != e.CustomTitle {
 					e.CustomTitle, changed = l.Custom, true
 				}
+			case "user":
+				// What you asked it, and how many times. A session the deck
+				// only watches runs no hooks of ours, so the transcript is
+				// where both come from; hooks keep their own count, and the
+				// two are reconciled below.
+				if p, ok := l.prompt(); ok {
+					e.Prompts++
+					if p != e.A.LastPrompt {
+						e.A.LastPrompt = p
+					}
+					changed = true
+				}
 			case "assistant":
 				if l.Message == nil {
 					continue
@@ -169,11 +181,52 @@ func Tail(e *store.Entry) bool {
 			e.A.Context.Window = 1_000_000
 		}
 	}
+	// An agent of ours is counted by its UserPromptSubmit hook, one that is
+	// only watched by the lines read here. Whichever has seen more is the
+	// number, so neither path doubles the other.
+	if e.Prompts > e.A.Turns {
+		e.A.Turns, changed = e.Prompts, true
+	}
 	if changed {
 		e.A.Tokens, e.A.CostUSD = e.Totals(pricing.Cost)
 		e.A.Title = e.DisplayTitle() // names follow Claude's titles live
 	}
 	return changed
+}
+
+// prompt is what you typed, when the line is a prompt of yours: a plain
+// string, or text blocks. A tool's result, Claude Code's own notes
+// (isMeta, the slash-command wrappers in angle brackets), a compaction's
+// summary and the note left by Esc are not prompts.
+func (l line) prompt() (string, bool) {
+	if l.Message == nil || l.IsMeta || l.Sidechain || l.Summary || l.ShownOnly {
+		return "", false
+	}
+	var text string
+	if err := json.Unmarshal(l.Message.Content, &text); err != nil {
+		var blocks []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(l.Message.Content, &blocks) != nil {
+			return "", false
+		}
+		for _, b := range blocks {
+			if b.Type != "text" {
+				return "", false // a tool result, an image: not a prompt
+			}
+			if text != "" {
+				text += " "
+			}
+			text += b.Text
+		}
+	}
+	text = oneLine(text)
+	if text == "" || strings.HasPrefix(text, "<") ||
+		strings.HasPrefix(text, "[Request interrupted by user") {
+		return "", false
+	}
+	return clip(text, model.LastPromptMax), true
 }
 
 // activeAt is when a line counts as the agent's activity: a message sent to
