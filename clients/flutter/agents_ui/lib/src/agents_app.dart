@@ -44,6 +44,7 @@ class AgentsApp extends StatefulWidget {
     this.leadingPage,
     this.pageTitles = const {},
     this.onRenamePage,
+    this.onHoldAttention,
   }) : assert(pageShapes.length > 0, 'the deck needs a shape'),
        assert(
          (openCard == null) == (cardHost == null),
@@ -88,6 +89,11 @@ class AgentsApp extends StatefulWidget {
   /// slot 25 and its third at 41. An agent keeps its slot through all of it;
   /// only which page shows it moves.
   final List<DeckShape> pageShapes;
+
+  /// Holding an agent on the "Needs you" screen. The phone speaks to it:
+  /// dictation, then the text goes to the agent's terminal. Null on a host
+  /// with nothing to dictate with, which leaves the hold alone.
+  final void Function(Agent a)? onHoldAttention;
 
   /// What each page is called, by page index; -1 is the "Needs you" screen.
   /// A page with no name of its own is called "page N".
@@ -552,6 +558,7 @@ class _AgentsAppState extends State<AgentsApp> {
                               agent: a,
                               state: state,
                               onOpen: _open,
+                              onHold: widget.onHoldAttention,
                               ringWidth: widget.contextRingWidth,
                             ),
                           )
@@ -724,10 +731,15 @@ class AgentTile extends StatefulWidget {
     required this.state,
     this.ringWidth = ContextRingPainter.defaultStroke,
     required this.onOpen,
+    this.onHold,
   });
 
   final Agent agent;
   final AgentsState state;
+
+  /// Held rather than tapped: dictation on the "Needs you" screen, where a
+  /// tile is not carried anywhere. Null leaves the gesture alone.
+  final void Function(Agent a)? onHold;
   final void Function(BuildContext tileContext, GlobalKey tileKey, Agent a)
   onOpen;
 
@@ -748,6 +760,7 @@ class _AgentTileState extends State<AgentTile> {
     final look = AgentLook.of(a);
     return Pressable(
       key: _tileKey,
+      onLongPress: widget.onHold == null ? null : () => widget.onHold!(a),
       onTap: () => widget.onOpen(context, _tileKey, a),
       builder: (context, pressed) {
         // Pressed = the deck's ink invert.

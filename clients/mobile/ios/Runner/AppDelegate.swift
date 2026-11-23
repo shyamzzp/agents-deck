@@ -12,5 +12,9 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    // Speaking to an agent (Dictation.swift), registered like a plugin would
+    // be: it is this app's own code, not a package.
+    Dictation.register(
+      with: engineBridge.pluginRegistry.registrar(forPlugin: "Dictation")!)
   }
 }

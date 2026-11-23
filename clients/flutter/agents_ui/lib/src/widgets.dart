@@ -14,9 +14,13 @@ class Pressable extends StatefulWidget {
     required this.onTap,
     required this.builder,
     this.behavior = HitTestBehavior.opaque,
+    this.onLongPress,
   });
 
   final VoidCallback? onTap;
+
+  /// Held rather than tapped; null leaves the gesture to whatever is above.
+  final VoidCallback? onLongPress;
   final Widget Function(BuildContext context, bool pressed) builder;
   final HitTestBehavior behavior;
 
@@ -34,13 +38,21 @@ class _PressableState extends State<Pressable> {
   @override
   Widget build(BuildContext context) {
     final tap = widget.onTap;
-    if (tap == null) return widget.builder(context, false);
+    if (tap == null && widget.onLongPress == null) {
+      return widget.builder(context, false);
+    }
     return GestureDetector(
       behavior: widget.behavior,
       onTapDown: (_) => _press(true),
       onTapUp: (_) => _press(false),
       onTapCancel: () => _press(false),
       onTap: tap,
+      onLongPress: widget.onLongPress == null
+          ? null
+          : () {
+              _press(false);
+              widget.onLongPress!();
+            },
       child: widget.builder(context, _down),
     );
   }
@@ -163,10 +175,7 @@ class DeckShape {
 
   int get cells => columns * rows;
 
-  static const panel = DeckShape(
-    DeckGrid.defaultColumns,
-    DeckGrid.defaultRows,
-  );
+  static const panel = DeckShape(DeckGrid.defaultColumns, DeckGrid.defaultRows);
 
   @override
   bool operator ==(Object other) =>
@@ -217,7 +226,11 @@ class DeckCompact extends InheritedWidget {
 /// Rebuilds once a second, so a label holding elapsed time counts up without
 /// the whole deck being rebuilt for it.
 class Ticking extends StatefulWidget {
-  const Ticking({super.key, required this.builder, this.every = const Duration(seconds: 1)});
+  const Ticking({
+    super.key,
+    required this.builder,
+    this.every = const Duration(seconds: 1),
+  });
 
   final WidgetBuilder builder;
   final Duration every;
