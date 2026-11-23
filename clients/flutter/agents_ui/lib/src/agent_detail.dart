@@ -779,7 +779,25 @@ class _AgentDetailState extends State<AgentDetail> {
     required Color body,
     required Color cut,
   }) {
-    final pill = Row(
+    // The clock, which sits against the mascot: the pose says which state
+    // this is, the number says the deck is still hearing from it.
+    final clock = Ticking(
+      key: const Key('agent-pill'),
+      // Ten frames a second is enough to read as moving without spending a
+      // frame on every thousandth.
+      every: const Duration(milliseconds: 100),
+      // Bare text, no box: the number carries the state's colour instead,
+      // which is what the fill was for.
+      builder: (context) => Text(
+        agentPillLabel(a, state),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: DeckHud.mono(size: 15, color: pillFill),
+      ),
+    );
+    // Whose it is, kept at the far end so the clock can have the mascot's
+    // side to itself.
+    final who = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (a.account case final acc?) ...[
@@ -793,7 +811,7 @@ class _AgentDetailState extends State<AgentDetail> {
               style: DeckHud.mono(size: 15, color: ink),
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
         ],
         // The tool's colour, or its Claude account's.
         Container(
@@ -802,30 +820,6 @@ class _AgentDetailState extends State<AgentDetail> {
           color: a.account == null
               ? agentToolColor(a.tool)
               : hatColor(a.account!.color).$1,
-        ),
-        const SizedBox(width: 8),
-        Flexible(
-          child: Container(
-            key: const Key('agent-pill'),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: pillFill,
-              borderRadius: BorderRadius.zero,
-            ),
-            // The seconds move while it works, so the label rebuilds itself
-            // rather than waiting for the deck to.
-            child: Ticking(
-              // Thousandths: ten frames a second is enough to read as moving
-              // without spending a frame on every one of them.
-              every: const Duration(milliseconds: 100),
-              builder: (context) => Text(
-                agentPillLabel(a, state),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: DeckHud.mono(size: 15, color: pillInk),
-              ),
-            ),
-          ),
         ),
       ],
     );
@@ -862,9 +856,13 @@ class _AgentDetailState extends State<AgentDetail> {
                 cut: cut,
               ),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
+            // Both sit on the row's bottom edge, so the clock lines up with
+            // the mascot's feet rather than floating beside its head.
+            Flexible(child: clock),
+            const SizedBox(width: 12),
             Expanded(
-              child: Align(alignment: Alignment.bottomRight, child: pill),
+              child: Align(alignment: Alignment.bottomRight, child: who),
             ),
           ],
         ),
@@ -976,7 +974,7 @@ class _AgentDetailState extends State<AgentDetail> {
             body: body,
             cut: DeckHud.bg,
           ),
-          const SizedBox(height: 26),
+          const SizedBox(height: 14),
           // Doing now, and how many subagents work for it on the right.
           Row(
             children: [
@@ -989,8 +987,12 @@ class _AgentDetailState extends State<AgentDetail> {
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           nowValue,
+          if (_nowAside(state, a) case final aside?) ...[
+            const SizedBox(height: 6),
+            aside,
+          ],
           // The working subagents, one to a row, like the boards draw them.
           if (a.subagents.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -1002,7 +1004,7 @@ class _AgentDetailState extends State<AgentDetail> {
               maxRows: others.isEmpty ? 4 : 2,
             ),
           ],
-          const SizedBox(height: 26),
+          const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
@@ -1024,7 +1026,7 @@ class _AgentDetailState extends State<AgentDetail> {
           ),
           const SizedBox(height: 10),
           TickBar(value: a.contextFraction, color: DeckHud.ink),
-          const SizedBox(height: 26),
+          const SizedBox(height: 16),
           // Four figures as a table: one hairline round the lot and one
           // between each pair, so a column is a cell rather than a gap.
           DecoratedBox(
@@ -1077,7 +1079,7 @@ class _AgentDetailState extends State<AgentDetail> {
               ),
             ),
           ),
-          const SizedBox(height: 26),
+          const SizedBox(height: 16),
           if (state.lastActiveText(a) case final active when active.isNotEmpty)
             Row(
               children: [
@@ -1093,23 +1095,27 @@ class _AgentDetailState extends State<AgentDetail> {
           else
             _label('last prompt', DeckHud.dim),
           const SizedBox(height: 8),
-          // As many lines of it as fit (subagent rows take the room first).
+          // As many lines of it as fit, and never none: what the agent was
+          // last asked is half of why the card is open. On a phone that
+          // leaves one line, clipped rather than dropped.
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, box) {
-                const style = TextStyle(height: 1.45);
-                // Keep clear of the footer under it.
-                final lines = ((box.maxHeight - 10) / (17 * 1.45))
-                    .floor()
-                    .clamp(0, 4);
-                if (lines == 0) return const SizedBox.shrink();
-                return Text(
-                  a.lastPrompt.isEmpty ? '—' : a.lastPrompt,
-                  maxLines: lines,
-                  overflow: TextOverflow.ellipsis,
-                  style: DeckHud.rm(17, DeckHud.ink).merge(style),
-                );
-              },
+            child: ClipRect(
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  const style = TextStyle(height: 1.45);
+                  // Keep clear of the footer under it.
+                  final lines = ((box.maxHeight - 10) / (17 * 1.45))
+                      .floor()
+                      .clamp(1, 4);
+                  return Text(
+                    a.lastPrompt.isEmpty ? '—' : a.lastPrompt,
+                    key: const Key('agent-last-prompt'),
+                    maxLines: lines,
+                    overflow: TextOverflow.ellipsis,
+                    style: DeckHud.rm(17, DeckHud.ink).merge(style),
+                  );
+                },
+              ),
             ),
           ),
           Row(
@@ -1157,7 +1163,7 @@ class _AgentDetailState extends State<AgentDetail> {
               ],
             ),
           ],
-          const SizedBox(height: 22),
+          const SizedBox(height: 14),
           Row(
             children: [
               ..._back(
@@ -1256,10 +1262,38 @@ class _AgentDetailState extends State<AgentDetail> {
     );
   }
 
-  (String, Widget) _doingNow(Agent a) {
-    Widget line(String text, {Color? color}) => Text(
-      text,
+  /// The second line of "doing now": the things worth a glance that are not
+  /// already a figure of their own below, each dropped when it has nothing to
+  /// say. Joined with the deck's dot so a narrow phone can cut it anywhere.
+  Widget? _nowAside(AgentsState state, Agent a) {
+    final bits = <String>[
+      if (a.status == AgentStatus.running &&
+          a.activity != null &&
+          a.activity!.tool.toLowerCase() != a.activity!.verb)
+        a.activity!.tool.toLowerCase(),
+      if (a.queued > 0) '${a.queued} queued',
+      if (a.turns > 0) 'turn ${a.turns}',
+      if (a.contextWindow > 0) '${a.contextPercent}% ctx',
+      if (a.subagents.isNotEmpty) subagentCount(a.subagents.length),
+      if (state.upText(a) case final up when up.isNotEmpty) 'up $up',
+      if (a.attached) 'attached',
+      if (a.queued == 0 && a.external)
+        a.inApp ? 'watched · ${a.app}' : 'watched',
+    ];
+    if (bits.isEmpty) return null;
+    return Text(
+      bits.join(' · '),
+      key: const Key('agent-now-aside'),
       maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: DeckHud.mono(size: 13, color: DeckHud.dim),
+    );
+  }
+
+  (String, Widget) _doingNow(Agent a) {
+    Widget line(String text, {Color? color, int lines = 1}) => Text(
+      text,
+      maxLines: lines,
       overflow: TextOverflow.ellipsis,
       style: DeckHud.rm(20, color ?? DeckHud.ink),
     );
@@ -1282,7 +1316,9 @@ class _AgentDetailState extends State<AgentDetail> {
                 ],
               ],
             ),
-            maxLines: 1,
+            // Two lines: a path or a command is the thing you came to read,
+            // and one line of a phone's width cuts most of them off.
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: DeckHud.rm(20, DeckHud.ink),
           ),
@@ -1290,7 +1326,7 @@ class _AgentDetailState extends State<AgentDetail> {
       case AgentStatus.error:
         return (
           'error',
-          line(a.errorMessage ?? 'error', color: DeckHud.accent),
+          line(a.errorMessage ?? 'error', color: DeckHud.accent, lines: 2),
         );
       case AgentStatus.starting:
         return (
@@ -1302,7 +1338,7 @@ class _AgentDetailState extends State<AgentDetail> {
       case AgentStatus.unknown:
       case AgentStatus.waiting:
         final t = a.aiTitle.isNotEmpty ? a.aiTitle : a.folder;
-        return ('session', line(t.isEmpty ? '—' : t.toLowerCase()));
+        return ('session', line(t.isEmpty ? '—' : t.toLowerCase(), lines: 2));
     }
   }
 
