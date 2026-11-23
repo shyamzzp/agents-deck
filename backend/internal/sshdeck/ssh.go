@@ -53,8 +53,8 @@ func Command(ctx context.Context, host, action, id string) (*exec.Cmd, error) {
 	command := `exec "$HOME/.local/bin/agents-deck-codex-reader"`
 	switch action {
 	case "watch":
-	case "list":
-		command += " list"
+	case "list", "terminals":
+		command += " " + action
 	case "show", "attach":
 		if !idPattern.MatchString(id) {
 			return nil, errors.New("use the session UUID or at least four characters of its ID")

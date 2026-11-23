@@ -69,6 +69,9 @@ func run(args []string) error {
 	if len(args) == 0 {
 		return watch(enc)
 	}
+	if len(args) == 1 && args[0] == "terminals" {
+		return terminalLinks()
+	}
 	threads, err := codex.AllThreads()
 	if err != nil {
 		return err

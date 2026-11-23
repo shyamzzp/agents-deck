@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/brushknight/agents-deck/backend/internal/deskterm"
 	"github.com/brushknight/agents-deck/backend/internal/hats"
 	"github.com/brushknight/agents-deck/backend/internal/model"
 	"github.com/brushknight/agents-deck/backend/internal/sshdeck"
@@ -157,12 +158,29 @@ func (a *Admin) sshAttach(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 409, "refresh the deck and select an online session")
 		return
 	}
+	inv, err := a.terminalInventory(r.Context())
+	if err != nil {
+		writeErr(w, 503, err.Error())
+		return
+	}
+	if inv.Host != req.Host {
+		writeErr(w, 409, "SSH host changed")
+		return
+	}
+	if p := inv.Remote[req.ID]; p.App != "" {
+		if err := deskterm.Focus(r.Context(), p, "pane"); err != nil {
+			writeErr(w, 409, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]string{"focused": p.Label()})
+		return
+	}
 	cmd, err := sshdeck.Command(r.Context(), req.Host, "attach", req.ID)
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
-	const script = `on run args
+	script := `on run args
  set commandText to ""
  repeat with arg in args
   set commandText to commandText & " " & quoted form of (contents of arg)
@@ -172,6 +190,22 @@ func (a *Admin) sshAttach(w http.ResponseWriter, r *http.Request) {
   activate
  end tell
 end run`
+	if inv.Preferred == "iTerm2" {
+		script = `on run args
+ set commandText to ""
+ repeat with arg in args
+  set commandText to commandText & " " & quoted form of (contents of arg)
+ end repeat
+ tell application id "com.googlecode.iterm2"
+  activate
+  if (count of windows) is 0 then
+   create window with default profile command commandText
+  else
+   tell current window to create tab with default profile command commandText
+  end if
+ end tell
+end run`
+	}
 	args := append([]string{"-e", script, "--", cmd.Path}, cmd.Args[1:]...)
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()

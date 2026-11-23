@@ -341,6 +341,15 @@ agentctl config --ssh --clear     # remove the saved host
 
 The full listing requires the remote Codex state database and sqlite3. Older
 threads appear as saved. Inspect a thread to read its rollout details, or use
-`ls --ssh --json` to consume the list in a script. Select a recent Codebox tile to see its details in the browser’s right drawer. On macOS, **Open in Terminal** opens the same
-interactive SSH session. Attach runs the remote installation of
-`codex resume` with the exact thread ID from its recorded working directory.
+`ls --ssh --json` to consume the list in a script. Select a recent Codebox tile to see its details in the browser’s right drawer. On macOS, Deck checks iTerm2 panes and Terminal tabs. The TERMINAL column in
+`agentctl ls` and `agentctl ls --ssh` displays the window, tab and pane for
+an identified session. Window numbers follow the current front-to-back order.
+Use `agentctl focus --ssh ID` for the pane or `agentctl focus --ssh --tab ID`
+for its tab. Omit `--ssh` for local agents. Attach checks for an existing
+pane before resuming the thread in the current terminal.
+
+A plain SSH shell may identify only the codebox. Its location is shown
+separately. Use **Focus codebox pane** or **Focus codebox tab** in the drawer,
+or `agentctl focus --ssh --host-pane` or `--host-tab` for a single connection.
+An idle thread can have no open pane. For a new terminal the dashboard prefers
+iTerm2 and falls back to Terminal. macOS may request Automation access.

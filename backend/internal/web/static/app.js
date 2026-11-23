@@ -16,6 +16,13 @@ let state = null;          // last State from the server
 let skew = 0;              // server clock minus local clock (ms)
 let sshState = { host: '', connection: '', sessions: [] };
 const sshTiles = new Map();
+let terminals = {};
+const locationFor = a => a.sshHost
+  ? (a.sshHost === terminals.host && terminals.remote?.[a.threadID])
+  : terminals.local?.[a.id];
+const locationKey = p => p.app + '/' + p.id;
+const locationText = p => p.app + ' W' + p.window + ' T' + p.tab +
+  (p.app === 'iTerm2' ? ' P' + p.pane : '');
 let selectedId = null;     // agent shown in the detail panel
 let needsFirst = false;    // "needs you first" sort toggle
 let panelMode = false;     // "panel view": the 720×720 panel's 4×4 grid
@@ -721,6 +728,10 @@ async function refreshSSH() {
     if (r.status === 401) { showExpired(); return; }
     if (!r.ok) throw new Error('unavailable');
     const data = await r.json();
+    try {
+      const inventory = await fetch('/admin/v1/terminals', {cache:'no-store'});
+      terminals = inventory.ok ? await inventory.json() : {};
+    } catch { terminals = {}; }
     sshState = { ...data, sessions: (data.sessions || []).map(a => ({
       ...a, id: 'ssh/' + data.host + '/' + a.id, threadID: a.id,
       sshHost: data.host, sshTerminal: data.terminal,
@@ -1367,6 +1378,11 @@ function header(a) {
 }
 
 function postAction(a, path, body) {
+  if (path.startsWith('terminal:')) {
+    const [,mode,...key] = path.split(':');
+    return api('/admin/v1/terminals/focus', {id:a.threadID || a.id,
+      host:a.sshHost || '', mode, key:key.join(':')});
+  }
   if (a.sshHost) {
     if (path === 'focus') return api('/admin/v1/ssh-codex/attach', { host: a.sshHost, id: a.threadID });
     return Promise.resolve({ ok: false, error: 'unavailable for this SSH session' });
@@ -1426,11 +1442,23 @@ function buildInfo(a) {
   const server = h('span');
   const note = h('div', { class: 'note', role: 'status', 'aria-live': 'polite' });
   const actions = h('div', { class: 'actions' });
+  const loc = locationFor(a);
+  if (loc) {
+    const key = locationKey(loc);
+    if (loc.app === 'iTerm2') actions.append(actionButton(a,'Focus pane','terminal:pane:'+key,'solid',note));
+    actions.append(actionButton(a,'Focus tab','terminal:tab:'+key,'narrow',note));
+  }
   if (a.sshHost) {
-    if (a.sshTerminal && a.status !== 'offline') actions.append(actionButton(a, 'Open in Terminal', 'focus', 'solid', note));
+    if (!loc && a.sshHost === terminals.host) {
+      for (const p of terminals.hostPanes || []) {
+        if (p.app === 'iTerm2') actions.append(actionButton(a,'Focus codebox pane · '+locationText(p),'terminal:host-pane:'+locationKey(p),'narrow',note));
+        actions.append(actionButton(a,'Focus codebox tab · '+locationText(p),'terminal:host-tab:'+locationKey(p),'narrow',note));
+      }
+    }
+    if (!loc && a.sshTerminal && a.status !== 'offline') actions.append(actionButton(a, 'Open in '+(terminals.preferred || 'Terminal'), 'focus', 'solid', note));
   } else {
-    if (a.status !== 'exited') actions.append(actionButton(a, codexThread(a) ? 'open in codex' : inApp(a) ? `open in ${a.app}` : hungry(a) ? 'review in terminal' : 'focus terminal', 'focus', 'solid', note));
-    else if (a.resumable) actions.append(actionButton(a, 'resume', 'resume', 'solid', note));
+    if (!loc && a.status !== 'exited') actions.append(actionButton(a, codexThread(a) ? 'open in codex' : inApp(a) ? `open in ${a.app}` : hungry(a) ? 'review in terminal' : 'focus terminal', 'focus', 'solid', note));
+    else if (!loc && a.resumable) actions.append(actionButton(a, 'resume', 'resume', 'solid', note));
     if (a.status === 'running' && (!a.external || inApp(a))) actions.append(actionButton(a, 'interrupt', 'interrupt', 'narrow', note));
     else actions.append(removeButton(a, note));
     if (a.tool === 'claude' && a.account) for (const acc of accounts) if (acc.name !== a.account.name) actions.append(handoffButton(a, acc, note));
@@ -1478,7 +1506,7 @@ function buildInfo(a) {
     setText(prompt, x.lastPrompt || '—');
     setText(active, lastActive(x)); // its latest message sent or received (survives restarts)
     setText(foot, [x.modelLabel || x.model, tilde(x.cwd), x.branch].filter(Boolean).join(' · '));
-    setText(server, x.sshHost || state?.server?.name || '');
+    setText(server, [x.sshHost || state?.server?.name, locationFor(x) && locationText(locationFor(x))].filter(Boolean).join(' · '));
   };
 }
 
@@ -1585,7 +1613,7 @@ function renderDetail() {
   }
   panel.hidden = false;
   panel.setAttribute('aria-labelledby', 'd-title');
-  const key = detailKey(a) + (a.sshTerminal ? '|ssh-terminal' : '');
+  const key = detailKey(a) + JSON.stringify([locationFor(a), a.sshHost && [terminals.preferred, terminals.hostPanes, a.sshTerminal]]);
   if (!det || det.key !== key) {
     const hadFocus = panel.contains(document.activeElement);
     det = { key, id: a.id };

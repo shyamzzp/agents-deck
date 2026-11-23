@@ -29,6 +29,7 @@ import (
 	"github.com/brushknight/agents-deck/backend/internal/accounts"
 	"github.com/brushknight/agents-deck/backend/internal/daemon"
 	"github.com/brushknight/agents-deck/backend/internal/demo"
+	"github.com/brushknight/agents-deck/backend/internal/deskterm"
 	"github.com/brushknight/agents-deck/backend/internal/devices"
 	"github.com/brushknight/agents-deck/backend/internal/groups"
 	"github.com/brushknight/agents-deck/backend/internal/hats"
@@ -70,6 +71,8 @@ const usage = `agentctl: runs and controls agents deck
                                  lists it first, asks before more than 5
   agentctl attach <agent>        show an agent in this terminal (detach: ctrl-q); one that isn't
                                  running is brought back first (it asks)
+  agentctl focus [--ssh] [--tab] ID   focus the existing pane or its tab
+  agentctl focus --ssh --host-pane | --host-tab   focus the codebox connection
   agentctl config --ssh [user@host|--clear]   show, set or clear the SSH host
   agentctl ls --ssh [--json] [ID]   list unarchived remote Codex threads, or inspect one
   agentctl attach --ssh ID        open the selected thread in Codex on the SSH host
@@ -166,6 +169,8 @@ func main() {
 		err = serve(args)
 	case "new":
 		err = newAgent(args)
+	case "focus":
+		err = focusCmd(args)
 	case "attach", "a":
 		err = attach(args)
 	case "reopen":
@@ -396,7 +401,7 @@ func attach(args []string) error {
 		if len(args) != 2 {
 			return errors.New("usage: agentctl attach --ssh ID")
 		}
-		return runSSH(context.Background(), "attach", args[1], nil)
+		return attachSSH(args[1])
 	}
 
 	if len(args) != 1 {
@@ -648,10 +653,11 @@ func list(args []string) error {
 	if err != nil {
 		return err
 	}
-	return printList(s, *sortBy)
+	inv := paneInventory()
+	return printList(s, *sortBy, inv.Local)
 }
 
-func printList(s model.State, sortBy string) error {
+func printList(s model.State, sortBy string, locations map[string]deskterm.Pane) error {
 	switch sortBy {
 	case "position", "slot":
 	case "active":
@@ -672,7 +678,7 @@ func printList(s model.State, sortBy string) error {
 		acctCol = acctCol || a.Account != nil
 		waitCol = waitCol || a.Waiting != nil
 	}
-	head := []string{"ID", "NAME", "STATUS", "ACTIVE", "CONTEXT", "COST", "FOLDER"}
+	head := []string{"ID", "NAME", "STATUS", "ACTIVE", "CONTEXT", "COST", "FOLDER", "TERMINAL"}
 	if acctCol {
 		head = append(head, "ACCOUNT")
 	}
@@ -697,7 +703,11 @@ func printList(s model.State, sortBy string) error {
 		if a.External {
 			cost = "—" // Codex reports no prices
 		}
-		row := []string{a.ID, clip(listName(a.Title), 40), st, activeAgo(a.LastActive), ctx, cost, clip(a.Folder, 24)}
+		loc := "—"
+		if p, ok := locations[a.ID]; ok {
+			loc = p.Label()
+		}
+		row := []string{a.ID, clip(listName(a.Title), 40), st, activeAgo(a.LastActive), ctx, cost, clip(a.Folder, 24), loc}
 		if acctCol {
 			acct := ""
 			if a.Account != nil {
