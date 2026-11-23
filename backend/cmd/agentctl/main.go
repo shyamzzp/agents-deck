@@ -1230,6 +1230,9 @@ func serve(args []string) error {
 	}
 	wifiDefault := &link.WifiDefault{Store: wifiStore}
 	adm := newAdmin(st, srv, self, *logFile)
+	if local, ok := ctl.(*daemon.Daemon); ok {
+		adm.SendMessage = local.Message
+	}
 	hub := &link.Hub{Wifi: wifiDefault, OnFirmware: adm.FirmwareChanged} // updates over Wi-Fi feed admin jobs
 	links := &link.Manager{Deck: link.ServerDeck{S: srv}, Hub: hub, Wifi: wifiDefault,
 		Ports: func() []link.PortConfig { return adm.LinkPorts(loadConfig().Link.Ports) }}

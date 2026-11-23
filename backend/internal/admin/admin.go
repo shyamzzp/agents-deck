@@ -74,11 +74,12 @@ var ErrNoOTA = errors.New("over-the-air update is not available in this build: p
 // Admin serves /admin/v1. Fields left nil turn their part off with a clear
 // answer, so the page can say what this service can't do.
 type Admin struct {
-	Version  string    // this service's version
-	Platform string    // GOOS/GOARCH
-	Install  string    // update.InstallKind
-	Started  time.Time // when the service started
-	Demo     bool      // serve --demo: pretend ports, boards and releases
+	SendMessage func(context.Context, string, string) error
+	Version     string    // this service's version
+	Platform    string    // GOOS/GOARCH
+	Install     string    // update.InstallKind
+	Started     time.Time // when the service started
+	Demo        bool      // serve --demo: pretend ports, boards and releases
 
 	Store   *store.Store
 	Devices *devices.Registry
@@ -158,6 +159,7 @@ func (a *Admin) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/v1/cli", a.cli)
 	mux.HandleFunc("POST /admin/v1/open-data-folder", a.openData)
 
+	mux.HandleFunc("POST /admin/v1/agents/message", a.message)
 	mux.HandleFunc("GET /admin/v1/ssh-codex/sessions", a.sshSessions)
 	mux.HandleFunc("POST /admin/v1/ssh-codex/pins", a.sshPin)
 	mux.HandleFunc("POST /admin/v1/ssh-codex/attach", a.sshAttach)

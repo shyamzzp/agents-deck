@@ -574,6 +574,61 @@ function makeRing() {
 }
 
 // wire makes it draggable: onto the deck's slots (wireDrag) or the "needs you" spots.
+let detailClick;
+let quickTarget;
+const quickForm = $('quick-message');
+function closeQuickMessage() {
+  quickForm.hidden = true;
+  quickTarget = null;
+}
+function positionQuickMessage() {
+  if (!quickTarget) return;
+  const r = quickTarget.anchor.getBoundingClientRect();
+  if (!quickTarget.anchor.isConnected || !r.width) { closeQuickMessage(); return; }
+  const w = quickForm.offsetWidth, h = quickForm.offsetHeight;
+  const right = r.right + 8;
+  const left = right + w <= innerWidth - 8 ? right : r.left - w - 8;
+  quickForm.style.left = Math.max(8, Math.min(innerWidth-w-8, left >= 8 ? left : r.left)) + 'px';
+  const top = left >= 8 ? r.top : r.bottom + 8;
+  quickForm.style.top = Math.max(8, Math.min(innerHeight-h-8, top)) + 'px';
+}
+function openQuickMessage(id, anchor) {
+  const agent = sshState.sessions.find(s => s.id === id) || state?.agents.find(s => s.id === id);
+  if (!agent) return;
+  closeDetail();
+  quickTarget = {anchor, id:agent.threadID || id, host:agent.sshHost || ''};
+  $('quick-title').textContent = 'Message ' + (agent.title || id);
+  $('quick-feedback').textContent = '';
+  $('quick-text').disabled = false;
+  $('quick-text').value = '';
+  quickForm.hidden = false;
+  positionQuickMessage();
+  $('quick-text').focus({preventScroll:true});
+}
+quickForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const target = quickTarget, input = $('quick-text');
+  if (!target || input.disabled || !input.value.trim()) return;
+  input.disabled = true;
+  setText($('quick-feedback'), 'Sending…');
+  const result = await api('/admin/v1/agents/message', {host:target.host,id:target.id,text:input.value});
+  if (target !== quickTarget) return;
+  input.disabled = false;
+  if (result.ok) input.value = '';
+  setText($('quick-feedback'), result.ok ? 'Sent' : result.error);
+  positionQuickMessage();
+  input.focus({preventScroll:true});
+});
+$('quick-close').addEventListener('click', closeQuickMessage);
+quickForm.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    event.preventDefault(); event.stopPropagation();
+    quickTarget?.anchor.focus(); closeQuickMessage();
+  }
+});
+addEventListener('resize', positionQuickMessage);
+document.addEventListener('scroll', positionQuickMessage, true);
+
 function makeTile(a, wire = wireDrag) {
   const spr = h('span', { class: 'spr' });
   const name = h('span', { class: 'name' });
@@ -584,7 +639,21 @@ function makeTile(a, wire = wireDrag) {
   const chip = h('span', { class: 'chip', 'aria-hidden': 'true' }); // the tool's colour, or its Claude account's
   const el = h('button', { type: 'button', class: 'tile', 'data-id': a.id },
     chip, subs, spr, name, meta, ring.svg, bar);
-  el.addEventListener('click', () => openDetail(a.id));
+  el.addEventListener('click', event => {
+    clearTimeout(detailClick);
+    if (!event.detail) { closeQuickMessage(); openDetail(a.id); return; }
+    if (event.detail === 1) detailClick = setTimeout(() => {
+      closeQuickMessage(); openDetail(a.id);
+    }, 350);
+  });
+  el.addEventListener('dblclick', event => {
+    event.preventDefault(); clearTimeout(detailClick); openQuickMessage(a.id, el);
+  });
+  el.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && event.shiftKey) {
+      event.preventDefault(); openQuickMessage(a.id, el);
+    }
+  });
   if (wire) {
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); openTileMenu(a.id, e.clientX, e.clientY); });
     el.addEventListener('keydown', (e) => {
