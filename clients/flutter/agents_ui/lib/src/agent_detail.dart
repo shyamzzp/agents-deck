@@ -368,6 +368,18 @@ class _AgentDetailState extends State<AgentDetail> {
               compact: tight,
               child: Stack(
                 children: [
+                  // Under the content, not around it: a double tap wrapped
+                  // around the card puts every button on it behind the
+                  // double-tap timeout, so taps that land on one are answered
+                  // late or not at all. Beneath it, this is only reached by a
+                  // tap no child took -- the empty space.
+                  Positioned.fill(
+                    child: GestureDetector(
+                      key: const Key('card-empty'),
+                      behavior: HitTestBehavior.translucent,
+                      onDoubleTap: _openAsks,
+                    ),
+                  ),
                   Padding(
                     padding: tight
                         ? const EdgeInsets.fromLTRB(18, 16, 18, 14)
@@ -386,6 +398,14 @@ class _AgentDetailState extends State<AgentDetail> {
 
   /// How far the card has been dragged sideways, for the swipe back.
   double _swipe = 0;
+
+  /// Opens the quick list. Reached by a double tap on the title or on any
+  /// empty part of the card.
+  void _openAsks() => setState(() {
+    _asks = true;
+    _askSent = -1;
+    _note = null;
+  });
 
   /// The quick list: swipe through the asks, tap one to send it.
   ///
@@ -422,51 +442,62 @@ class _AgentDetailState extends State<AgentDetail> {
             ),
           ),
           Expanded(
-            child: PageView.builder(
-              key: const Key('asks-pages'),
-              controller: PageController(viewportFraction: tight ? 0.86 : 0.6),
+            child: GridView.builder(
+              key: const Key('asks-grid'),
+              padding: EdgeInsets.fromLTRB(
+                tight ? 18 : 36,
+                tight ? 10 : 16,
+                tight ? 18 : 36,
+                tight ? 10 : 16,
+              ),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: tight ? 2 : 3,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: tight ? 1.25 : 1.5,
+              ),
               itemCount: agentAsks.length,
               itemBuilder: (context, i) {
                 final ask = agentAsks[i];
                 final sent = _askSent == i;
-                return Padding(
-                  padding: EdgeInsets.fromLTRB(6, tight ? 10 : 18, 6, tight ? 10 : 18),
-                  child: GestureDetector(
-                    key: Key('ask-$i'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _busy ? null : () => _ask(i),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: sent ? DeckHud.ink : DeckHud.panel,
-                        border: Border.all(
-                          color: sent ? DeckHud.ink : DeckHud.dim,
-                          width: 2,
+                return GestureDetector(
+                  key: Key('ask-$i'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _busy ? null : () => _ask(i),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: sent ? DeckHud.ink : DeckHud.panel,
+                      border: Border.all(
+                        color: sent ? DeckHud.ink : DeckHud.dim,
+                        width: 2,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          sent ? 'sent' : ask.label,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: DeckHud.rm(
+                            tight ? 16 : 19,
+                            sent ? DeckHud.bg : DeckHud.ink,
+                            weight: 700,
+                          ),
                         ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            sent ? 'sent' : ask.label,
-                            style: DeckHud.rm(
-                              tight ? 20 : 24,
-                              sent ? DeckHud.bg : DeckHud.ink,
-                              weight: 700,
+                        const SizedBox(height: 6),
+                        Expanded(
+                          child: Text(
+                            ask.text,
+                            overflow: TextOverflow.fade,
+                            style: DeckHud.mono(
+                              size: tight ? 11 : 12,
+                              color: sent ? DeckHud.bg : DeckHud.dim,
                             ),
                           ),
-                          const SizedBox(height: 10),
-                          Expanded(
-                            child: Text(
-                              ask.text,
-                              style: DeckHud.mono(
-                                size: tight ? 13 : 15,
-                                color: sent ? DeckHud.bg : DeckHud.dim,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -484,8 +515,8 @@ class _AgentDetailState extends State<AgentDetail> {
           Padding(
             padding: EdgeInsets.fromLTRB(18, 0, 18, tight ? 12 : 20),
             child: Text(
-              'Swipe for more. Tapping one puts it on the agent\u2019s queue, '
-              'so asking while it works does not cut the turn short.',
+              'Tapping one puts it on the agent\u2019s queue, so asking while '
+              'it works does not cut the turn short.',
               style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
           ),
@@ -787,11 +818,7 @@ class _AgentDetailState extends State<AgentDetail> {
         GestureDetector(
           key: const Key('agent-title'),
           behavior: HitTestBehavior.opaque,
-          onDoubleTap: () => setState(() {
-            _asks = true;
-            _askSent = -1;
-            _note = null;
-          }),
+          onDoubleTap: _openAsks,
           child: Text(
             a.title,
             maxLines: 2,
