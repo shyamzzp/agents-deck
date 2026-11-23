@@ -121,7 +121,42 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('a watched session says it cannot be told', (tester) async {
+  testWidgets('a watched terminal session can be told', (tester) async {
+    tester.view.physicalSize = const Size(900, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    // A session started by hand in a terminal and added to the deck. The
+    // service types into iTerm through iTerm, so the card must offer the asks.
+    final json = FakeAgentsSource.demo().toJson();
+    final a = (json['agents'] as List)
+        .cast<Map<String, dynamic>>()
+        .firstWhere((x) => x['id'] == 'd0cs1t');
+    a['external'] = true;
+    a['app'] = '';
+    a['tool'] = 'claude';
+    final source = FakeAgentsSource.demo()..load(json);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: DeckHud.bg),
+        home: Scaffold(
+          body: AgentDetail(source: source, agentId: 'd0cs1t', onClose: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('agent-title')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const Key('agent-title')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('asks-grid')), findsOneWidget);
+    expect(find.byKey(const Key('asks-refused')), findsNothing);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('an agent inside another app says it cannot be told', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(900, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -131,7 +166,7 @@ void main() {
         .cast<Map<String, dynamic>>()
         .firstWhere((x) => x['id'] == 'd0cs1t');
     a['external'] = true;
-    a['app'] = '';
+    a['app'] = 'orca';
     final source = FakeAgentsSource.demo()..load(json);
     await tester.pumpWidget(
       MaterialApp(
