@@ -182,6 +182,8 @@ type Store struct {
 	// Groups gives the deck's group dividers (nil: no groups). They are an
 	// overlay on the slots, so the store itself never places by them.
 	Groups func() []model.Group
+	// Queued counts each agent's queued prompts (nil: no queue).
+	Queued func() map[string]int
 
 	// The "Needs you" grid (attention.go): the clock and the random free
 	// spot (tests set both), how long an agent stays after it stops needing
@@ -465,9 +467,15 @@ func (s *Store) Snapshot() model.State {
 		agents = append(agents, e.A)
 		places = append(places, where{e.Account, e.Transcript})
 	}
-	hat, account, groups := s.Hat, s.Account, s.Groups
+	hat, account := s.Hat, s.Account
+	groups, queued := s.Groups, s.Queued
 	s.mu.Unlock()
+	var counts map[string]int
+	if queued != nil {
+		counts = queued()
+	}
 	for i := range agents {
+		agents[i].Queued = counts[agents[i].ID]
 		if hat != nil {
 			agents[i].Hat = hat(agents[i].Cwd)
 		}

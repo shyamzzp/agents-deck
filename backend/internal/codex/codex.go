@@ -131,8 +131,8 @@ func queryThreads(bin, db, tail string) ([]Thread, error) {
 		"coalesce(git_branch,'') as git_branch, coalesce(model,'') as model, coalesce(updated_at_ms,0) as updated_at_ms " +
 		"from threads where coalesce(archived,0)=0" + filter + tail
 	cmd := exec.CommandContext(ctx, bin, "-readonly", "-json", db, q)
-	proc.NoWindow(cmd)
-	out, err := cmd.Output()
+	proc.Tidy(cmd)
+	out, err := proc.Timed(cmd, (*exec.Cmd).Output)
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +325,7 @@ func apply(e *store.Entry, kind string, p payload, replay bool) bool {
 			for i := len(p.Content) - 1; i >= 0; i-- {
 				t := strings.TrimSpace(p.Content[i].Text)
 				if t != "" && !strings.HasPrefix(t, "<") {
-					e.A.LastPrompt = clip(strings.Join(strings.Fields(t), " "), 280)
+					e.A.LastPrompt = clip(strings.Join(strings.Fields(t), " "), model.LastPromptMax)
 					e.A.Turns++
 					return true
 				}

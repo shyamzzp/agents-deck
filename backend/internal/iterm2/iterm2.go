@@ -274,6 +274,7 @@ const (
 	fID           = 1
 	fError        = 2
 	fListSessions = 106
+	fSendText     = 107
 	fActivate     = 114
 	fVariable     = 115
 )
@@ -408,6 +409,31 @@ func (k *Conn) Variable(sessionID, name string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// SendText types text into the session, as if it had been typed there. iTerm
+// takes it as input to whatever is running, so a trailing newline is what
+// submits it.
+//
+// SendTextRequest: 1 session, 2 text, 3 suppress_broadcast. Broadcast is
+// suppressed, or a session in a broadcast group would type into its whole
+// group.
+func (k *Conn) SendText(sessionID, text string) error {
+	body := pbString(nil, 1, sessionID)
+	body = pbString(body, 2, text)
+	body = pbBool(body, 3, true)
+	raw, err := k.call(fSendText, body)
+	if err != nil {
+		return err
+	}
+	f, err := pbFields(raw)
+	if err != nil {
+		return err
+	}
+	if s := f[1]; len(s) > 0 && s[0].num != 0 {
+		return fmt.Errorf("send text: status %d", s[0].num)
+	}
+	return nil
 }
 
 // Activate selects the session's tab and pane and brings its window and the

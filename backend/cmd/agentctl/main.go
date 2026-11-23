@@ -38,6 +38,7 @@ import (
 	"github.com/brushknight/agents-deck/backend/internal/paths"
 	"github.com/brushknight/agents-deck/backend/internal/pki"
 	"github.com/brushknight/agents-deck/backend/internal/proc"
+	"github.com/brushknight/agents-deck/backend/internal/queue"
 	"github.com/brushknight/agents-deck/backend/internal/server"
 	"github.com/brushknight/agents-deck/backend/internal/service"
 	"github.com/brushknight/agents-deck/backend/internal/sim"
@@ -96,6 +97,10 @@ const usage = `agentctl: runs and controls agents deck
   agentctl pair <name> [--scope view|act|admin] [--bundle FILE]
                                  pair a device: a one-time code it trades for its own certificate,
                                  or (--bundle) a key and certificate to copy to it over SSH
+  agentctl mcp token create <name> [--scope view|act|admin] | token list | token revoke <name>
+                                 MCP tokens: let an agent (Claude Code) run the deck's agents
+  agentctl mcp [--token T]       the MCP server over stdio, for an MCP client (token from
+                                 AGENTSDECK_MCP_TOKEN); see docs/mcp.md
   agentctl devices [revoke|approve|remove <name> | scope <name> <scope>]
                                  paired devices and serial boards; cut one off, approve a board
   agentctl link [ports | add <port> [--baud N] | rm <port>]
@@ -128,6 +133,7 @@ const usage = `agentctl: runs and controls agents deck
   agentctl bluetooth [scan | ls | add <name>]
                                  boards over Bluetooth: find one nearby, add it with the code on its screen
   agentctl system                what the service is doing (boards, new ports, updates)
+  agentctl cpu                   how much CPU the service and its helpers use
   agentctl settings [<key> <value>]
                                  start-at-login, notifications, sound, restore, updates, network
   agentctl diagnostics           a report to send when something's wrong (no names or folders)
@@ -221,6 +227,8 @@ func main() {
 		err = openWeb(args)
 	case "pair":
 		err = pair(args)
+	case "mcp":
+		err = mcpCmd(args)
 	case "devices":
 		err = devicesCmd(args)
 	case "bluetooth", "ble":
@@ -249,6 +257,8 @@ func main() {
 		err = portsCmd(args)
 	case "diagnostics":
 		err = diagnosticsCmd(args)
+	case "cpu":
+		err = cpuCmd(args)
 	case "version", "--version":
 		fmt.Println(version)
 	case "help", "-h", "--help":
@@ -1230,7 +1240,16 @@ func serve(args []string) error {
 	st.Groups = lines.All
 	srv := &server.Server{Store: st, Ctl: ctl, Static: web.Static(),
 		WebSession: webSession, LocalAddr: cfg.LocalAddr, Hats: book, Groups: lines,
-		Devices: &devices.Registry{Path: paths.Devices()}, Audit: &devices.Audit{Path: paths.Audit()}}
+		Devices: &devices.Registry{Path: paths.Devices()}, Audit: &devices.Audit{Path: paths.Audit()},
+		Tokens: &devices.Tokens{Path: paths.MCPTokens()}}
+	// Prompts queued for busy agents survive a restart (a demo keeps them in memory).
+	queuePath := paths.PromptQueue()
+	if *demoMode {
+		queuePath = ""
+	}
+	srv.Queue = queue.Open(queuePath)
+	st.Queued = srv.Queue.Agents
+	go srv.RunQueue(context.Background())
 	errc := make(chan error, 4)
 	// The default Wi-Fi network for boards plugged in over USB: its password in
 	// the OS secret store (the login Keychain on macOS), never in a file here.
@@ -1240,9 +1259,9 @@ func serve(args []string) error {
 	}
 	wifiDefault := &link.WifiDefault{Store: wifiStore}
 	adm := newAdmin(st, srv, self, *logFile)
-	if local, ok := ctl.(*daemon.Daemon); ok {
-		adm.SendMessage = local.Message
-	}
+	meter := proc.NewCPUMeter()
+	go meter.Run()
+	adm.CPU = meter.Report
 	hub := &link.Hub{Wifi: wifiDefault, OnFirmware: adm.FirmwareChanged} // updates over Wi-Fi feed admin jobs
 	links := &link.Manager{Deck: link.ServerDeck{S: srv}, Hub: hub, Wifi: wifiDefault,
 		Ports: func() []link.PortConfig { return adm.LinkPorts(loadConfig().Link.Ports) }}
@@ -1305,15 +1324,16 @@ func serve(args []string) error {
 		}()
 	}
 	log.Printf("agentctl %s serving web on http://%s", version, cfg.LocalAddr)
+	go watchStalls(paths.Socket()) // watchdog.go
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
 	select {
 	case err := <-errc:
 		st.Flush()
 		return err
-	case <-sig:
+	case s := <-sig:
 		st.Flush()
-		log.Printf("stopping")
+		log.Printf("stopping (%s)", sigName(s))
 		return nil
 	case <-serveStop:
 		st.Flush()
@@ -1513,4 +1533,17 @@ func simAgent(args []string) error {
 	}
 	return sim.Run(sim.Config{ID: id, Socket: sock, Dir: *dir, Transcript: *transcript,
 		Seed: time.Now().UnixNano() ^ int64(len(id))<<20, Speed: *speed, Patience: pat})
+}
+
+// sigName says which signal stopped the service, for the log: SIGTERM is
+// launchd or systemd (agentctl install, a restart, logging out), SIGINT is
+// Ctrl-C.
+func sigName(s os.Signal) string {
+	switch s {
+	case syscall.SIGTERM:
+		return "SIGTERM"
+	case syscall.SIGINT:
+		return "SIGINT"
+	}
+	return s.String()
 }
