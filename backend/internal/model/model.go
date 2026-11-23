@@ -82,15 +82,16 @@ type Agent struct {
 	Turns         int        `json:"turns"`
 	Focused       bool       `json:"focused"`
 	Attached      bool       `json:"attached"`
-	Resumable     bool       `json:"resumable"`           // exited Claude agent that POST /resume can bring back
-	Lost          bool       `json:"lost,omitempty"`      // ended with the tmux server, not by itself: POST /v1/restore brings it back
-	Unseen        bool       `json:"unseen"`              // finished a turn you haven't looked at yet ("hungry")
-	External      bool       `json:"external"`            // owned by another app (Codex): view and focus only
-	App           string     `json:"app,omitempty"`       // the app it runs in when not agentctl's: "orca", "herdr", "cmux" (answer, interrupt and focus work there)
-	Subagents     []Subagent `json:"subagents,omitempty"` // subagents still working, oldest first
-	Queued        int        `json:"queued"`              // prompts waiting to be typed in once its turn ends ("mode": "queue")
-	Hat           *Hat       `json:"hat,omitempty"`       // the pixel hat for its working folder (nil: none)
-	Account       *Account   `json:"account,omitempty"`   // the Claude account it runs in (nil: only one account is set up)
+	Resumable     bool       `json:"resumable"`            // exited Claude agent that POST /resume can bring back
+	Lost          bool       `json:"lost,omitempty"`       // ended with the tmux server, not by itself: POST /v1/restore brings it back
+	Unseen        bool       `json:"unseen"`               // finished a turn you haven't looked at yet ("hungry")
+	External      bool       `json:"external"`             // owned by another app (Codex): view and focus only
+	App           string     `json:"app,omitempty"`        // the app it runs in when not agentctl's: "orca", "herdr", "cmux" (answer, interrupt and focus work there)
+	Subagents     []Subagent `json:"subagents,omitempty"`  // subagents still working, oldest first
+	Queued        int        `json:"queued"`               // prompts waiting to be typed in once its turn ends ("mode": "queue")
+	QueuedNext    string     `json:"queuedNext,omitempty"` // the text of the next of those, for the card to show
+	Hat           *Hat       `json:"hat,omitempty"`        // the pixel hat for its working folder (nil: none)
+	Account       *Account   `json:"account,omitempty"`    // the Claude account it runs in (nil: only one account is set up)
 	StartedAt     time.Time  `json:"startedAt"`
 	UpdatedAt     time.Time  `json:"updatedAt"`
 	LastActive    time.Time  `json:"lastActive,omitzero"` // its latest message sent or received (zero: not known yet)

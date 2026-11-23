@@ -302,6 +302,7 @@ class Agent {
     this.app = '',
     this.subagents = const [],
     this.queued = 0,
+    this.queuedNext = '',
     this.hat,
     this.account,
     this.startedAt,
@@ -368,6 +369,10 @@ class Agent {
   /// Prompts waiting to be typed in once its turn ends (sent with
   /// `"mode": "queue"`).
   final int queued;
+
+  /// The text of the next of those, so the card can say what is about to go
+  /// in rather than only how many are waiting.
+  final String queuedNext;
 
   /// The pixel hat for its working folder; null = none.
   final AgentHat? hat;
@@ -461,6 +466,7 @@ class Agent {
             if (x is Map<String, dynamic>) AgentSubagent.fromJson(x),
       ],
       queued: _int(j['queued']),
+      queuedNext: _str(j['queuedNext']),
       startedAt: _time(j['startedAt']),
       updatedAt: _time(j['updatedAt']),
       lastActive: _time(j['lastActive']),

@@ -48,11 +48,10 @@ const _settingsFile = 'settings.json';
 /// the room for.
 const gridRange = [2, 3, 4, 5, 6, 7, 8];
 
-/// The most a page may be set to on this device: 8 on a tablet, 6 on a phone,
-/// where a seventh column leaves a tile too small to read. 600 points of
-/// shortest side is the usual line between the two.
+/// The most a page may be set to on this device: 8 on a tablet, 7 on a phone.
+/// 600 points of shortest side is the usual line between the two.
 int gridMax(BuildContext context) =>
-    MediaQuery.sizeOf(context).shortestSide >= 600 ? 8 : 6;
+    MediaQuery.sizeOf(context).shortestSide >= 600 ? 8 : 7;
 
 /// A tablet has the room for 25 agents at once.
 const defaultShape = DeckShape(5, 5);

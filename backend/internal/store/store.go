@@ -186,6 +186,9 @@ type Store struct {
 	// Queued counts each agent's queued prompts (nil: no queue).
 	Queued func() map[string]int
 
+	// QueuedText is the text of each agent's next queued prompt (nil: none).
+	QueuedText func() map[string]string
+
 	// The "Needs you" grid (attention.go): the clock and the random free
 	// spot (tests set both), how long an agent stays after it stops needing
 	// you, and the timer for the next one to leave.
@@ -469,14 +472,19 @@ func (s *Store) Snapshot() model.State {
 		places = append(places, where{e.Account, e.Transcript})
 	}
 	hat, account := s.Hat, s.Account
-	groups, queued := s.Groups, s.Queued
+	groups, queued, queuedText := s.Groups, s.Queued, s.QueuedText
 	s.mu.Unlock()
 	var counts map[string]int
 	if queued != nil {
 		counts = queued()
 	}
+	var next map[string]string
+	if queuedText != nil {
+		next = queuedText()
+	}
 	for i := range agents {
 		agents[i].Queued = counts[agents[i].ID]
+		agents[i].QueuedNext = next[agents[i].ID]
 		if hat != nil {
 			agents[i].Hat = hat(agents[i].Cwd)
 		}

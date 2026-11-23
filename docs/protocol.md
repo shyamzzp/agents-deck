@@ -122,6 +122,10 @@ The full state is small (≤ a few KB per agent), so there are no deltas.
   "account": { "name": "work", "color": "yellow" }, // omitted while only one Claude account is set up:
                                   // the account (Claude config folder) the session runs in; color is a hat colour
   "queued": 0,                    // prompts waiting to be typed in once its turn ends (POST /v1/agents/{id}/prompt, "mode": "queue")
+  "queuedNext": "run the tests again", // the text of the next of those, so a card can show what goes in next; absent when none
+                                  // lastPrompt is set as soon as the deck types a prompt in, not when the agent's
+                                  // transcript records it: Claude Code holds anything typed during a turn in its own
+                                  // queue, so the transcript (and the hooks) only carry it once the turn ends
   "subagents": [                  // omitted when none: subagents (and workflow runs, type "workflow") still
                                   // working, oldest first. While only they work (Claude's turn is over) the
                                   // agent is "running" with activity {"tool": "Task", "detail": "2 subagents working"}
