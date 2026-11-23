@@ -23,6 +23,7 @@ void main() {
             onFallback: (sh) => log.add('all -> $sh'),
             onAttention: (sh) => log.add('needs you -> $sh'),
             onRing: (w) => log.add('ring -> $w'),
+            onTheme: (t) => log.add('theme -> ${t?.name ?? 'agents deck'}'),
           ),
         ),
       ),

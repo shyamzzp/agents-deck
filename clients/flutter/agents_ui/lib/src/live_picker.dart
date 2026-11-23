@@ -66,7 +66,7 @@ class _LivePickerState extends State<LivePicker> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const CritterSprite(
+          CritterSprite(
             pose: CritterPose.wait,
             width: 54,
             body: DeckHud.ink,

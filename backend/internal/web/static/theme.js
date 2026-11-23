@@ -75,7 +75,7 @@ export function buildPicker(all, { h, row }) {
   const themeRow = (t) => {
     const on = t.name === current;
     const chips = h('span', { class: 'theme-chips', 'aria-hidden': 'true' },
-      ['--bg', '--panel', '--ink', '--dim', '--accent'].map((k) => {
+      ['--term', '--block', '--ink', '--muted', '--orange'].map((k) => {
         const i = h('i', {});
         i.style.background = t.tokens[k];
         return i;
@@ -87,7 +87,7 @@ export function buildPicker(all, { h, row }) {
        h('small', { class: 'theme-kind', text: t.light ? 'light' : 'dark' }));
     // Set through the CSSOM, not a style attribute: the page's CSP is
     // style-src 'self', which a style attribute would fall foul of.
-    b.style.setProperty('--rbg', t.tokens['--bg']);
+    b.style.setProperty('--rbg', t.tokens['--ground'] ?? t.tokens['--bg']);
     b.style.setProperty('--rink', t.tokens['--ink']);
     b.style.setProperty('--rline', t.tokens['--line']);
     b.addEventListener('click', () => {
@@ -109,6 +109,10 @@ export function buildPicker(all, { h, row }) {
     const hits = all.filter((t) =>
       (kind === 'all' || (kind === 'light') === !!t.light) &&
       (!q || t.name.toLowerCase().includes(q)));
+    // Only the first MAX_SHOWN are drawn, and a chosen theme is as likely to
+    // be a W as an A. It leads the list so the page always opens on it.
+    const i = hits.findIndex((t) => t.name === current);
+    if (i > 0) hits.unshift(...hits.splice(i, 1));
     list.replaceChildren(...hits.slice(0, MAX_SHOWN).map(themeRow));
     count.textContent = hits.length > MAX_SHOWN
       ? `${hits.length} themes · showing the first ${MAX_SHOWN}, keep typing to narrow it`

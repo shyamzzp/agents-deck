@@ -1213,11 +1213,11 @@ class _AgentDetailState extends State<AgentDetail> {
   }
 
   (String, Widget) _doingNow(Agent a) {
-    Widget line(String text, {Color color = DeckHud.ink}) => Text(
+    Widget line(String text, {Color? color}) => Text(
       text,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: DeckHud.rm(20, color),
+      style: DeckHud.rm(20, color ?? DeckHud.ink),
     );
     switch (a.status) {
       case AgentStatus.running:
@@ -1230,7 +1230,7 @@ class _AgentDetailState extends State<AgentDetail> {
               children: [
                 TextSpan(text: act.verb),
                 if (act.detail.isNotEmpty) ...[
-                  const TextSpan(
+                  TextSpan(
                     text: ' · ',
                     style: TextStyle(color: DeckHud.dim),
                   ),
@@ -1682,7 +1682,7 @@ class _AgentDetailState extends State<AgentDetail> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CritterSprite(
+            CritterSprite(
               pose: CritterPose.exited,
               width: 92,
               body: DeckHud.dim,

@@ -247,7 +247,7 @@ class NotRunningCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const CritterSprite(
+          CritterSprite(
             pose: CritterPose.wait,
             width: 108,
             body: DeckHud.ink,

@@ -16,7 +16,8 @@ has always had: an approximation would quietly restyle the default deck.
 Usage:
   scripts/gen-themes.py --yaml ../iTerm2-Color-Schemes/yaml \
       --presets ~/Applications/iTerm.app/Contents/Resources/ColorPresets.plist \
-      --out backend/internal/web/static/themes.json
+      --out backend/internal/web/static/themes.json \
+      --copy clients/flutter/agents_ui/assets/themes.json
 """
 
 import argparse
@@ -29,12 +30,20 @@ from pathlib import Path
 # The deck as it has always looked. Kept verbatim: it is the fallback in CSS,
 # and the first entry in the picker.
 STOCK = {
-    "--bg": "#0A0A0A", "--panel": "#141412", "--ink": "#E8E4DC", "--dim": "#7A776F",
-    "--accent": "#FF4D00", "--line": "#262622", "--line-2": "#2A2925", "--empty": "#0B0B0B",
-    "--sub-on-ink": "#3B3A36", "--empty-edge": "#22221F", "--sel": "#1C1C19",
-    "--focus-bg": "#24241F", "--accent-hi": "#FF6A26", "--accent-edge": "#5A2E18",
-    "--meta": "#9A968C", "--edge": "#3B3A36", "--track": "#2A2925", "--panel-on": "#24241F",
-    "--tool-claude": "#C98B6B", "--tool-codex": "#4FB3A6", "--tool-gemini": "#6F8FD8",
+    # The app in the browser, as upstream draws it (settings.css :root).
+    "--ground": "#1A1A18", "--panel": "#141412", "--block": "#222220",
+    "--raised": "#2A2A27", "--hover": "#1C1C19", "--rule": "#3B3A36",
+    "--line": "#262622", "--edge": "#55524B", "--term": "#0A0A0A",
+    "--ink": "#E8E4DC", "--text": "#C9C5BC", "--soft": "#B5B1A8",
+    "--muted": "#9A968C", "--dim": "#7A776F", "--orange": "#FF4D00",
+    "--orange2": "#FF6A2E", "--ok": "#6FD69A", "--bad": "#F2766B",
+    # The deck's own tokens, still drawn by the Flutter clients and the panel.
+    "--bg": "#0A0A0A", "--accent": "#FF4D00", "--line-2": "#2A2925",
+    "--empty": "#0B0B0B", "--sub-on-ink": "#3B3A36", "--empty-edge": "#22221F",
+    "--sel": "#1C1C19", "--focus-bg": "#24241F", "--accent-hi": "#FF6A26",
+    "--accent-edge": "#5A2E18", "--meta": "#9A968C", "--track": "#2A2925",
+    "--panel-on": "#24241F", "--tool-claude": "#C98B6B",
+    "--tool-codex": "#4FB3A6", "--tool-gemini": "#6F8FD8",
 }
 
 
@@ -119,15 +128,50 @@ def pick_dim(bg, fg, colors):
     return fg
 
 
+def lift(c, against, target):
+    """c, moved away from `against` until it carries at `target`.
+
+    A terminal scheme only has to carry one size of monospace text, and some
+    of them (Penumbra, Solarized, Ozz's Blizzard) sit at 2.5-4:1. The deck
+    draws smaller text and more of it, so a colour that low is walked away
+    from the surface it sits on, towards black or white depending on which
+    side of it the surface is, until it clears the floor. 595 of the 611
+    schemes never reach this: their own colours already carry.
+
+    The walk keeps the scheme's own direction: black text on Hot Dog Stand's
+    red stays black and settles at 3.9, because turning it white to buy
+    0.6 of contrast would not be that scheme any more.
+    """
+    if contrast(c, against) >= target:
+        return c
+    towards = "#000000" if luminance(against) > luminance(c) else "#FFFFFF"
+    for pct in range(95, -1, -5):
+        blend = mix(c, towards, pct)
+        if contrast(blend, against) >= target:
+            return blend
+    return towards
+
+
 def tool_colour(c, bg, fg, fallback):
     if c and contrast(c, bg) >= 2.0:
         return c
     return fallback
 
 
+# What the deck's text has to carry against the surface it sits on. The ink
+# floor is WCAG AA for body text; second-rank text is held to the 3.0 that
+# pick_dim already uses.
+INK_FLOOR = 4.5
+MUTED_FLOOR = 3.0
+
+
 def tokens_for(bg, fg, colors, cursor):
     light = luminance(bg) > 0.5
     accent = pick_accent(bg, fg, colors, cursor)
+    # Panels sit on --ground, a step of the background towards the
+    # foreground, so that is what the text has to carry against.
+    ground = mix(bg, fg, 92.8)
+    fg = lift(fg, ground, INK_FLOOR)
     dim = pick_dim(bg, fg, colors)
     t = {
         "--bg": bg.upper(),
@@ -147,7 +191,7 @@ def tokens_for(bg, fg, colors, cursor):
         "--track": mix(bg, fg, 85.6),
         "--panel-on": mix(bg, fg, 88.3),
         "--edge": mix(bg, fg, 77.9),
-        "--meta": mix(bg, fg, 35.1),
+        "--meta": lift(mix(bg, fg, 35.1), ground, MUTED_FLOOR),
         "--sub-on-ink": mix(bg, fg, 77.9),
         "--accent-hi": mix(accent, fg, 88),
         "--accent-edge": mix(accent, bg, 45),
@@ -155,6 +199,27 @@ def tokens_for(bg, fg, colors, cursor):
         "--tool-codex": tool_colour(colors[6], bg, fg, STOCK["--tool-codex"]),
         "--tool-gemini": tool_colour(colors[4], bg, fg, STOCK["--tool-gemini"]),
     }
+    # The app in the browser has its own names for the same idea. Every blend
+    # below was solved from upstream's own hex, so the stock theme comes back
+    # exactly rather than approximately.
+    green = colors[2] or colors[10]
+    red = colors[1] or colors[9]
+    t.update({
+        "--term": bg.upper(),
+        "--ground": ground,
+        "--block": mix(bg, fg, 89.2),
+        "--raised": mix(bg, fg, 85.6),
+        "--hover": mix(bg, fg, 91.9),
+        "--rule": mix(bg, fg, 77.9),
+        "--edge": mix(bg, fg, 66.2),
+        "--text": mix(bg, fg, 14.0),
+        "--soft": mix(bg, fg, 23.0),
+        "--muted": lift(mix(bg, fg, 35.1), ground, MUTED_FLOOR),
+        "--orange": accent.upper(),
+        "--orange2": mix(accent, fg, 88),
+        "--ok": tool_colour(green, bg, fg, STOCK["--ok"]),
+        "--bad": tool_colour(red, bg, fg, STOCK["--bad"]),
+    })
     return t, light
 
 
@@ -211,6 +276,8 @@ def main():
     ap.add_argument("--yaml", type=Path)
     ap.add_argument("--presets", type=Path)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--copy", type=Path, action="append", default=[],
+                    help="write the same file here too (the Flutter clients bundle a copy)")
     args = ap.parse_args()
 
     themes, seen = [], set()
@@ -237,8 +304,11 @@ def main():
     themes.sort(key=lambda x: x["name"].lower())
     stock = {"name": "agents deck", "light": False, "source": "built-in", "tokens": dict(STOCK)}
     out = {"version": 1, "default": "agents deck", "themes": [stock] + themes}
-    args.out.write_text(json.dumps(out, separators=(",", ":"), ensure_ascii=False) + "\n",
-                        encoding="utf-8")
+    text = json.dumps(out, separators=(",", ":"), ensure_ascii=False) + "\n"
+    args.out.write_text(text, encoding="utf-8")
+    for also in args.copy:
+        also.parent.mkdir(parents=True, exist_ok=True)
+        also.write_text(text, encoding="utf-8")
     dark = sum(1 for t in themes if not t["light"])
     print("%d themes (%d dark, %d light) -> %s (%.0f KB)" %
           (len(out["themes"]), dark + 1, len(themes) - dark, args.out,

@@ -105,9 +105,9 @@ class _TicksPainter extends CustomPainter {
 
 /// HH:MM, redrawn only when the minute changes.
 class HudClock extends StatefulWidget {
-  const HudClock({super.key, this.color = DeckHud.ink, this.size = 24});
+  const HudClock({super.key, this.color, this.size = 24});
 
-  final Color color;
+  final Color? color;
   final double size;
 
   @override
@@ -141,7 +141,7 @@ class _HudClockState extends State<HudClock> {
     return RepaintBoundary(
       child: Text(
         '${two(_shown.hour)}:${two(_shown.minute)}',
-        style: DeckHud.rm(widget.size, widget.color),
+        style: DeckHud.rm(widget.size, widget.color ?? DeckHud.ink),
       ),
     );
   }

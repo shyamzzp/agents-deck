@@ -56,7 +56,7 @@
   --f-serif: "Instrument Serif", Georgia, serif;
   --side: 208px;
   --f-label: var(--f-mono);
-  color-scheme: dark;
+  color-scheme: light dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -976,3 +976,25 @@ code { font-family: var(--f-mono); font-size: 0.92em; color: var(--ink); }
 @media (max-width: 900px) {
   .barred .panelview { right: 0; }
 }
+
+/* ---------- Appearance: the theme picker ---------- */
+.theme-ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.theme-ctl input[type="search"] { min-width: 210px; flex: 1 1 210px; }
+.theme-list {
+  margin-top: 10px; display: grid; gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  max-height: 60vh; overflow-y: auto; overscroll-behavior: contain;
+}
+/* Each row is drawn in its own theme, so the list is the preview. */
+.theme-row {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  padding: 8px 10px; cursor: pointer; text-align: left;
+  background: var(--rbg); color: var(--rink);
+  border: 2px solid var(--rline); border-radius: 0;
+}
+.theme-row:hover, .theme-row:focus-visible { border-color: var(--rink); outline: none; }
+.theme-row.on { border-color: var(--orange); }
+.theme-name { flex: 1 1 auto; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.theme-kind { flex: none; font-size: 11px; opacity: 0.6; }
+.theme-chips { display: flex; flex: none; gap: 2px; }
+.theme-chips i { display: block; width: 9px; height: 18px; }
