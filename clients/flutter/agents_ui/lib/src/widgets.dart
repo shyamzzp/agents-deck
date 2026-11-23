@@ -150,6 +150,55 @@ class _HudClockState extends State<HudClock> {
 /// The deck's 4×4 board: square cells with an 8 px gap, as large as the
 /// space allows, centred. With [square] false the cells fill the space
 /// instead (a little shorter than wide when room is needed below the grid).
+/// How many cells a page of the deck is drawn in. The desk panel and the
+/// boards draw 4 x 4, which is also how the service numbers slots, so that is
+/// the default everywhere; a host with more room can ask for more, and pages
+/// need not all be the same shape.
+class DeckShape {
+  const DeckShape(this.columns, this.rows)
+    : assert(columns > 0 && rows > 0, 'a page needs at least one cell');
+
+  final int columns;
+  final int rows;
+
+  int get cells => columns * rows;
+
+  static const panel = DeckShape(
+    DeckGrid.defaultColumns,
+    DeckGrid.defaultRows,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is DeckShape && other.columns == columns && other.rows == rows;
+
+  @override
+  int get hashCode => Object.hash(columns, rows);
+
+  @override
+  String toString() => '${columns}x$rows';
+}
+
+/// The shape of page [i] of a deck shaped by [shapes], the last entry
+/// standing in for every page beyond it.
+DeckShape deckShapeOf(List<DeckShape> shapes, int i) =>
+    shapes[math.min(i < 0 ? 0 : i, shapes.length - 1)];
+
+/// Which page of a deck shaped by [shapes] holds [slot]. Pages hold as many
+/// agents as they have cells, so this walks the shapes rather than dividing.
+int deckPageOf(List<DeckShape> shapes, int slot) {
+  var page = 0, end = deckShapeOf(shapes, 0).cells;
+  while (slot >= end) {
+    page++;
+    end += deckShapeOf(shapes, page).cells;
+  }
+  return page;
+}
+
+/// Enough pages for every slot in [slots], and never fewer than one.
+int deckPageCount(List<DeckShape> shapes, Iterable<int> slots) =>
+    slots.isEmpty ? 1 : deckPageOf(shapes, slots.reduce(math.max)) + 1;
+
 class DeckGrid extends StatelessWidget {
   const DeckGrid({
     super.key,

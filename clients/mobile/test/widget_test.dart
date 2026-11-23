@@ -8,6 +8,12 @@ import 'package:agents_deck_ui/agents_deck_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+const _pathChannels = [
+  MethodChannel('plugins.flutter.io/path_provider'),
+  MethodChannel('plugins.flutter.io/path_provider_foundation'),
+  MethodChannel('plugins.flutter.io/path_provider_macos'),
+];
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -15,32 +21,34 @@ void main() {
 
   setUp(() {
     docs = Directory.systemTemp.createTempSync('deck_test');
-    // path_provider is a platform channel; in a test it has to be answered.
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-          const MethodChannel('plugins.flutter.io/path_provider'),
-          (call) async => call.method == 'getApplicationDocumentsDirectory'
-              ? docs.path
-              : null,
-        );
+    // path_provider is a platform channel with no implementation under
+    // flutter test. The host decides which one answers: the Apple
+    // implementation asks for a directory by name, the legacy channel has a
+    // method per directory, so both are answered here.
+    for (final channel in _pathChannels) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async => docs.path);
+    }
   });
 
   tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-          const MethodChannel('plugins.flutter.io/path_provider'),
-          null,
-        );
+    for (final channel in _pathChannels) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    }
     docs.deleteSync(recursive: true);
   });
 
   testWidgets('an unpaired device is asked to pair', (tester) async {
-    await tester.pumpWidget(const DeckApp());
-    await tester.pumpAndSettle();
-    expect(
-      find.text('This device is not paired yet. On the Mac, run:'),
-      findsOneWidget,
-    );
+    // Startup asks the platform for a directory and reads two files. That is
+    // real I/O on the real event loop, which tester.pump cannot advance, so it
+    // runs outside the fake clock.
+    await tester.runAsync(() async {
+      await tester.pumpWidget(const DeckApp());
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(find.byType(PairingScreen), findsOneWidget);
   });
 
   test('a bundle that is not https is refused', () {
