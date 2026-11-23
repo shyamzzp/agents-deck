@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"os/exec"
 	"runtime"
 	"slices"
 	"strings"
@@ -221,36 +220,9 @@ func (a *Admin) sshAttach(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, err.Error())
 		return
 	}
-	script := `on run args
- set commandText to ""
- repeat with arg in args
-  set commandText to commandText & " " & quoted form of (contents of arg)
- end repeat
- tell application "Terminal"
-  do script commandText
-  activate
- end tell
-end run`
-	if inv.Preferred == "iTerm2" {
-		script = `on run args
- set commandText to ""
- repeat with arg in args
-  set commandText to commandText & " " & quoted form of (contents of arg)
- end repeat
- tell application id "com.googlecode.iterm2"
-  activate
-  if (count of windows) is 0 then
-   create window with default profile command commandText
-  else
-   tell current window to create tab with default profile command commandText
-  end if
- end tell
-end run`
-	}
-	args := append([]string{"-e", script, "--", cmd.Path}, cmd.Args[1:]...)
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	if err := exec.CommandContext(ctx, "/usr/bin/osascript", args...).Run(); err != nil {
+	if err := deskterm.OpenCommand(ctx, inv.Preferred, cmd.Path, cmd.Args[1:]...); err != nil {
 		writeErr(w, 500, "could not open Terminal; run agentctl attach --ssh "+req.ID)
 		return
 	}

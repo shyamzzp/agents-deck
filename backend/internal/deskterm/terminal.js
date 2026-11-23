@@ -21,7 +21,9 @@ function run([action, targetApp, targetTTY, targetID]) {
             app.activate();
             return 'focused';
           }
-          result.panes.push({app:name, window:wi+1, tab:ti+1, pane:pi+1, tty, id});
+          let title = '';
+          try { title = name === 'iTerm2' ? p.name() : t.customTitle(); } catch {}
+          result.panes.push({title,app:name, window:wi+1, tab:ti+1, pane:pi+1, tty, id});
         }
       }
     }

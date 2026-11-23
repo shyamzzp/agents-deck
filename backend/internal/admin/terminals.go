@@ -15,15 +15,14 @@ import (
 func (a *Admin) terminalInventory(ctx context.Context) (deskterm.Inventory, error) {
 	host := str(a.readConfig(), "sshCodexHost", "")
 	ttys := map[string]string{}
-	ids := map[string]string{}
+	var ids, names map[string]string
 	if a.Store != nil && runtime.GOOS == "darwin" {
 		clients := tmux.ClientList()
-		for _, e := range a.Store.Entries() {
+		entries := a.Store.Entries()
+		ids, names = deskterm.CodexIndex(entries)
+		for _, e := range entries {
 			if e.LiveTTY != "" {
 				ttys[e.A.ID] = e.LiveTTY
-			}
-			if e.SessionID != "" {
-				ids[e.SessionID] = e.A.ID
 			}
 			for _, c := range clients {
 				if e.TmuxName != "" && c.Session == e.TmuxName && ttys[e.A.ID] == "" {
@@ -34,7 +33,7 @@ func (a *Admin) terminalInventory(ctx context.Context) (deskterm.Inventory, erro
 	}
 	ctx, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
-	inv, err := deskterm.Discover(ctx, host, ttys, ids)
+	inv, err := deskterm.Discover(ctx, host, ttys, ids, names)
 	if err == nil {
 		a.bindings.apply(&inv)
 	}

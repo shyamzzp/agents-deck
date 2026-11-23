@@ -1,14 +1,19 @@
 package daemon
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/brushknight/agents-deck/backend/internal/codex"
+	"github.com/brushknight/agents-deck/backend/internal/deskterm"
 	"github.com/brushknight/agents-deck/backend/internal/model"
 	"github.com/brushknight/agents-deck/backend/internal/proc"
 	"github.com/brushknight/agents-deck/backend/internal/store"
@@ -112,13 +117,50 @@ func (d *Daemon) syncCodex(threads []codex.Thread) {
 	}
 }
 
-// focusExternal opens the thread in the Codex app (codex:// deep link; no Apple events).
-// It needs the Codex app installed: with only the CLI there is nothing to open.
+// Focus an existing CLI pane or resume the thread in a new terminal on macOS.
 func (d *Daemon) focusExternal(e store.Entry) error {
-	d.Store.Update(e.A.ID, func(x *store.Entry) bool { was := x.A.Unseen; x.A.Unseen = false; return was })
-	if err := proc.Open("codex://threads/" + e.SessionID); err != nil {
+	if runtime.GOOS == "darwin" {
+		if !deskterm.ValidID(e.SessionID) {
+			return errors.New("invalid Codex thread ID")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		ids, names := deskterm.CodexIndex(d.Store.Entries())
+		inv, err := deskterm.Discover(ctx, "", nil, ids, names)
+		if err != nil {
+			return err
+		}
+		if p, ok := inv.Local[e.A.ID]; ok {
+			err = deskterm.Focus(ctx, p, "pane")
+		} else {
+			home, _ := os.UserHomeDir()
+			fromPath, _ := exec.LookPath("codex")
+			program := ""
+			for _, candidate := range []string{inv.CodexBinary, LookPathLogin("codex"), fromPath, filepath.Join(home, ".npm-global", "bin", "codex"), filepath.Join(home, ".local", "bin", "codex")} {
+				if filepath.IsAbs(candidate) && exec.CommandContext(ctx, candidate, "--version").Run() == nil {
+					program = candidate
+					break
+				}
+			}
+			if program == "" {
+				if err = proc.Open("codex://threads/" + e.SessionID); err != nil {
+					return fmt.Errorf("could not find a working Codex CLI or desktop app; run codex resume %s in your terminal", e.SessionID)
+				}
+			} else {
+				cwd := e.A.Cwd
+				if st, statErr := os.Stat(cwd); statErr != nil || !st.IsDir() {
+					cwd = home
+				}
+				err = deskterm.OpenCommand(ctx, inv.Preferred, "/bin/zsh", "-lc", `cd -- "$1" && exec "$2" resume -- "$3"`, "agentctl", cwd, program, e.SessionID)
+			}
+		}
+		if err != nil {
+			return err
+		}
+	} else if err := proc.Open("codex://threads/" + e.SessionID); err != nil {
 		return err
 	}
+	d.Store.Update(e.A.ID, func(x *store.Entry) bool { was := x.A.Unseen; x.A.Unseen = false; return was })
 	log.Printf("focus %s: opened codex thread", e.A.ID)
 	return nil
 }

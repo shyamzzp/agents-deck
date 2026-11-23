@@ -1748,7 +1748,7 @@ function buildInfo(a) {
     }
     if (!loc && a.sshTerminal && a.status !== 'offline') actions.append(actionButton(a, 'Open in '+(terminals.preferred || 'Terminal'), 'focus', 'solid', note));
   } else {
-    if (!loc && a.status !== 'exited') actions.append(actionButton(a, codexThread(a) ? 'open in codex' : inApp(a) ? `open in ${a.app}` : hungry(a) ? 'review in terminal' : 'focus terminal', 'focus', 'solid', note));
+    if (!loc && a.status !== 'exited') actions.append(actionButton(a, codexThread(a) ? (terminals.preferred ? 'Open in '+terminals.preferred : 'Open Codex session') : inApp(a) ? `open in ${a.app}` : hungry(a) ? 'review in terminal' : 'focus terminal', 'focus', 'solid', note));
     else if (!loc && a.resumable) actions.append(actionButton(a, 'resume', 'resume', 'solid', note));
     if (a.status === 'running' && (!a.external || inApp(a))) actions.append(actionButton(a, 'interrupt', 'interrupt', 'narrow', note));
     else actions.append(removeButton(a, note));
@@ -1904,7 +1904,7 @@ function renderDetail() {
   }
   panel.hidden = false;
   panel.setAttribute('aria-labelledby', 'd-title');
-  const key = detailKey(a) + JSON.stringify([locationFor(a), a.sshHost && [terminals.preferred, terminals.hostPanes, a.sshTerminal]]);
+  const key = detailKey(a) + JSON.stringify([locationFor(a), terminals.preferred, a.sshHost && [terminals.hostPanes, a.sshTerminal]]);
   if (!det || det.key !== key) {
     const hadFocus = panel.contains(document.activeElement);
     det = { key, id: a.id };
