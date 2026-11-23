@@ -17,7 +17,7 @@ void main() {
     final a = s.agents.first;
     expect(a.lost, isTrue);
     expect(agentMetaLine(a, s), 'lost with tmux');
-    expect(agentPillLabel(a, s), startsWith('lost with tmux · '));
+    expect(agentPillLabel(a, s), matches(RegExp(r'^\d+[smhd]')));
   });
 
   test('only subagents at work: the tile counts them', () {
@@ -392,15 +392,15 @@ void main() {
         s.inStatus(a, DateTime.utc(2030).add(const Duration(minutes: 38))),
         const Duration(minutes: 38),
       );
-      // Working carries its seconds: a number that moves says the link is
-      // alive.
+      // Working carries its seconds and thousandths: a number that moves
+      // says the link is alive.
       expect(
         agentPillLabel(a, s, DateTime.utc(2030, 1, 1, 0, 38)),
-        'running · 38m 0s',
+        '38m 0.000s',
       );
       expect(
         agentPillLabel(a, s, DateTime.utc(2030, 1, 1, 0, 38, 7)),
-        'running · 38m 7s',
+        '38m 7.000s',
       );
     });
 

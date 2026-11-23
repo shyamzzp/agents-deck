@@ -417,13 +417,22 @@ class _AgentDetailState extends State<AgentDetail> {
       child: Column(
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(tight ? 18 : 36, tight ? 14 : 24, 12, 0),
+            padding: EdgeInsets.fromLTRB(
+              tight ? 18 : 36,
+              tight ? 14 : 24,
+              12,
+              0,
+            ),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
                     'ask it to\u2026',
-                    style: DeckHud.rm(tight ? 22 : 28, DeckHud.ink, weight: 700),
+                    style: DeckHud.rm(
+                      tight ? 22 : 28,
+                      DeckHud.ink,
+                      weight: 700,
+                    ),
                   ),
                 ),
                 GestureDetector(
@@ -447,14 +456,23 @@ class _AgentDetailState extends State<AgentDetail> {
           if (_shown?.$2 case final a? when !a.canBeTold)
             Expanded(
               child: Padding(
-                padding: EdgeInsets.fromLTRB(tight ? 18 : 36, 8, tight ? 18 : 36, 8),
+                padding: EdgeInsets.fromLTRB(
+                  tight ? 18 : 36,
+                  8,
+                  tight ? 18 : 36,
+                  8,
+                ),
                 child: Column(
                   key: const Key('asks-refused'),
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'this one cannot be told',
-                      style: DeckHud.rm(tight ? 18 : 22, DeckHud.accent, weight: 700),
+                      style: DeckHud.rm(
+                        tight ? 18 : 22,
+                        DeckHud.accent,
+                        weight: 700,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Text(
@@ -472,69 +490,69 @@ class _AgentDetailState extends State<AgentDetail> {
               ),
             )
           else
-          Expanded(
-            child: GridView.builder(
-              key: const Key('asks-grid'),
-              padding: EdgeInsets.fromLTRB(
-                tight ? 18 : 36,
-                tight ? 10 : 16,
-                tight ? 18 : 36,
-                tight ? 10 : 16,
-              ),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: tight ? 2 : 3,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                childAspectRatio: tight ? 1.25 : 1.5,
-              ),
-              itemCount: agentAsks.length,
-              itemBuilder: (context, i) {
-                final ask = agentAsks[i];
-                final sent = _askSent == i;
-                return GestureDetector(
-                  key: Key('ask-$i'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _busy ? null : () => _ask(i),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: sent ? DeckHud.ink : DeckHud.panel,
-                      border: Border.all(
-                        color: sent ? DeckHud.ink : DeckHud.dim,
-                        width: 2,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          sent ? 'sent' : ask.label,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: DeckHud.rm(
-                            tight ? 16 : 19,
-                            sent ? DeckHud.bg : DeckHud.ink,
-                            weight: 700,
-                          ),
+            Expanded(
+              child: GridView.builder(
+                key: const Key('asks-grid'),
+                padding: EdgeInsets.fromLTRB(
+                  tight ? 18 : 36,
+                  tight ? 10 : 16,
+                  tight ? 18 : 36,
+                  tight ? 10 : 16,
+                ),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: tight ? 2 : 3,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: tight ? 1.25 : 1.5,
+                ),
+                itemCount: agentAsks.length,
+                itemBuilder: (context, i) {
+                  final ask = agentAsks[i];
+                  final sent = _askSent == i;
+                  return GestureDetector(
+                    key: Key('ask-$i'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _busy ? null : () => _ask(i),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: sent ? DeckHud.ink : DeckHud.panel,
+                        border: Border.all(
+                          color: sent ? DeckHud.ink : DeckHud.dim,
+                          width: 2,
                         ),
-                        const SizedBox(height: 6),
-                        Expanded(
-                          child: Text(
-                            ask.text,
-                            overflow: TextOverflow.fade,
-                            style: DeckHud.mono(
-                              size: tight ? 11 : 12,
-                              color: sent ? DeckHud.bg : DeckHud.dim,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            sent ? 'sent' : ask.label,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: DeckHud.rm(
+                              tight ? 16 : 19,
+                              sent ? DeckHud.bg : DeckHud.ink,
+                              weight: 700,
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 6),
+                          Expanded(
+                            child: Text(
+                              ask.text,
+                              overflow: TextOverflow.fade,
+                              style: DeckHud.mono(
+                                size: tight ? 11 : 12,
+                                color: sent ? DeckHud.bg : DeckHud.dim,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
           if (_note case final n?)
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
@@ -797,6 +815,9 @@ class _AgentDetailState extends State<AgentDetail> {
             // The seconds move while it works, so the label rebuilds itself
             // rather than waiting for the deck to.
             child: Ticking(
+              // Thousandths: ten frames a second is enough to read as moving
+              // without spending a frame on every one of them.
+              every: const Duration(milliseconds: 100),
               builder: (context) => Text(
                 agentPillLabel(a, state),
                 maxLines: 1,
@@ -903,10 +924,7 @@ class _AgentDetailState extends State<AgentDetail> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: fill == null
               ? null
-              : BoxDecoration(
-                  color: fill,
-                  borderRadius: BorderRadius.zero,
-                ),
+              : BoxDecoration(color: fill, borderRadius: BorderRadius.zero),
           child: Text(
             _flashKey == 'focus' && _flash == _Flash.sent
                 ? 'focused'
@@ -1007,31 +1025,57 @@ class _AgentDetailState extends State<AgentDetail> {
           const SizedBox(height: 10),
           TickBar(value: a.contextFraction, color: DeckHud.ink),
           const SizedBox(height: 26),
-          Row(
-            children: [
-              for (final (label, value) in [
-                ('tokens out', compactCount(a.tokensOutput)),
-                ('cache read', compactCount(a.cacheRead)),
-                (
-                  'cost · est',
-                  a.codexThread ? '—' : '\$${a.costUsd.toStringAsFixed(2)}',
-                ),
-                ('turns', '${a.turns}'),
-              ])
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _label(label, DeckHud.dim),
-                      const SizedBox(height: 6),
-                      Text(
-                        value,
-                        style: DeckHud.rm(22, DeckHud.ink, weight: 600),
+          // Four figures as a table: one hairline round the lot and one
+          // between each pair, so a column is a cell rather than a gap.
+          DecoratedBox(
+            key: const Key('agent-figures'),
+            decoration: BoxDecoration(
+              border: Border.all(color: DeckHud.dim, width: 1),
+            ),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final (i, (label, value)) in [
+                    ('tokens out', compactCount(a.tokensOutput)),
+                    ('cache read', compactCount(a.cacheRead)),
+                    (
+                      'cost · est',
+                      a.codexThread ? '—' : '\$${a.costUsd.toStringAsFixed(2)}',
+                    ),
+                    ('turns', '${a.turns}'),
+                  ].indexed)
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                        decoration: BoxDecoration(
+                          border: i == 0
+                              ? null
+                              : Border(
+                                  left: BorderSide(
+                                    color: DeckHud.dim,
+                                    width: 1,
+                                  ),
+                                ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _label(label, DeckHud.dim),
+                            const SizedBox(height: 6),
+                            Text(
+                              value,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: DeckHud.rm(22, DeckHud.ink, weight: 600),
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
-                ),
-            ],
+                    ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 26),
           if (state.lastActiveText(a) case final active when active.isNotEmpty)
@@ -1419,6 +1463,18 @@ class _AgentDetailState extends State<AgentDetail> {
             cut: DeckHud.bg,
           ),
           const SizedBox(height: 20),
+          // Which question of a form this is. The pill above is a clock now,
+          // so the card has to say it.
+          if (p.context.isNotEmpty) ...[
+            Text(
+              p.context,
+              key: const Key('agent-question-context'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: DeckHud.mono(size: 14, color: DeckHud.dim),
+            ),
+            const SizedBox(height: 8),
+          ],
           Text(
             p.title.isEmpty ? 'question' : p.title,
             maxLines: 3,
