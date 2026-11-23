@@ -151,12 +151,24 @@ class _HudClockState extends State<HudClock> {
 /// space allows, centred. With [square] false the cells fill the space
 /// instead (a little shorter than wide when room is needed below the grid).
 class DeckGrid extends StatelessWidget {
-  const DeckGrid({super.key, required this.cells, this.square = true});
+  const DeckGrid({
+    super.key,
+    required this.cells,
+    this.square = true,
+    this.columns = defaultColumns,
+    this.rows = defaultRows,
+  });
 
   final List<Widget> cells;
   final bool square;
 
-  static const columns = 4, rows = 4;
+  /// How the page is laid out. The desk panel and the boards draw 4x4 and the
+  /// "Needs you" grid is 4x4 in the protocol, so that stays the default; a
+  /// host with more room (a tablet) can ask for more.
+  final int columns;
+  final int rows;
+
+  static const defaultColumns = 4, defaultRows = 4;
   static const gap = 8.0;
 
   @override
