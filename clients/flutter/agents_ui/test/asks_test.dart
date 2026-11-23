@@ -32,10 +32,61 @@ void main() {
 
   testWidgets('a double tap on the title opens the quick list', (tester) async {
     await card(tester);
-    expect(find.byKey(const Key('asks-pages')), findsNothing);
+    expect(find.byKey(const Key('asks-grid')), findsNothing);
     await openAsks(tester);
-    expect(find.byKey(const Key('asks-pages')), findsOneWidget);
+    expect(find.byKey(const Key('asks-grid')), findsOneWidget);
     expect(find.text('verify changes'), findsOneWidget);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the grid shows every ask, and scrolls to the last', (
+    tester,
+  ) async {
+    await card(tester);
+    await openAsks(tester);
+    // A grid, not a slider: more than one is on the screen at once.
+    expect(find.text('verify changes'), findsOneWidget);
+    expect(find.text('run the tests'), findsOneWidget);
+
+    // The last one is reachable by scrolling, not by swiping through the rest.
+    await tester.scrollUntilVisible(
+      find.byKey(Key('ask-${agentAsks.length - 1}')),
+      240,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('asks-grid')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(find.text(agentAsks.last.label), findsOneWidget);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a double tap on empty space opens it too', (tester) async {
+    await card(tester);
+    expect(find.byKey(const Key('asks-grid')), findsNothing);
+    // The detector sits under the content, so an empty part of the card
+    // reaches it while a button over it does not.
+    // The gap the Spacer leaves between the card's text and its buttons is
+    // empty by construction, so a tap there reaches the layer beneath.
+    final gap = tester.getCenter(find.byType(Spacer).first);
+    await tester.tapAt(gap);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tapAt(gap);
+    await tester.pump();
+    expect(find.byKey(const Key('asks-grid')), findsOneWidget);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the card\'s own buttons still answer a single tap', (
+    tester,
+  ) async {
+    final source = await card(tester);
+    // focus terminal is the running card's first button; one tap must act,
+    // not wait out a double-tap timeout.
+    await tester.tap(find.text('focus terminal'));
+    await tester.pump();
+    expect(source.calls.where((c) => c.$1 == 'focus'), hasLength(1));
+    expect(find.byKey(const Key('asks-grid')), findsNothing);
     await tester.pumpAndSettle();
   });
 
@@ -54,7 +105,7 @@ void main() {
     // The card says "sent" for a moment before it closes itself.
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('asks-pages')), findsNothing);
+    expect(find.byKey(const Key('asks-grid')), findsNothing);
   });
 
   testWidgets('it can be closed again without sending anything', (
@@ -64,7 +115,7 @@ void main() {
     await openAsks(tester);
     await tester.tap(find.byKey(const Key('asks-close')));
     await tester.pump();
-    expect(find.byKey(const Key('asks-pages')), findsNothing);
+    expect(find.byKey(const Key('asks-grid')), findsNothing);
     expect(source.calls.where((c) => c.$1 == 'prompt'), isEmpty);
     await tester.pumpAndSettle();
   });
