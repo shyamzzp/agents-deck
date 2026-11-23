@@ -36,6 +36,9 @@ func TestSSHPinsScopedAndIdempotent(t *testing.T) {
 		if len(slot) > 0 {
 			body["groupSlot"] = slot[0]
 		}
+		if len(slot) > 1 {
+			body["groupCell"] = slot[1]
+		}
 		data, _ := json.Marshal(body)
 		w := httptest.NewRecorder()
 		a.sshPin(w, httptest.NewRequest("POST", "/admin/v1/ssh-codex/pins", strings.NewReader(string(data))))
@@ -54,6 +57,9 @@ func TestSSHPinsScopedAndIdempotent(t *testing.T) {
 			if len(slot) > 0 && res.State.GroupSlots[id] != slot[0] {
 				t.Fatalf("unexpected group: %v", res.State.GroupSlots)
 			}
+			if len(slot) > 1 && res.State.GroupCells[id] != slot[1] {
+				t.Fatal("lost destination cell")
+			}
 			if len(a.ssh.state.Sessions) != 1 || a.ssh.state.Sessions[0].ID != id {
 				t.Fatal("polling would lose the new tile before the watcher starts")
 			}
@@ -66,7 +72,7 @@ func TestSSHPinsScopedAndIdempotent(t *testing.T) {
 		t.Fatal(got)
 	}
 	pin("test-box", true, 409, 8)
-	pin("test-box", true, 200, 4)
+	pin("test-box", true, 200, 4, 2)
 	if err := book.Set(4, "Renamed"); err != nil {
 		t.Fatal(err)
 	}
