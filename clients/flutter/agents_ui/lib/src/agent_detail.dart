@@ -1340,6 +1340,20 @@ class _AgentDetailState extends State<AgentDetail> {
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: DeckHud.rm(17, DeckHud.ink),
+            // The verb is 17 and the detail 13, so without a strut the line
+            // holding the verb is taller than the ones under it. Forced to
+            // the larger of the two, every line of the paragraph is the same
+            // height whichever sizes happen to fall on it.
+            strutStyle: StrutStyle(
+              fontFamily: 'RobotoMono',
+              // The panel registers the same faces itself and sets this to
+              // null; naming the package there would miss the font and take
+              // the strut's metrics from a fallback.
+              package: DeckHud.fontPackage,
+              fontSize: 17,
+              height: 1.25,
+              forceStrutHeight: true,
+            ),
           ),
         );
       case AgentStatus.error:
