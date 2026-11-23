@@ -15,6 +15,7 @@ const FIXTURE = location.protocol === 'file:' || params.has('fixture');
 let state = null;          // last State from the server
 let skew = 0;              // server clock minus local clock (ms)
 let sshState = { host: '', connection: '', sessions: [] };
+let sshRevision = 0;
 const sshTiles = new Map();
 let terminals = {};
 const locationFor = a => a.sshHost
@@ -725,8 +726,18 @@ function renderSSH() {
   setText($('ssh-status'), status);
 }
 
+function applySSHState(data) {
+  sshState = { ...data, sessions: (data.sessions || []).map(a => ({
+    ...a, id: 'ssh/' + data.host + '/' + a.id, threadID: a.id,
+    sshHost: data.host, sshTerminal: data.terminal,
+    status: data.connection === 'online' ? a.status : 'offline',
+    statusSince: null,
+  })) };
+}
+
 async function refreshSSH() {
   if (expired) return;
+  const revision = sshRevision;
   try {
     const r = await fetch('/admin/v1/ssh-codex', { cache: 'no-store' });
     if (r.status === 401) { showExpired(); return; }
@@ -736,15 +747,12 @@ async function refreshSSH() {
       const inventory = await fetch('/admin/v1/terminals', {cache:'no-store'});
       terminals = inventory.ok ? await inventory.json() : {};
     } catch { terminals = {}; }
-    sshState = { ...data, sessions: (data.sessions || []).map(a => ({
-      ...a, id: 'ssh/' + data.host + '/' + a.id, threadID: a.id,
-      sshHost: data.host, sshTerminal: data.terminal,
-      status: data.connection === 'online' ? a.status : 'offline',
-      statusSince: null,
-    })) };
+    if (revision === sshRevision) applySSHState(data);
   } catch {
-    sshState.connection = 'offline';
-    sshState.sessions = sshState.sessions.map(a => ({ ...a, status: 'offline' }));
+    if (revision === sshRevision) {
+      sshState.connection = 'offline';
+      sshState.sessions = sshState.sessions.map(a => ({ ...a, status: 'offline' }));
+    }
   }
   render();
   setTimeout(refreshSSH, 5000);
@@ -1170,7 +1178,12 @@ function renderSSHChoices() {
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       btn.textContent = pinned ? 'removing…' : 'adding…';
-      const r = await api('/admin/v1/ssh-codex/pins', {host, id:s.id, pinned:!pinned});
+      const r = await api('/admin/v1/ssh-codex/pins', {host, id:s.id, pinned:!pinned}, true);
+      if (r.ok && sshState.host === host && r.data?.state?.host === host) {
+        ++sshRevision; // Ignore polls started before this change.
+        applySSHState(r.data.state);
+        render();
+      }
       if (generation !== pickerGeneration) return;
       if (!r.ok) { btn.disabled = false; btn.textContent = r.error; return; }
       if (pinned) pickerPins.delete(s.id); else pickerPins.add(s.id);
@@ -1946,7 +1959,7 @@ addEventListener('resize', () => closeTileMenu(false));
 document.querySelector('.main').addEventListener('scroll', () => closeTileMenu(false), true);
 
 // ---------------------------------------------------------------- network
-async function api(path, body) {
+async function api(path, body, readJSON = false) {
   if (FIXTURE) return fixtureAction(path, body);
   try {
     const r = await fetch(path, {
@@ -1955,7 +1968,7 @@ async function api(path, body) {
       body: JSON.stringify(body ?? {}),
     });
     if (r.status === 401) { showExpired(); return { ok: false, status: 401, error: 'session expired' }; }
-    if (r.ok) return { ok: true, status: r.status };
+    if (r.ok) return { ok: true, status: r.status, data: readJSON ? await r.json() : undefined };
     let msg = `http ${r.status}`;
     try { const j = await r.json(); if (j?.error) msg = j.error; } catch { /* not json */ }
     return { ok: false, status: r.status, error: msg };

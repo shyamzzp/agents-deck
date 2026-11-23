@@ -70,6 +70,7 @@ func (a *Admin) sshPin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "invalid Codebox selection")
 		return
 	}
+	var added *model.Agent
 	if *req.Pinned {
 		if str(a.readConfig(), "sshCodexHost", "") != req.Host {
 			writeErr(w, 409, "the configured SSH host changed")
@@ -82,11 +83,16 @@ func (a *Admin) sshPin(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 400, err.Error())
 			return
 		}
-		if err = cmd.Run(); err != nil {
+		raw, err := cmd.Output()
+		var session model.Agent
+		if err != nil || json.Unmarshal(raw, &session) != nil || session.ID != req.ID {
 			writeErr(w, 409, "Session unavailable. Reopen the picker to refresh the list.")
 			return
 		}
+		added = &session
 	}
+	a.ssh.mu.Lock()
+	defer a.ssh.mu.Unlock()
 	err := a.editConfig(func(cfg map[string]any) error {
 		if str(cfg, "sshCodexHost", "") != req.Host {
 			return errors.New("the configured SSH host changed")
@@ -118,5 +124,5 @@ func (a *Admin) sshPin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 409, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]bool{"pinned": *req.Pinned})
+	writeJSON(w, 200, map[string]any{"pinned": *req.Pinned, "state": a.sshSnapshot(added)})
 }

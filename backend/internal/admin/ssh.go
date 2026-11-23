@@ -57,6 +57,13 @@ func (a *Admin) sshDashboard(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	writeJSON(w, 200, a.sshSnapshot(nil))
+}
+
+// Caller holds a.ssh.mu. Seed a newly pinned session until the watcher emits
+// its first snapshot so subsequent dashboard reads also see the selection.
+func (a *Admin) sshSnapshot(added *model.Agent) sshState {
+	m := &a.ssh
 	cfg := a.readConfig()
 	host := str(cfg, "sshCodexHost", "")
 	pins := sshPins(cfg, host)
@@ -72,6 +79,10 @@ func (a *Admin) sshDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 		m.state.Pinned = pins
 	}
+	if added != nil && slices.Contains(pins, added.ID) &&
+		!slices.ContainsFunc(m.state.Sessions, func(s model.Agent) bool { return s.ID == added.ID }) {
+		m.state.Sessions = append(m.state.Sessions, *added)
+	}
 	if host != "" && sshdeck.ValidHost(host) && m.cancel == nil && !time.Now().Before(m.retry) && !a.Demo {
 		ctx, cancel := context.WithCancel(context.Background())
 		m.cancel = cancel
@@ -85,7 +96,7 @@ func (a *Admin) sshDashboard(w http.ResponseWriter, r *http.Request) {
 	if state.Connection == "online" && time.Since(state.LastSeen) > 30*time.Second {
 		state.Connection = "offline"
 	}
-	writeJSON(w, 200, state)
+	return state
 }
 
 func (m *sshWatch) run(ctx context.Context, host string, generation uint64, pins []string) {
