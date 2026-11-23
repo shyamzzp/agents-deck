@@ -9,35 +9,36 @@
 //
 // Pairing is the bundle `agentctl pair <name> --bundle agents.json` writes:
 // the deck's CA, this device's certificate and its key. It is kept in the
-// app's Documents directory, which on iOS is inside the app's own container,
-// so no plugin is needed to find it. `docs/phone.md` sets out a stronger
+// app's Documents directory, found with path_provider: iOS does not put HOME
+// in the environment the way a desktop does, so the directory has to be asked
+// for rather than assembled. `docs/phone.md` sets out a stronger
 // scheme -- a QR code, a key made in the Secure Enclave, a CSR -- which keeps
 // the key off disk entirely; this takes the bundle route first because the
 // server side of it is already built.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:agents_deck_ui/agents_deck_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const DeckApp());
 }
 
-/// Where the pairing bundle lives. On iOS `$HOME` is the app's container.
-String? configPath() {
-  final home = Platform.environment['HOME'];
-  return home == null ? null : '$home/Documents/${AgentsConfig.fileName}';
-}
+/// Where the pairing bundle lives, inside the app's own container.
+Future<String> configPath() async =>
+    '${(await getApplicationDocumentsDirectory()).path}/${AgentsConfig.fileName}';
 
-(AgentsConfig?, String?) loadBundle() {
-  final path = configPath();
-  if (path == null) return (null, 'no home directory');
-  return AgentsConfig.load(env: const {}, paths: [path]);
-}
+/// The loader [HttpAgentsClient] calls on every reconnect, so a bundle
+/// replaced while the app runs is picked up. It has to be synchronous, hence
+/// the resolved path rather than another lookup.
+(AgentsConfig?, String?) Function() bundleLoader(String path) =>
+    () => AgentsConfig.load(env: const {}, paths: [path]);
 
 class DeckApp extends StatefulWidget {
   const DeckApp({super.key});
@@ -48,21 +49,27 @@ class DeckApp extends StatefulWidget {
 
 class _DeckAppState extends State<DeckApp> {
   AgentsSource? _source;
+  String? _path;
   String? _reason;
+  bool _looked = false;
 
   @override
   void initState() {
     super.initState();
-    _check();
+    unawaited(_check());
   }
 
   /// Reads the bundle before connecting, so an unpaired app shows the pairing
   /// screen rather than a deck that can never arrive.
-  void _check() {
-    final (cfg, why) = loadBundle();
+  Future<void> _check() async {
+    final path = _path ?? await configPath();
+    final (cfg, why) = AgentsConfig.load(env: const {}, paths: [path]);
+    if (!mounted) return;
     setState(() {
+      _path = path;
       _reason = why;
-      if (cfg != null) _source ??= HttpAgentsClient(loadConfig: loadBundle);
+      _looked = true;
+      if (cfg != null) _source ??= HttpAgentsClient(loadConfig: bundleLoader(path));
     });
   }
 
@@ -75,9 +82,17 @@ class _DeckAppState extends State<DeckApp> {
       builder: (context, _) => ColoredBox(
         color: DeckHud.bg,
         child: SafeArea(
-          child: source == null
-              ? PairingScreen(reason: _reason, onPaired: _check)
-              : AgentsApp(source: source),
+          child: switch ((source, _looked)) {
+            (final AgentsSource s, _) => AgentsApp(source: s),
+            // Until the directory has been asked for there is nothing to say:
+            // showing "not paired yet" first would be a lie on every launch.
+            (_, false) => const SizedBox.shrink(),
+            _ => PairingScreen(
+              reason: _reason,
+              path: _path,
+              onPaired: () => unawaited(_check()),
+            ),
+          },
         ),
       ),
     );
@@ -88,9 +103,17 @@ class _DeckAppState extends State<DeckApp> {
 /// it: a QR scanner would want a camera permission and a package, and this is
 /// a one-off step.
 class PairingScreen extends StatefulWidget {
-  const PairingScreen({super.key, this.reason, required this.onPaired});
+  const PairingScreen({
+    super.key,
+    this.reason,
+    this.path,
+    required this.onPaired,
+  });
 
   final String? reason;
+
+  /// Where a pasted bundle is written; null until the directory is known.
+  final String? path;
   final VoidCallback onPaired;
 
   @override
@@ -133,8 +156,7 @@ class _PairingScreenState extends State<PairingScreen> {
         throw const FormatException('that is not a bundle object');
       }
       AgentsConfig.fromJson(j); // validate before anything is written
-      final path = configPath();
-      if (path == null) throw const FormatException('no home directory');
+      final path = widget.path ?? await configPath();
       final f = File(path);
       await f.parent.create(recursive: true);
       await f.writeAsString(const JsonEncoder.withIndent('  ').convert(j));
