@@ -71,6 +71,7 @@ class DeckLayout {
     this.attention,
     this.ring = defaultRingWidth,
     this.theme,
+    this.titles = const {},
   });
 
   /// Every page that has not been given its own shape.
@@ -90,6 +91,10 @@ class DeckLayout {
   /// The chosen iTerm2 colour scheme by name, or null for the stock deck.
   final String? theme;
 
+  /// What each page is called, by index; -1 is the "Needs you" screen. A page
+  /// with no name of its own is called "page N".
+  final Map<int, String> titles;
+
   DeckShape shapeOf(int page) => perPage[page] ?? fallback;
 
   /// The "Needs you" screen, which is a page you swipe to like any other even
@@ -102,6 +107,7 @@ class DeckLayout {
     attention: shape == fallback ? null : shape,
     ring: ring,
     theme: theme,
+    titles: titles,
   );
 
   DeckLayout withRing(double width) => DeckLayout(
@@ -110,6 +116,7 @@ class DeckLayout {
     attention: attention,
     ring: ringWidths.contains(width) ? width : ring,
     theme: theme,
+    titles: titles,
   );
 
   /// With a page set to [shape], or back to the default when they are equal.
@@ -126,6 +133,7 @@ class DeckLayout {
       attention: attention,
       ring: ring,
       theme: theme,
+      titles: titles,
     );
   }
 
@@ -140,6 +148,7 @@ class DeckLayout {
     attention: attention == shape ? null : attention,
     ring: ring,
     theme: theme,
+    titles: titles,
   );
 
   /// With the deck painted in the scheme called [name]; null is the stock
@@ -150,7 +159,26 @@ class DeckLayout {
     attention: attention,
     ring: ring,
     theme: name == stockThemeName ? null : name,
+    titles: titles,
   );
+
+  /// With a page renamed, or back to its default name when [name] is empty.
+  DeckLayout withTitle(int page, String name) {
+    final next = {...titles};
+    if (name.trim().isEmpty) {
+      next.remove(page);
+    } else {
+      next[page] = name.trim();
+    }
+    return DeckLayout(
+      fallback: fallback,
+      perPage: perPage,
+      attention: attention,
+      ring: ring,
+      theme: theme,
+      titles: next,
+    );
+  }
 
   /// The shapes [AgentsApp] wants: one per page, the last repeating. The
   /// default goes last so every page past the overrides gets it.
@@ -165,11 +193,26 @@ class DeckLayout {
     if (attention case final a?) 'needsYou': [a.columns, a.rows],
     'ring': ring,
     'theme': ?theme,
+    if (titles.isNotEmpty)
+      'titles': {for (final e in titles.entries) '${e.key}': e.value},
     'pages': {
       for (final e in perPage.entries)
         '${e.key}': [e.value.columns, e.value.rows],
     },
   };
+
+  static Map<int, String> _titles(Object? j) {
+    if (j is! Map) return const {};
+    final out = <int, String>{};
+    for (final e in j.entries) {
+      final page = int.tryParse('${e.key}');
+      final name = e.value;
+      if (page != null && name is String && name.trim().isNotEmpty) {
+        out[page] = name.trim();
+      }
+    }
+    return out;
+  }
 
   static DeckShape? _shape(Object? j) {
     if (j is! List || j.length != 2) return null;
@@ -203,6 +246,7 @@ class DeckLayout {
           ? r.toDouble()
           : defaultRingWidth,
       theme: j['theme'] is String ? j['theme'] as String : null,
+      titles: _titles(j['titles']),
     );
   }
 }
@@ -261,7 +305,9 @@ class _DeckAppState extends State<DeckApp> {
       _layout = layout;
       _reason = why;
       _looked = true;
-      if (cfg != null) _source ??= HttpAgentsClient(loadConfig: bundleLoader(path));
+      if (cfg != null) {
+        _source ??= HttpAgentsClient(loadConfig: bundleLoader(path));
+      }
     });
   }
 
@@ -287,6 +333,10 @@ class _DeckAppState extends State<DeckApp> {
     DeckHud.apply(theme);
     await _store(_layout.withTheme(theme?.name));
   }
+
+  /// Renames the page shown, from the footer.
+  Future<void> _setTitle(int page, String name) =>
+      _store(_layout.withTitle(page, name));
 
   Future<void> _store(DeckLayout layout) async {
     final docs = _docs;
@@ -327,6 +377,8 @@ class _DeckAppState extends State<DeckApp> {
               pageShapes: _layout.pageShapes,
               attentionShape: _layout.attentionShape,
               contextRingWidth: _layout.ring,
+              pageTitles: _layout.titles,
+              onRenamePage: _setTitle,
               // A phone has no menu bar to hang settings off, so they get a
               // page of their own at the far left. The deck still opens.
               leadingPage: ConfigPage(
@@ -536,7 +588,10 @@ class _Button extends StatelessWidget {
           opacity: off ? 0.5 : 1,
           child: Text(
             label,
-            style: DeckHud.mono(size: 14, color: filled ? DeckHud.bg : DeckHud.ink),
+            style: DeckHud.mono(
+              size: 14,
+              color: filled ? DeckHud.bg : DeckHud.ink,
+            ),
           ),
         ),
       ),
@@ -874,11 +929,7 @@ class _Stepper extends StatelessWidget {
       children: [
         Text(label, style: DeckHud.mono(size: 12, color: DeckHud.dim)),
         const SizedBox(width: 6),
-        _Tap(
-          glyph: '\u2212',
-          on: value > lo,
-          onTap: () => onChange(value - 1),
-        ),
+        _Tap(glyph: '\u2212', on: value > lo, onTap: () => onChange(value - 1)),
         Container(
           width: 34,
           alignment: Alignment.center,
@@ -995,10 +1046,7 @@ class _SearchState extends State<_Search> {
       alignment: Alignment.centerLeft,
       children: [
         if (_controller.text.isEmpty)
-          Text(
-            widget.hint,
-            style: DeckHud.mono(size: 12, color: DeckHud.dim),
-          ),
+          Text(widget.hint, style: DeckHud.mono(size: 12, color: DeckHud.dim)),
         EditableText(
           controller: _controller,
           focusNode: _focus,
@@ -1041,7 +1089,6 @@ class _Tap extends StatelessWidget {
     );
   }
 }
-
 
 /// How thick the context gauge is drawn.
 class _RingRow extends StatelessWidget {

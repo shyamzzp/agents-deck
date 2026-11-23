@@ -623,6 +623,20 @@ String tickingDuration(Duration d) {
   return '${d.inDays}d';
 }
 
+/// The same elapsed time to the millisecond: 12.340s, 7m 12.340s. The card's
+/// status is a timer and nothing else, so the moving thousandths are what say
+/// the deck is still hearing from the agent.
+String preciseDuration(Duration d) {
+  final ms = (d.inMilliseconds % 1000).clamp(0, 999);
+  final thousandths = ms.toString().padLeft(3, '0');
+  if (d.inMinutes < 1) return '${d.inSeconds}.${thousandths}s';
+  if (d.inHours < 1) {
+    return '${d.inMinutes}m ${d.inSeconds % 60}.${thousandths}s';
+  }
+  if (d.inDays < 1) return '${d.inHours}h ${d.inMinutes % 60}m';
+  return '${d.inDays}d';
+}
+
 /// Short elapsed time: 45s, 12m, 3h, 2d.
 String shortDuration(Duration d) {
   if (d.inMinutes < 1) return '${d.inSeconds}s';
@@ -687,21 +701,15 @@ String agentMetaLine(Agent a, AgentsState state, [DateTime? localNow]) {
 /// Detail-screen status pill text ("running · 38m", "needs you · 2m").
 String agentPillLabel(Agent a, AgentsState state, [DateTime? localNow]) {
   final d = state.inStatus(a, localNow);
-  final t = shortDuration(d);
+  // The critter beside it already says which state this is, so the pill is
+  // the clock alone. Working, waiting and starting run to the millisecond;
+  // the states that are not going anywhere keep the short form.
   return switch (a.status) {
-    // Working and waiting tick by the second: the moving number is how you
-    // know the deck is still hearing from it.
-    AgentStatus.running => 'running · ${tickingDuration(d)}',
-    AgentStatus.waiting =>
-      a.waiting?.kind == PromptKind.question &&
-              (a.waiting?.context.isNotEmpty ?? false)
-          ? a.waiting!.context
-          : 'needs you · ${tickingDuration(d)}',
-    AgentStatus.idle when a.hungry => 'hungry · $t',
-    AgentStatus.idle || AgentStatus.unknown => 'idle · $t',
+    AgentStatus.running ||
+    AgentStatus.waiting ||
+    AgentStatus.starting => preciseDuration(d),
     AgentStatus.error => 'error',
-    AgentStatus.starting => 'starting · ${tickingDuration(d)}',
-    AgentStatus.exited => a.lost ? 'lost with tmux · $t' : 'exited · $t',
+    _ => shortDuration(d),
   };
 }
 
@@ -755,7 +763,6 @@ const agentAsks = [
   ),
   AgentAsk('carry on', 'Carry on with what you were doing.'),
 ];
-
 
 /// A Claude session started by hand in another terminal (`GET /v1/live`),
 /// which can be added to the deck (watched).

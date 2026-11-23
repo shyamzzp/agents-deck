@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -43,6 +42,8 @@ class AgentsApp extends StatefulWidget {
     this.attentionShape,
     this.contextRingWidth = ContextRingPainter.defaultStroke,
     this.leadingPage,
+    this.pageTitles = const {},
+    this.onRenamePage,
   }) : assert(pageShapes.length > 0, 'the deck needs a shape'),
        assert(
          (openCard == null) == (cardHost == null),
@@ -87,6 +88,14 @@ class AgentsApp extends StatefulWidget {
   /// slot 25 and its third at 41. An agent keeps its slot through all of it;
   /// only which page shows it moves.
   final List<DeckShape> pageShapes;
+
+  /// What each page is called, by page index; -1 is the "Needs you" screen.
+  /// A page with no name of its own is called "page N".
+  final Map<int, String> pageTitles;
+
+  /// Renames the page shown. Null leaves the footer's title as a label: a
+  /// host that cannot keep a name should not offer to take one.
+  final void Function(int page, String title)? onRenamePage;
 
   /// Whether anyone can see the board (a menu bar window that hides): the
   /// critters stop animating while false. Null = always visible.
@@ -482,7 +491,6 @@ class _AgentsAppState extends State<AgentsApp> {
     return null;
   }
 
-
   /// Pages of 16 slots (page = slot ~/ 16), side by side, with the "Needs
   /// you" screen before the first: swipe between them, scroll, use the arrow
   /// keys or click a bar. The tiles keep their width and get a little shorter
@@ -521,50 +529,53 @@ class _AgentsAppState extends State<AgentsApp> {
         child: Stack(
           children: [
             Column(
-          children: [
-            Expanded(
-              child: PageView.builder(
-                key: const Key('agents-pages'),
-                controller: _pager,
-                physics: _dragging
-                    ? const NeverScrollableScrollPhysics()
-                    : null,
-                itemCount: pages + 1 + _lead,
-                onPageChanged: (v) => setState(() => _view = v),
-                itemBuilder: (context, v) => v < _lead
-                    ? widget.leadingPage!
-                    : v == _lead
-                    ? AttentionScreen(
-                        needsYou: needsYou,
-                        columns: (widget.attentionShape ?? _shape(0)).columns,
-                        rows: (widget.attentionShape ?? _shape(0)).rows,
-                        tile: (a) => AgentTile(
-                          key: ValueKey('attention-tile-${a.id}'),
-                          agent: a,
-                          state: state,
-                          onOpen: _open,
-                          ringWidth: widget.contextRingWidth,
-                        ),
-                      )
-                    : DeckGrid(
-                        cells: _cellsFor(state, v - 1 - _lead),
-                        square: false,
-                        columns: _shape(v - 1 - _lead).columns,
-                        rows: _shape(v - 1 - _lead).rows,
-                      ),
-              ),
-            ),
-            SizedBox(
-              height: _barsHeight,
-              child: _PageBars(
-                pages: pages,
-                current: _view - 1 - _lead,
-                hot: hot,
-                attention: needsYou.count,
-                onTap: (p) => _goTo(p + 1 + _lead),
-                onAttention: () => _goTo(_lead),
-              ),
-            ),
+              children: [
+                Expanded(
+                  child: PageView.builder(
+                    key: const Key('agents-pages'),
+                    controller: _pager,
+                    physics: _dragging
+                        ? const NeverScrollableScrollPhysics()
+                        : null,
+                    itemCount: pages + 1 + _lead,
+                    onPageChanged: (v) => setState(() => _view = v),
+                    itemBuilder: (context, v) => v < _lead
+                        ? widget.leadingPage!
+                        : v == _lead
+                        ? AttentionScreen(
+                            needsYou: needsYou,
+                            columns:
+                                (widget.attentionShape ?? _shape(0)).columns,
+                            rows: (widget.attentionShape ?? _shape(0)).rows,
+                            tile: (a) => AgentTile(
+                              key: ValueKey('attention-tile-${a.id}'),
+                              agent: a,
+                              state: state,
+                              onOpen: _open,
+                              ringWidth: widget.contextRingWidth,
+                            ),
+                          )
+                        : DeckGrid(
+                            cells: _cellsFor(state, v - 1 - _lead),
+                            square: false,
+                            columns: _shape(v - 1 - _lead).columns,
+                            rows: _shape(v - 1 - _lead).rows,
+                          ),
+                  ),
+                ),
+                SizedBox(
+                  height: _barsHeight,
+                  child: _PageBars(
+                    pages: pages,
+                    current: _view - 1 - _lead,
+                    hot: hot,
+                    attention: needsYou.count,
+                    onTap: (p) => _goTo(p + 1 + _lead),
+                    onAttention: () => _goTo(_lead),
+                    titles: widget.pageTitles,
+                    onRename: widget.onRenamePage,
+                  ),
+                ),
               ],
             ),
             // The card in hand: the tile itself, following the finger. Not a
@@ -728,7 +739,6 @@ class AgentTile extends StatefulWidget {
 }
 
 class _AgentTileState extends State<AgentTile> {
-
   static const _tileDesign = 170.0;
   final _tileKey = GlobalKey();
 
@@ -1134,7 +1144,7 @@ class AgentsEmptyTile extends StatelessWidget {
 /// another page's orange when an agent there needs you. Tap one to go there.
 /// At the far left, an outlined mark for the "Needs you" screen, with how
 /// many agents are on it while you are elsewhere.
-class _PageBars extends StatelessWidget {
+class _PageBars extends StatefulWidget {
   const _PageBars({
     required this.pages,
     required this.current,
@@ -1142,6 +1152,8 @@ class _PageBars extends StatelessWidget {
     required this.attention,
     required this.onTap,
     required this.onAttention,
+    this.titles = const {},
+    this.onRename,
   });
 
   final int pages;
@@ -1155,81 +1167,228 @@ class _PageBars extends StatelessWidget {
   final ValueChanged<int> onTap;
   final VoidCallback onAttention;
 
+  /// What each page is called, by index; -1 is the "Needs you" screen.
+  final Map<int, String> titles;
+
+  /// Null means the name cannot be changed here, so it is drawn as a label.
+  final void Function(int page, String title)? onRename;
+
+  @override
+  State<_PageBars> createState() => _PageBarsState();
+}
+
+class _PageBarsState extends State<_PageBars> {
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+  bool _editing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Tapping away is "done", the same as the keyboard's own return.
+    _focus.addListener(() {
+      if (!_focus.hasFocus && _editing) _commit();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  /// What the page shown is called: its own name, or what it is by default.
+  String get _title => widget.titles[widget.current] ?? _fallback;
+
+  String get _fallback =>
+      widget.current < 0 ? 'needs you' : 'page ${widget.current + 1}';
+
+  void _start() {
+    _controller.text = _title;
+    _controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _controller.text.length,
+    );
+    setState(() => _editing = true);
+    _focus.requestFocus();
+  }
+
+  /// A name that is empty, or the default spelled out, is no name at all: the
+  /// page goes back to being called what it is.
+  void _commit() {
+    final name = _controller.text.trim();
+    widget.onRename?.call(widget.current, name == _fallback ? '' : name);
+    setState(() => _editing = false);
+    _focus.unfocus();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final here = current < 0;
-    final lit = here || attention > 0;
+    final here = widget.current < 0;
+    final lit = here || widget.attention > 0;
+    final pages = widget.pages;
+    final current = widget.current;
+    final attention = widget.attention;
+    final hot = widget.hot;
+    final onTap = widget.onTap;
+    final onAttention = widget.onAttention;
     return Semantics(
       label: here ? 'needs you' : 'page ${current + 1} of $pages',
-      child: Row(
-        key: const Key('agents-pager'),
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Stack(
+        alignment: Alignment.centerLeft,
         children: [
-          Semantics(
-            button: true,
-            label: attention == 0 ? 'needs you' : '$attention need you',
-            child: GestureDetector(
-              key: const Key('agents-page-attention'),
-              behavior: HitTestBehavior.opaque,
-              onTap: onAttention,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
-                child: Row(
-                  children: [
-                    if (!here && attention > 0) ...[
-                      Text(
-                        '$attention',
-                        key: const Key('agents-attention-count'),
-                        style: DeckHud.rm(15, DeckHud.accent, weight: 600),
-                      ),
-                      const SizedBox(width: 7),
-                    ],
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: here ? 56 : 30,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: here ? DeckHud.accent : null,
-                        border: Border.all(
-                          color: lit ? DeckHud.accent : DeckHud.dim,
-                          width: 2,
-                        ),
-                        borderRadius: BorderRadius.zero,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+          // The name sits at the far left and the bars stay centred, so
+          // neither moves the other as a name gets longer.
+          Positioned(
+            left: 8,
+            right: 0,
+            child: _PageName(
+              title: _title,
+              editing: _editing,
+              controller: _controller,
+              focus: _focus,
+              onStart: widget.onRename == null ? null : _start,
+              onDone: _commit,
             ),
           ),
-          for (var p = 0; p < pages; p++)
-            GestureDetector(
-              key: Key('agents-page-$p'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () => onTap(p),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6,
-                  vertical: 12,
-                ),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: p == current ? 56 : 30,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    // Where you are is always bright; other pages turn
-                    // orange when an agent there needs you.
-                    color: p == current
-                        ? DeckHud.ink
-                        : (hot.contains(p)
-                              ? DeckHud.accent
-                              : const Color(0xFF2A2925)),
-                    borderRadius: BorderRadius.zero,
+          Row(
+            key: const Key('agents-pager'),
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Semantics(
+                button: true,
+                label: attention == 0 ? 'needs you' : '$attention need you',
+                child: GestureDetector(
+                  key: const Key('agents-page-attention'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onAttention,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
+                    child: Row(
+                      children: [
+                        if (!here && attention > 0) ...[
+                          Text(
+                            '$attention',
+                            key: const Key('agents-attention-count'),
+                            style: DeckHud.rm(15, DeckHud.accent, weight: 600),
+                          ),
+                          const SizedBox(width: 7),
+                        ],
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: here ? 56 : 30,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: here ? DeckHud.accent : null,
+                            border: Border.all(
+                              color: lit ? DeckHud.accent : DeckHud.dim,
+                              width: 2,
+                            ),
+                            borderRadius: BorderRadius.zero,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+              for (var p = 0; p < pages; p++)
+                GestureDetector(
+                  key: Key('agents-page-$p'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onTap(p),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 12,
+                    ),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: p == current ? 56 : 30,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        // Where you are is always bright; other pages turn
+                        // orange when an agent there needs you.
+                        color: p == current
+                            ? DeckHud.ink
+                            : (hot.contains(p)
+                                  ? DeckHud.accent
+                                  : const Color(0xFF2A2925)),
+                        borderRadius: BorderRadius.zero,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// The page's name at the left of the pager: a label, or a line to type in
+/// once it is tapped.
+class _PageName extends StatelessWidget {
+  const _PageName({
+    required this.title,
+    required this.editing,
+    required this.controller,
+    required this.focus,
+    required this.onStart,
+    required this.onDone,
+  });
+
+  final String title;
+  final bool editing;
+  final TextEditingController controller;
+  final FocusNode focus;
+
+  /// Null where the host cannot keep a name: then this is only a label.
+  final VoidCallback? onStart;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    if (editing) {
+      return SizedBox(
+        width: 150,
+        child: EditableText(
+          key: const Key('agents-page-name-field'),
+          controller: controller,
+          focusNode: focus,
+          style: DeckHud.mono(size: 12, color: DeckHud.ink),
+          cursorColor: DeckHud.accent,
+          backgroundCursorColor: DeckHud.dim,
+          maxLines: 1,
+          autocorrect: false,
+          enableSuggestions: false,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => onDone(),
+          selectionColor: DeckHud.accent.withValues(alpha: 0.35),
+        ),
+      );
+    }
+    return Semantics(
+      button: onStart != null,
+      label: onStart == null ? title : '$title, rename',
+      child: GestureDetector(
+        key: const Key('agents-page-name'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onStart,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: SizedBox(
+            width: 150,
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
+            ),
+          ),
+        ),
       ),
     );
   }

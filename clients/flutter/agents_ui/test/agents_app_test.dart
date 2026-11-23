@@ -88,7 +88,6 @@ void main() {
     expect(await strokes(1), everyElement(1));
   }, skip: false);
 
-
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     debugAgentsSetupHostname = 'panel';
@@ -142,7 +141,15 @@ void main() {
     await _open(tester, 'checkout-api');
 
     expect(find.text('doing now'), findsOneWidget);
-    expect(find.text('running · 38m 0s'), findsOneWidget);
+    // The thousandths move with the wall clock, so the pill is matched by
+    // shape rather than by an exact string.
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('agent-pill')),
+        matching: find.textContaining(RegExp(r'^38m \d+\.\d{3}s$')),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('410k / 1m'), findsOneWidget);
     expect(find.text('41%'), findsOneWidget);
     expect(find.text('84k'), findsOneWidget);
@@ -282,7 +289,7 @@ void main() {
   ) async {
     await _pumpApp(tester, FakeAgentsSource.demo());
     await _open(tester, 'docs-site');
-    expect(find.text('hungry · 12m'), findsOneWidget);
+    expect(find.text('12m'), findsOneWidget);
     expect(find.text('rewrite install guide'), findsOneWidget);
     expect(find.byKey(const Key('agent-interrupt')), findsNothing);
     expect(find.byKey(const Key('agent-focus')), findsOneWidget);
@@ -302,7 +309,13 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('bash · ~/dev/infra-network/terraform'), findsOneWidget);
-    expect(find.text('needs you · 2m 0s'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('agent-pill')),
+        matching: find.textContaining(RegExp(r'^2m \d+\.\d{3}s$')),
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byKey(const Key('agent-option-2')));
@@ -742,7 +755,7 @@ void main() {
     final source = FakeAgentsSource.demo();
     await _pumpApp(tester, source);
     await _open(tester, 'docs-site');
-    expect(find.text('hungry · 12m'), findsOneWidget);
+    expect(find.text('12m'), findsOneWidget);
 
     // A permission prompt appears on the open agent: layout swaps in place.
     final json = source.toJson();
