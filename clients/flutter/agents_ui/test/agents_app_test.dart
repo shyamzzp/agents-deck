@@ -108,7 +108,7 @@ void main() {
     await _open(tester, 'checkout-api');
 
     expect(find.text('doing now'), findsOneWidget);
-    expect(find.text('running · 38m'), findsOneWidget);
+    expect(find.text('running · 38m 0s'), findsOneWidget);
     expect(find.text('410k / 1m'), findsOneWidget);
     expect(find.text('41%'), findsOneWidget);
     expect(find.text('84k'), findsOneWidget);
@@ -268,7 +268,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('bash · ~/dev/infra-network/terraform'), findsOneWidget);
-    expect(find.text('needs you · 2m'), findsOneWidget);
+    expect(find.text('needs you · 2m 0s'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byKey(const Key('agent-option-2')));
@@ -679,7 +679,16 @@ void main() {
         FakeAgentsSource.demo(); // docs-site is unseen in the fixture
     await _pumpApp(tester, source);
     expect(find.text('hungry · feed me'), findsOneWidget);
-    expect(find.byType(HungryStripes), findsOneWidget);
+    // The stripes mean "working", not "finished": a card that is done sits
+    // plain so the one still going is the one that moves.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('agent-tile-d0cs1t')),
+        matching: find.byType(HungryStripes),
+      ),
+      findsNothing,
+    );
+    expect(find.byType(HungryStripes), findsWidgets);
     await _open(tester, 'docs-site');
     expect(find.text('review in terminal'), findsOneWidget);
     // The daemon clears it once its terminal has been looked at.

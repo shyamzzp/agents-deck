@@ -596,6 +596,18 @@ String compactCount(int n) {
   return fmt(n / 1000000, 'm');
 }
 
+/// Elapsed time with its seconds kept: 45s, 7m 23s, 3h 12m, 2d.
+///
+/// The deck's tiles use [shortDuration], which rounds to the largest unit; a
+/// card for an agent that is working wants the seconds, since a number that
+/// moves is what says the link is alive.
+String tickingDuration(Duration d) {
+  if (d.inMinutes < 1) return '${d.inSeconds}s';
+  if (d.inHours < 1) return '${d.inMinutes}m ${d.inSeconds % 60}s';
+  if (d.inDays < 1) return '${d.inHours}h ${d.inMinutes % 60}m';
+  return '${d.inDays}d';
+}
+
 /// Short elapsed time: 45s, 12m, 3h, 2d.
 String shortDuration(Duration d) {
   if (d.inMinutes < 1) return '${d.inSeconds}s';
@@ -659,18 +671,21 @@ String agentMetaLine(Agent a, AgentsState state, [DateTime? localNow]) {
 
 /// Detail-screen status pill text ("running · 38m", "needs you · 2m").
 String agentPillLabel(Agent a, AgentsState state, [DateTime? localNow]) {
-  final t = shortDuration(state.inStatus(a, localNow));
+  final d = state.inStatus(a, localNow);
+  final t = shortDuration(d);
   return switch (a.status) {
-    AgentStatus.running => 'running · $t',
+    // Working and waiting tick by the second: the moving number is how you
+    // know the deck is still hearing from it.
+    AgentStatus.running => 'running · ${tickingDuration(d)}',
     AgentStatus.waiting =>
       a.waiting?.kind == PromptKind.question &&
               (a.waiting?.context.isNotEmpty ?? false)
           ? a.waiting!.context
-          : 'needs you · $t',
+          : 'needs you · ${tickingDuration(d)}',
     AgentStatus.idle when a.hungry => 'hungry · $t',
     AgentStatus.idle || AgentStatus.unknown => 'idle · $t',
     AgentStatus.error => 'error',
-    AgentStatus.starting => 'starting · $t',
+    AgentStatus.starting => 'starting · ${tickingDuration(d)}',
     AgentStatus.exited => a.lost ? 'lost with tmux · $t' : 'exited · $t',
   };
 }

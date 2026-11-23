@@ -9,11 +9,6 @@ import 'agents_model.dart';
 import 'agents_style.dart';
 import 'critter.dart';
 
-/// The header's left column: the 54 px critter (13/18 as tall as wide) and
-/// the 30 px title; the right column lines up with them.
-const _mascotHeight = 54 * 13 / 18;
-const _titleHeight = 30.0;
-
 /// How long the "sent" invert holds before the card closes itself.
 const _sentHold = Duration(milliseconds: 600);
 
@@ -348,12 +343,44 @@ class _AgentDetailState extends State<AgentDetail> {
         borderRadius: BorderRadius.zero,
         border: border == null ? null : Border.all(color: border, width: 3),
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(36, 34, 36, 30),
-        child: child,
+      // Dragged to the right, the card goes back, as a phone's screens do.
+      // The buttons at the bottom stay where they are, so the gesture is the
+      // only way back that does not need them to be reachable.
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragUpdate: (d) => _swipe += d.delta.dx,
+        onHorizontalDragEnd: (d) {
+          final back =
+              _swipe > 80 || (d.primaryVelocity ?? 0) > 420 && _swipe > 24;
+          _swipe = 0;
+          if (back) widget.onClose();
+        },
+        onHorizontalDragCancel: () => _swipe = 0,
+        child: LayoutBuilder(
+          builder: (context, box) {
+            // A phone in portrait has little height. The padding closes up and
+            // the buttons draw shorter, so the row at the bottom of the card
+            // stays on the screen instead of being pushed off it. Scrolling
+            // the card is not an option: each one puts its buttons at the
+            // bottom with a Spacer, which needs a bounded height.
+            final tight = box.maxHeight < 620 || box.maxWidth < 420;
+            return DeckCompact(
+              compact: tight,
+              child: Padding(
+                padding: tight
+                    ? const EdgeInsets.fromLTRB(18, 16, 18, 14)
+                    : const EdgeInsets.fromLTRB(36, 34, 36, 30),
+                child: child,
+              ),
+            );
+          },
+        ),
       ),
     );
   }
+
+  /// How far the card has been dragged sideways, for the swipe back.
+  double _swipe = 0;
 
   // ---- hat picker ------------------------------------------------------------
 
@@ -530,122 +557,98 @@ class _AgentDetailState extends State<AgentDetail> {
     required Color body,
     required Color cut,
   }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final pill = Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  // Tap the mascot to pick its hat.
-                  GestureDetector(
-                    key: const Key('agent-hat'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: a.cwd.isEmpty
-                        ? null
-                        : () => setState(() {
-                            _hats = true;
-                            _note = null;
-                          }),
-                    child: CritterSprite(
-                      pose: critterPoseOf(a, inStatus: state.inStatus(a)),
-                      celebrateUntil: DateTime.now().add(
-                        critterCelebration - state.inStatus(a),
-                      ),
-                      afterCelebrate: a.unseen
-                          ? CritterPose.hungry
-                          : CritterPose.idle,
-                      species: critterSpeciesFor(a.tool),
-                      hat: a.hat,
-                      width: 54,
-                      body: body,
-                      cut: cut,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                a.title,
+        if (a.account case final acc?) ...[
+          ConstrainedBox(
+            key: const Key('agent-account'),
+            constraints: const BoxConstraints(maxWidth: 120),
+            child: Text(
+              acc.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: DeckHud.mono(size: 15, color: ink),
+            ),
+          ),
+          const SizedBox(width: 14),
+        ],
+        // The tool's colour, or its Claude account's.
+        Container(
+          width: 8,
+          height: 8,
+          color: a.account == null
+              ? agentToolColor(a.tool)
+              : hatColor(a.account!.color).$1,
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Container(
+            key: const Key('agent-pill'),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: pillFill,
+              borderRadius: BorderRadius.zero,
+            ),
+            // The seconds move while it works, so the label rebuilds itself
+            // rather than waiting for the deck to.
+            child: Ticking(
+              builder: (context) => Text(
+                agentPillLabel(a, state),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: DeckHud.rm(30, ink, weight: 700, spacing: -0.3),
+                style: DeckHud.mono(size: 15, color: pillInk),
               ),
-            ],
+            ),
           ),
         ),
-        const SizedBox(width: 16),
-        // The same rhythm as the left column: the clock sits level with the
-        // critter's body (its top rows are headroom for bubbles), the pill
-        // level with the title.
-        Column(
+      ],
+    );
+    // The status sits where the clock used to, beside the critter, so the
+    // title below has the whole width. A phone has little of it to spare.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            SizedBox(
-              height: _mascotHeight,
-              child: Align(
-                alignment: Alignment.bottomRight,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: HudClock(color: ink, size: 22),
+            // Tap the mascot to pick its hat.
+            GestureDetector(
+              key: const Key('agent-hat'),
+              behavior: HitTestBehavior.opaque,
+              onTap: a.cwd.isEmpty
+                  ? null
+                  : () => setState(() {
+                      _hats = true;
+                      _note = null;
+                    }),
+              child: CritterSprite(
+                pose: critterPoseOf(a, inStatus: state.inStatus(a)),
+                celebrateUntil: DateTime.now().add(
+                  critterCelebration - state.inStatus(a),
                 ),
+                afterCelebrate: a.unseen
+                    ? CritterPose.hungry
+                    : CritterPose.idle,
+                species: critterSpeciesFor(a.tool),
+                hat: a.hat,
+                width: 54,
+                body: body,
+                cut: cut,
               ),
             ),
-            const SizedBox(height: 10),
-            SizedBox(
-              height: _titleHeight,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (a.account case final acc?) ...[
-                    ConstrainedBox(
-                      key: const Key('agent-account'),
-                      constraints: const BoxConstraints(maxWidth: 120),
-                      child: Text(
-                        acc.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: DeckHud.mono(size: 15, color: ink),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                  ],
-                  // The tool's colour, or its Claude account's.
-                  Container(
-                    width: 8,
-                    height: 8,
-                    color: a.account == null
-                        ? agentToolColor(a.tool)
-                        : hatColor(a.account!.color).$1,
-                  ),
-                  const SizedBox(width: 8),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 300),
-                    child: Container(
-                      key: const Key('agent-pill'),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: pillFill,
-                        borderRadius: BorderRadius.zero,
-                      ),
-                      child: Text(
-                        agentPillLabel(a, state),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: DeckHud.mono(size: 15, color: pillInk),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Align(alignment: Alignment.bottomRight, child: pill),
             ),
           ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          a.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: DeckHud.rm(30, ink, weight: 700, spacing: -0.3),
         ),
       ],
     );

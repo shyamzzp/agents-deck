@@ -114,6 +114,23 @@ void main() {
     });
   });
 
+  group('the card border', () {
+    test('defaults, and only takes the steps on offer', () {
+      const l = DeckLayout();
+      expect(l.border, defaultBorderWidth);
+      expect(l.withBorder(2).border, 2);
+      expect(l.withBorder(7).border, defaultBorderWidth, reason: 'not a step');
+    });
+
+    test('survives a round trip and is not lost by other changes', () {
+      final l = const DeckLayout().withBorder(3);
+      expect(DeckLayout.fromJson(l.toJson()).border, 3);
+      expect(l.withPage(0, const DeckShape(3, 3)).border, 3);
+      expect(l.withFallback(const DeckShape(4, 4)).border, 3);
+      expect(l.withAttention(const DeckShape(2, 2)).border, 3);
+    });
+  });
+
   group('what is stored', () {
     test('survives a round trip', () {
       final l = const DeckLayout(
@@ -127,7 +144,11 @@ void main() {
     test('a default with no overrides stores none', () {
       expect(
         const DeckLayout(fallback: DeckShape(3, 3)).toJson(),
-        {'default': [3, 3], 'pages': <String, Object?>{}},
+        {
+          'default': [3, 3],
+          'border': defaultBorderWidth,
+          'pages': <String, Object?>{},
+        },
       );
     });
 

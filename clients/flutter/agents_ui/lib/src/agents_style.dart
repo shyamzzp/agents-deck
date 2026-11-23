@@ -63,7 +63,7 @@ class AgentLook {
   final Color ring;
   final Color ringTrack;
 
-  /// Sliding orange zebra stripes behind the critter (hungry: review me).
+  /// Sliding orange diagonal stripes behind the critter: this one is working.
   final bool stripes;
 
   static AgentLook of(Agent a) {
@@ -87,12 +87,14 @@ class AgentLook {
         meta: DeckHud.accent,
         chip: tool,
       ),
+      // Working: the sliding diagonal stripes, so a glance says it is going.
       AgentStatus.running => AgentLook(
         fill: DeckHud.panel,
         body: DeckHud.accent,
         label: DeckHud.ink,
         meta: DeckHud.dim,
         chip: tool,
+        stripes: true,
       ),
       AgentStatus.starting => AgentLook(
         fill: DeckHud.panel,
@@ -101,13 +103,14 @@ class AgentLook {
         meta: DeckHud.dim,
         chip: tool,
       ),
+      // Finished and not yet looked at: plain, so it reads as stopped next to
+      // the one that is still going.
       AgentStatus.idle when a.hungry => AgentLook(
         fill: DeckHud.panel,
         body: DeckHud.accent,
         label: DeckHud.ink,
         meta: DeckHud.accent,
         chip: tool,
-        stripes: true,
       ),
       AgentStatus.idle ||
       AgentStatus.exited ||
@@ -181,10 +184,16 @@ class AgentButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Shorter where there is little room, so a card's bottom row stays on a
+    // phone's screen.
+    final tight = DeckCompact.of(context);
+    final h = tight ? height * 0.72 : height;
+    final fs = tight ? fontSize * 0.84 : fontSize;
+
     return Pressable(
       onTap: onTap,
       builder: (context, pressed) => Container(
-        height: height,
+        height: h,
         alignment: alignLeft ? Alignment.centerLeft : Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 22),
         decoration: BoxDecoration(
@@ -197,7 +206,7 @@ class AgentButton extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: DeckHud.mono(
-            size: fontSize,
+            size: fs,
             color: pressed ? pressedInk : ink,
           ),
         ),
