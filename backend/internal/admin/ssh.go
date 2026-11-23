@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/brushknight/agents-deck/backend/internal/hats"
 	"github.com/brushknight/agents-deck/backend/internal/model"
 	"github.com/brushknight/agents-deck/backend/internal/sshdeck"
 )
@@ -109,6 +110,12 @@ func (m *sshWatch) run(ctx context.Context, host string, generation uint64) {
 		var sessions []model.Agent
 		if err := json.Unmarshal(scanner.Bytes(), &sessions); err != nil || len(sessions) > 32 {
 			break
+		}
+		for i := range sessions {
+			if sessions[i].Hat == nil && sessions[i].Cwd != "" {
+				hat := hats.Auto(sessions[i].Cwd)
+				sessions[i].Hat = &hat
+			}
 		}
 		timer.Reset(40 * time.Second)
 		m.mu.Lock()

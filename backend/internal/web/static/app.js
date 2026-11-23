@@ -14,6 +14,8 @@ const FIXTURE = location.protocol === 'file:' || params.has('fixture');
 // ---------------------------------------------------------------- model
 let state = null;          // last State from the server
 let skew = 0;              // server clock minus local clock (ms)
+let sshState = { host: '', connection: '', sessions: [] };
+const sshTiles = new Map();
 let selectedId = null;     // agent shown in the detail panel
 let needsFirst = false;    // "needs you first" sort toggle
 let panelMode = false;     // "panel view": the 720×720 panel's 4×4 grid
@@ -108,6 +110,7 @@ function subsOnly(a) {
 }
 
 function tileMeta(a) {
+  if (a.sshHost && a.status === 'idle') return lastActive(a) || 'idle';
   if (hungry(a)) return 'hungry · feed me';
   switch (a.status) {
     case 'running': return `${subsOnly(a) || verb(a.activity?.tool)} · ${ctxPct(a)}% ctx`;
@@ -129,6 +132,7 @@ function tileMeta(a) {
 }
 
 function pillText(a) {
+  if (a.sshHost && !a.statusSince) return a.status === 'waiting' ? 'needs you' : a.status;
   const since = rel(a.statusSince);
   switch (a.status) {
     case 'running': return `running · ${since}`;
@@ -561,14 +565,16 @@ function makeTile(a, wire = wireDrag) {
   const el = h('button', { type: 'button', class: 'tile', 'data-id': a.id },
     chip, subs, spr, name, meta, ring.svg, bar);
   el.addEventListener('click', () => openDetail(a.id));
-  el.addEventListener('contextmenu', (e) => { e.preventDefault(); openTileMenu(a.id, e.clientX, e.clientY); });
-  el.addEventListener('keydown', (e) => {
-    if (e.key !== 'ContextMenu' && !(e.key === 'F10' && e.shiftKey)) return;
-    e.preventDefault();
-    const r = el.getBoundingClientRect();
-    openTileMenu(a.id, r.left + 10, r.bottom - 6);
-  });
-  wire(el, a.id);
+  if (wire) {
+    el.addEventListener('contextmenu', (e) => { e.preventDefault(); openTileMenu(a.id, e.clientX, e.clientY); });
+    el.addEventListener('keydown', (e) => {
+      if (e.key !== 'ContextMenu' && !(e.key === 'F10' && e.shiftKey)) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      openTileMenu(a.id, r.left + 10, r.bottom - 6);
+    });
+    wire(el, a.id);
+  }
   return { el, spr, name, meta, subs, chip, bar, subsKey: '', acctKey: '', ring: ring.fill, dash: '', cls: '', label: '' };
 }
 
@@ -677,10 +683,56 @@ function renderGrid() {
   // Reconcile in place so running animations aren't restarted needlessly.
   reconcile(grid, want);
   const onAttn = view === 'attn';
-  $('empty').hidden = list.length > 0 || !state || panelOn() || onAttn;
+  $('empty').hidden = list.length > 0 || sshState.sessions.length > 0 || !state || panelOn() || onAttn;
   grid.hidden = (list.length === 0 && !panelOn()) || onAttn;
   renderAttention();
+  renderSSH();
   renderPageBar(panelOn() ? panelPageCount(list) : 1, panelOn() ? new Set(list.filter(needsYou).map((a) => Math.floor(a.slot / 16))) : new Set());
+}
+
+// SSH sessions use the same tile and drawer as local agents. Their identities
+// include the host so a host switch cannot attach an old selection elsewhere.
+function renderSSH() {
+  const box = $('ssh-deck');
+  box.hidden = !sshState.host || view === 'attn';
+  const list = sshState.sessions;
+  const nodes = list.map(a => {
+    let t = sshTiles.get(a.id);
+    if (!t) { t = makeTile(a, null); sshTiles.set(a.id, t); }
+    updateTile(t, a);
+    return t.el;
+  });
+  for (const id of sshTiles.keys()) {
+    if (!list.some(a => a.id === id)) sshTiles.delete(id);
+  }
+  reconcile($('ssh-sessions'), nodes);
+  let status = sshState.host + ' · ' + sshState.connection;
+  if (sshState.connection === 'online' && !list.length) status += ' · No sessions in the last six hours.';
+  if (sshState.connection === 'offline' && list.length && sshState.lastSeen) {
+    status += ' · Last seen ' + new Date(sshState.lastSeen).toLocaleTimeString();
+  }
+  setText($('ssh-status'), status);
+}
+
+async function refreshSSH() {
+  if (expired) return;
+  try {
+    const r = await fetch('/admin/v1/ssh-codex', { cache: 'no-store' });
+    if (r.status === 401) { showExpired(); return; }
+    if (!r.ok) throw new Error('unavailable');
+    const data = await r.json();
+    sshState = { ...data, sessions: (data.sessions || []).map(a => ({
+      ...a, id: 'ssh/' + data.host + '/' + a.id, threadID: a.id,
+      sshHost: data.host, sshTerminal: data.terminal,
+      status: data.connection === 'online' ? a.status : 'offline',
+      statusSince: null,
+    })) };
+  } catch {
+    sshState.connection = 'offline';
+    sshState.sessions = sshState.sessions.map(a => ({ ...a, status: 'offline' }));
+  }
+  render();
+  setTimeout(refreshSSH, 5000);
 }
 
 function reconcile(parent, want) {
@@ -1082,7 +1134,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('pick
 
 function renderTop() {
   const c = { running: 0, waiting: 0, idle: 0, error: 0 };
-  for (const a of state?.agents || []) {
+  for (const a of [...(state?.agents || []), ...sshState.sessions]) {
     if (a.status === 'running' || a.status === 'starting') c.running++;
     else if (a.status === 'exited') c.idle++;
     else if (a.status in c) c[a.status]++;
@@ -1144,7 +1196,7 @@ function closeDetail() {
   selectedId = null; det = null;
   panel.hidden = true; panel.replaceChildren();
   render();
-  (view === 'attn' ? attnTiles : tiles).get(id)?.el.focus({ preventScroll: true });
+  (sshTiles.get(id) || (view === 'attn' ? attnTiles : tiles).get(id))?.el.focus({ preventScroll: true });
 }
 
 const closeIcon = () => {
@@ -1300,8 +1352,8 @@ function header(a) {
   setSprite(spr, poseOf(a), a.tool, a.hat);
   crewUpdate(crew, a);
   // Click the mascot to pick its hat.
-  const hats = hatPicker(a);
-  if (a.cwd) {
+  const hats = a.sshHost ? null : hatPicker(a);
+  if (a.cwd && hats) {
     spr.classList.add('d-spr-btn');
     spr.setAttribute('role', 'button');
     spr.setAttribute('tabindex', '0');
@@ -1311,10 +1363,14 @@ function header(a) {
     spr.addEventListener('click', toggle);
     spr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
   }
-  return { el: h('div', { class: 'd-head' }, el, hats.el), update: (x) => { acct.update(x); setText(pill, pillText(x)); setText(ai, x.aiTitle || ''); ai.hidden = !x.aiTitle; crewUpdate(crew, x); setSprite(spr, poseOf(x), x.tool, x.hat); hats.update(x); } };
+  return { el: h('div', { class: 'd-head' }, el, hats?.el), update: (x) => { setText(el.querySelector('.d-title'), x.title); acct.update(x); setText(pill, pillText(x)); setText(ai, x.aiTitle || ''); ai.hidden = !x.aiTitle; crewUpdate(crew, x); setSprite(spr, poseOf(x), x.tool, x.hat); hats?.update(x); } };
 }
 
 function postAction(a, path, body) {
+  if (a.sshHost) {
+    if (path === 'focus') return api('/admin/v1/ssh-codex/attach', { host: a.sshHost, id: a.threadID });
+    return Promise.resolve({ ok: false, error: 'unavailable for this SSH session' });
+  }
   return api(`/v1/agents/${encodeURIComponent(a.id)}/${path}`, body);
 }
 
@@ -1370,19 +1426,24 @@ function buildInfo(a) {
   const server = h('span');
   const note = h('div', { class: 'note', role: 'status', 'aria-live': 'polite' });
   const actions = h('div', { class: 'actions' });
-  if (a.status !== 'exited') actions.append(actionButton(a, codexThread(a) ? 'open in codex' : inApp(a) ? `open in ${a.app}` : hungry(a) ? 'review in terminal' : 'focus terminal', 'focus', 'solid', note));
-  else if (a.resumable) actions.append(actionButton(a, 'resume', 'resume', 'solid', note));
-  if (a.status === 'running' && (!a.external || inApp(a))) actions.append(actionButton(a, 'interrupt', 'interrupt', 'narrow', note));
-  else actions.append(removeButton(a, note));
-  if (a.tool === 'claude' && a.account) for (const acc of accounts) if (acc.name !== a.account.name) actions.append(handoffButton(a, acc, note));
+  if (a.sshHost) {
+    if (a.sshTerminal && a.status !== 'offline') actions.append(actionButton(a, 'Open in Terminal', 'focus', 'solid', note));
+  } else {
+    if (a.status !== 'exited') actions.append(actionButton(a, codexThread(a) ? 'open in codex' : inApp(a) ? `open in ${a.app}` : hungry(a) ? 'review in terminal' : 'focus terminal', 'focus', 'solid', note));
+    else if (a.resumable) actions.append(actionButton(a, 'resume', 'resume', 'solid', note));
+    if (a.status === 'running' && (!a.external || inApp(a))) actions.append(actionButton(a, 'interrupt', 'interrupt', 'narrow', note));
+    else actions.append(removeButton(a, note));
+    if (a.tool === 'claude' && a.account) for (const acc of accounts) if (acc.name !== a.account.name) actions.append(handoffButton(a, acc, note));
+  }
 
-  panel.className = 'detail' + (a.status === 'error' ? ' p-error' : ['idle', 'starting', 'exited'].includes(a.status) ? ' p-dim' : '');
+  panel.className = 'detail' + (a.status === 'error' ? ' p-error' : ['idle', 'starting', 'exited', 'offline'].includes(a.status) ? ' p-dim' : '');
   panel.replaceChildren(hd.el,
     h('div', { class: 'sec' }, doingLbl, doing),
     h('div', { class: 'sec' }, h('div', { class: 'ctx-head' }, h('span', { class: 'h' }, 'context', ctxNums), ctxPctEl), bar),
     h('div', { class: 'stats' }, S.map((s) => s[0])),
     h('div', { class: 'sec grow' }, h('span', { class: 'lbl', text: 'last prompt' }), prompt, active),
     h('div', { class: 'd-foot' }, foot, server),
+    ...(a.sshHost ? [h('code', { class: 'ssh-command', text: `agentctl attach --ssh ${a.threadID}` })] : []),
     actions, note);
 
   return (x) => {
@@ -1391,6 +1452,10 @@ function buildInfo(a) {
       setText(doingLbl, 'doing now');
       if (x.activity) doing.replaceChildren(verb(x.activity.tool), h('span', { class: 'sep', text: ' · ' }), x.activity.detail || '');
       else setText(doing, 'thinking…');
+      doing.className = 'val';
+    } else if (x.sshHost && x.status !== 'error') {
+      setText(doingLbl, x.status === 'waiting' ? 'waiting for input' : 'status');
+      setText(doing, x.status === 'waiting' ? x.waiting?.title || 'Needs input' : x.status);
       doing.className = 'val';
     } else if (x.status === 'error') {
       setText(doingLbl, 'error'); setText(doing, x.error?.message || 'unknown error'); doing.className = 'val err';
@@ -1413,7 +1478,7 @@ function buildInfo(a) {
     setText(prompt, x.lastPrompt || '—');
     setText(active, lastActive(x)); // its latest message sent or received (survives restarts)
     setText(foot, [x.modelLabel || x.model, tilde(x.cwd), x.branch].filter(Boolean).join(' · '));
-    setText(server, state?.server?.name || '');
+    setText(server, x.sshHost || state?.server?.name || '');
   };
 }
 
@@ -1513,18 +1578,18 @@ function buildPrompt(a) {
 }
 
 function renderDetail() {
-  const a = selectedId && state?.agents.find((x) => x.id === selectedId);
+  const a = selectedId && (sshState.sessions.find(x => x.id === selectedId) || state?.agents.find(x => x.id === selectedId));
   if (!a) {
     if (selectedId && state) { selectedId = null; det = null; panel.hidden = true; panel.replaceChildren(); }
     return;
   }
   panel.hidden = false;
   panel.setAttribute('aria-labelledby', 'd-title');
-  const key = detailKey(a);
+  const key = detailKey(a) + (a.sshTerminal ? '|ssh-terminal' : '');
   if (!det || det.key !== key) {
     const hadFocus = panel.contains(document.activeElement);
     det = { key, id: a.id };
-    det.update = a.status === 'waiting' && a.waiting ? buildPrompt(a) : buildInfo(a);
+    det.update = !a.sshHost && a.status === 'waiting' && a.waiting ? buildPrompt(a) : buildInfo(a);
     if (hadFocus) $('d-title')?.focus({ preventScroll: true });
   }
   det.update(a);
@@ -1567,7 +1632,7 @@ const dialogIn = (t) => t instanceof HTMLElement && !!t.closest('#picker, #detai
 // are the only way to rename or remove a group without a mouse.
 const cycleTiles = () =>
   [...document.querySelectorAll(
-    '#grid > .tile, #grid > .group-line .group-name, #grid > .group-line .group-del, #attn-grid > .tile',
+    '#grid > .tile, #grid > .group-line .group-name, #grid > .group-line .group-del, #attn-grid > .tile, #ssh-sessions > .tile',
   )].filter((el) => el.offsetParent);
 
 // Returns false when there is nothing to walk, so Tab stays the browser's.
@@ -1847,6 +1912,7 @@ async function start() {
     if (state?.agents.some((a) => a.status === 'idle' && a.statusSince && now() - Date.parse(a.statusSince) < CELEBRATE_MS + 1500)) renderGrid();
   }, 1000);
   if (FIXTURE) return startFixture();
+  refreshSSH();
   setConn('connecting');
   try { if (!(await loadState())) return; } catch { setConn('reconnecting'); }
   connect();

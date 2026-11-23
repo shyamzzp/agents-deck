@@ -338,7 +338,6 @@ agentctl config --ssh --clear     # remove the saved host
 
 The full listing requires the remote Codex state database and sqlite3. Older
 threads appear as saved. Inspect a thread to read its rollout details, or use
-`ls --ssh --json` to consume the list in a script. Expand a recent tile in the
-browser to see its details. On macOS, **Open in Terminal** opens the same
+`ls --ssh --json` to consume the list in a script. Select a recent Codebox tile to see its details in the browser’s right drawer. On macOS, **Open in Terminal** opens the same
 interactive SSH session. Attach runs the remote installation of
 `codex resume` with the exact thread ID from its recorded working directory.
