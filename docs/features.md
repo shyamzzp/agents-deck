@@ -341,7 +341,7 @@ agentctl config --ssh --clear     # remove the saved host
 
 The full listing requires the remote Codex state database and sqlite3. Older
 threads appear as saved. Inspect a thread to read its rollout details, or use
-`ls --ssh --json` to consume the list in a script. Select a recent Codebox tile to see its details in the browser’s right drawer. **Settings → Layout → Session title font size** adjusts the title text size for both local and Codebox drawers in this browser. **Agent tile font size** independently adjusts the names on the tiles. On macOS, Deck checks iTerm2 panes and Terminal tabs. For local Codex sessions it can match a foreground CLI by its resume ID or unique thread title. When no pane matches, the focus action can resume the session in a new terminal. The TERMINAL column in
+`ls --ssh --json` to consume the list in a script. Select a recent Codebox tile to see its details in the browser’s right drawer. **Settings → Layout → Session title font size** adjusts the title text size for both local and Codebox drawers in this browser. **Agent tile font size** independently adjusts the names on the tiles. **Agent card border width** sets the stroke around local and Codebox cards, from 0 to 3 px. It defaults to 0.5 px. On macOS, Deck checks iTerm2 panes and Terminal tabs. For local Codex sessions it can match a foreground CLI by its resume ID or unique thread title. When no pane matches, the focus action can resume the session in a new terminal. The TERMINAL column in
 `agentctl ls` and `agentctl ls --ssh` displays the window, tab and pane for
 an identified session. Window numbers follow the current front-to-back order.
 Use `agentctl focus --ssh ID` for the pane or `agentctl focus --ssh --tab ID`
