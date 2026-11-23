@@ -348,14 +348,14 @@ Use `agentctl focus --ssh ID` for the pane or `agentctl focus --ssh --tab ID`
 for its tab. Omit `--ssh` for local agents. Attach checks for an existing
 pane before resuming the thread in the current terminal.
 
-A plain SSH shell may identify only the codebox. Its location is shown
-separately. Use **Focus codebox pane** or **Focus codebox tab** in the drawer,
-or `agentctl focus --ssh --host-pane` or `--host-tab` for a single connection.
+A plain SSH shell may identify only the codebox. The drawer offers **Focus pane** or
+**Focus tab** when Deck can identify the selected thread’s terminal.
+Use `agentctl focus --ssh --host-pane` or `--host-tab` to focus a single host connection.
 An idle thread can have no open pane. For a new terminal the dashboard prefers
 iTerm2 and falls back to Terminal. macOS may request Automation access.
 
 If an existing SSH shell is already showing the selected thread, choose
-**Link this thread** next to its pane or run
+its location under **Link an existing pane…** and confirm with **Link pane**, or run
 `agentctl focus --ssh --link-pane --location 1:1:2 ID` (window:tab:pane).
 Subsequent listings and focus actions use that pane. Use **Unlink pane** if
 you switch threads inside the shell. A link expires with the connection or

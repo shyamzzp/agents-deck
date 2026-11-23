@@ -1811,7 +1811,26 @@ function removeButton(a, note) {
   return b;
 }
 
-function buildInfo(a) {
+function availableLinkPanes(a, loc) {
+  if (loc || !a.sshHost || a.sshHost !== terminals.host) return [];
+  const assigned = Object.values(terminals.remote || {});
+  return (terminals.hostPanes || []).filter(p =>
+    !assigned.some(other => other.app === p.app && other.id === p.id));
+}
+
+function paneLinkPicker(a, panes, note) {
+  const select = h('select', {class:'btn', 'aria-label':'Choose a pane to link'},
+    h('option', {value:''}, 'Link an existing pane…'),
+    panes.map(p => h('option', {value:locationKey(p)}, locationText(p))));
+  const picker = h('div', {class:'pane-link-picker'}, select);
+  select.addEventListener('change', () => {
+    picker.querySelector('button')?.remove();
+    if (select.value) picker.append(actionButton(a, 'Link pane', 'terminal:link:'+select.value, 'narrow', note));
+  });
+  return picker;
+}
+
+function buildInfo(a, loc, linkPanes) {
   const hd = header(a);
   const doingLbl = h('span', { class: 'lbl' });
   const doing = h('span', { class: 'val' });
@@ -1827,7 +1846,6 @@ function buildInfo(a) {
   const server = h('span');
   const note = h('div', { class: 'note', role: 'status', 'aria-live': 'polite' });
   const actions = h('div', { class: 'actions' });
-  const loc = locationFor(a);
   if (loc) {
     const key = locationKey(loc);
     if (loc.linked) actions.append(actionButton(a,'Unlink pane','terminal:unlink:'+key,'narrow',note));
@@ -1835,14 +1853,8 @@ function buildInfo(a) {
     actions.append(actionButton(a,'Focus tab','terminal:tab:'+key,'narrow',note));
   }
   if (a.sshHost) {
-    if (!loc && a.sshHost === terminals.host) {
-      for (const p of terminals.hostPanes || []) {
-        actions.append(actionButton(a,'Link this thread to '+locationText(p),'terminal:link:'+locationKey(p),'narrow',note));
-        if (p.app === 'iTerm2') actions.append(actionButton(a,'Focus codebox pane · '+locationText(p),'terminal:host-pane:'+locationKey(p),'narrow',note));
-        actions.append(actionButton(a,'Focus codebox tab · '+locationText(p),'terminal:host-tab:'+locationKey(p),'narrow',note));
-      }
-    }
     if (!loc && a.sshTerminal && a.status !== 'offline') actions.append(actionButton(a, 'Open in '+(terminals.preferred || 'Terminal'), 'focus', 'solid', note));
+    if (linkPanes.length) actions.append(paneLinkPicker(a, linkPanes, note));
   } else {
     if (!loc && a.status !== 'exited') actions.append(actionButton(a, codexThread(a) ? (terminals.preferred ? 'Open in '+terminals.preferred : 'Open Codex session') : inApp(a) ? `open in ${a.app}` : hungry(a) ? 'review in terminal' : 'focus terminal', 'focus', 'solid', note));
     else if (!loc && a.resumable) actions.append(actionButton(a, 'resume', 'resume', 'solid', note));
@@ -2000,11 +2012,13 @@ function renderDetail() {
   }
   panel.hidden = false;
   panel.setAttribute('aria-labelledby', 'd-title');
-  const key = detailKey(a) + JSON.stringify([locationFor(a), terminals.preferred, a.sshHost && [terminals.hostPanes, a.sshTerminal]]);
+  const loc = locationFor(a);
+  const linkPanes = availableLinkPanes(a, loc);
+  const key = detailKey(a) + JSON.stringify([loc, terminals.preferred, linkPanes, a.sshTerminal]);
   if (!det || det.key !== key) {
     const hadFocus = panel.contains(document.activeElement);
     det = { key, id: a.id };
-    det.update = !a.sshHost && a.status === 'waiting' && a.waiting ? buildPrompt(a) : buildInfo(a);
+    det.update = !a.sshHost && a.status === 'waiting' && a.waiting ? buildPrompt(a) : buildInfo(a, loc, linkPanes);
     if (hadFocus) $('d-title')?.focus({ preventScroll: true });
   }
   det.update(a);
