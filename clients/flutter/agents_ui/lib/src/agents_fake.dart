@@ -412,6 +412,16 @@ class FakeAgentsSource implements AgentsSource {
   }
 
   @override
+  Future<AgentsResult> prompt(
+    String agentId,
+    String text, {
+    String mode = 'queue',
+  }) async {
+    calls.add(('prompt', agentId, {'text': text, 'mode': mode}));
+    return AgentsResult.ok;
+  }
+
+  @override
   Future<AgentsResult> move(String agentId, int slot) async {
     calls.add(('move', agentId, {'slot': slot}));
     final a = _agent(agentId);

@@ -366,11 +366,16 @@ class _AgentDetailState extends State<AgentDetail> {
             final tight = box.maxHeight < 620 || box.maxWidth < 420;
             return DeckCompact(
               compact: tight,
-              child: Padding(
-                padding: tight
-                    ? const EdgeInsets.fromLTRB(18, 16, 18, 14)
-                    : const EdgeInsets.fromLTRB(36, 34, 36, 30),
-                child: child,
+              child: Stack(
+                children: [
+                  Padding(
+                    padding: tight
+                        ? const EdgeInsets.fromLTRB(18, 16, 18, 14)
+                        : const EdgeInsets.fromLTRB(36, 34, 36, 30),
+                    child: child,
+                  ),
+                  if (_asks) Positioned.fill(child: _askSheet(tight)),
+                ],
               ),
             );
           },
@@ -381,6 +386,137 @@ class _AgentDetailState extends State<AgentDetail> {
 
   /// How far the card has been dragged sideways, for the swipe back.
   double _swipe = 0;
+
+  /// The quick list: swipe through the asks, tap one to send it.
+  ///
+  /// It is a page per ask rather than a list, so a thumb can reach every one
+  /// of them on a phone without stretching for a row near the top.
+  Widget _askSheet(bool tight) {
+    return ColoredBox(
+      color: DeckHud.bg,
+      child: Column(
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(tight ? 18 : 36, tight ? 14 : 24, 12, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'ask it to\u2026',
+                    style: DeckHud.rm(tight ? 22 : 28, DeckHud.ink, weight: 700),
+                  ),
+                ),
+                GestureDetector(
+                  key: const Key('asks-close'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _asks = false),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      '\u00d7',
+                      style: DeckHud.rm(26, DeckHud.dim, weight: 700),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: PageView.builder(
+              key: const Key('asks-pages'),
+              controller: PageController(viewportFraction: tight ? 0.86 : 0.6),
+              itemCount: agentAsks.length,
+              itemBuilder: (context, i) {
+                final ask = agentAsks[i];
+                final sent = _askSent == i;
+                return Padding(
+                  padding: EdgeInsets.fromLTRB(6, tight ? 10 : 18, 6, tight ? 10 : 18),
+                  child: GestureDetector(
+                    key: Key('ask-$i'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _busy ? null : () => _ask(i),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: sent ? DeckHud.ink : DeckHud.panel,
+                        border: Border.all(
+                          color: sent ? DeckHud.ink : DeckHud.dim,
+                          width: 2,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            sent ? 'sent' : ask.label,
+                            style: DeckHud.rm(
+                              tight ? 20 : 24,
+                              sent ? DeckHud.bg : DeckHud.ink,
+                              weight: 700,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: Text(
+                              ask.text,
+                              style: DeckHud.mono(
+                                size: tight ? 13 : 15,
+                                color: sent ? DeckHud.bg : DeckHud.dim,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (_note case final n?)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+              child: Text(
+                n,
+                style: DeckHud.mono(size: 14, color: DeckHud.accent),
+              ),
+            ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(18, 0, 18, tight ? 12 : 20),
+            child: Text(
+              'Swipe for more. Tapping one puts it on the agent\u2019s queue, '
+              'so asking while it works does not cut the turn short.',
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Sends one ask, and says so on its card.
+  Future<void> _ask(int i) async {
+    setState(() {
+      _busy = true;
+      _note = null;
+    });
+    final r = await widget.source.prompt(widget.agentId, agentAsks[i].text);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _askSent = r.isOk ? i : -1;
+      _note = r.isOk ? null : (r.message ?? 'could not send');
+    });
+    if (r.isOk) {
+      Timer(_sentHold, () {
+        if (mounted) setState(() => _asks = false);
+      });
+    }
+  }
+
+  /// The quick list, opened by a double tap on the card.
+  bool _asks = false;
+  int _askSent = -1;
 
   // ---- hat picker ------------------------------------------------------------
 
@@ -644,11 +780,24 @@ class _AgentDetailState extends State<AgentDetail> {
           ],
         ),
         const SizedBox(height: 10),
-        Text(
-          a.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: DeckHud.rm(30, ink, weight: 700, spacing: -0.3),
+        // Double tapping the title opens the quick list. It is on the title
+        // and not on the card or the header because anything with a tap of
+        // its own underneath a double tap -- a button, the mascot -- has to
+        // wait out the double-tap timeout before it answers.
+        GestureDetector(
+          key: const Key('agent-title'),
+          behavior: HitTestBehavior.opaque,
+          onDoubleTap: () => setState(() {
+            _asks = true;
+            _askSent = -1;
+            _note = null;
+          }),
+          child: Text(
+            a.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: DeckHud.rm(30, ink, weight: 700, spacing: -0.3),
+          ),
         ),
       ],
     );
