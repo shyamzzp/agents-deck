@@ -119,6 +119,10 @@ daemon uses the socket methods `surface.read_text`, `surface.send_text`, `surfac
 `surface.focus` and `system.identify`. Codex sessions in cmux aren't mirrored yet. `config.json`:
 `"cmux": false` turns it off.
 
+## Add a session
+
+The web picker combines local Claude Code sessions, unarchived local Codex threads, agents already discovered through enabled harnesses, and sessions from the configured Codebox. Search by title, folder, ID or source. The Codebox section’s add button opens the same picker filtered to that host. Selecting a saved local Codex thread keeps it on the deck until you hide it. `agentctl live` lists the local catalog and `agentctl ls --ssh` lists the Codebox catalog.
+
 ## Claude sessions started elsewhere
 
 Claude Code sessions you start by hand in any terminal (plain `claude`) can join the deck too. Tap a free cell (or **+ session** on the web dashboard, or `agentctl live` / `agentctl add <session>`) to see them and add one; it lands in that cell.

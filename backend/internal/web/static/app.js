@@ -895,7 +895,8 @@ for (const container of [$('grid'), $('ssh-deck')]) {
 }
 
 function applySSHState(data) {
-  if (data.host !== sshState.host) {
+  const hostChanged = data.host !== sshState.host;
+  if (hostChanged) {
     if (pickerHost) closePicker();
     sshCatalog = {host:data.host, sessions:null, updated:0, pending:null};
   }
@@ -909,6 +910,10 @@ function applySSHState(data) {
     status: data.connection === 'online' ? a.status : 'offline',
     statusSince: null,
   })) };
+  if (hostChanged && !$('picker').hidden) {
+    pickerPins = new Set(data.pinned || []);
+    renderChoices();
+  }
 }
 
 let sshRefreshes = 0;
@@ -1319,8 +1324,7 @@ function makeEmptyCell(slot) {
 }
 
 // ---------------------------------------------------------------- add a session
-// Claude sessions started by hand in other terminals (GET /v1/live); adding
-// one puts it on the deck, in the free cell it was opened from.
+// The main picker combines local sessions with the configured Codebox.
 let pickerSlot = -1;
 let pickerHost = '';
 let pickerGeneration = 0;
@@ -1329,6 +1333,7 @@ let sshCatalog = {host:'', sessions:null, updated:0, pending:null};
 let pickerRefreshTimer;
 const pendingPins = new Set();
 let pickerPins = new Set();
+const localCatalog = {sessions:null, updated:0, pending:null};
 const localPickerText = $('picker-sub').textContent;
 const pickerRow = (title, meta, button) => h('li', {},
   h('span', {class:'picker-name', text:title}),
@@ -1336,61 +1341,53 @@ const pickerRow = (title, meta, button) => h('li', {},
 const pickerMessage = text => $('picker-list').replaceChildren(
   h('li', {class:'picker-empty', text}));
 
-async function openPicker(slot = -1, host = '') {
-  const generation = ++pickerGeneration;
+function openPicker(slot = -1, host = '') {
+  ++pickerGeneration;
   pickerHost = host;
-  setText($('picker-title'), host ? 'Add a Codebox session' : 'add a running session');
-  setText($('picker-sub'), host ? 'Choose a session from ' + host + '.' : localPickerText);
-  $('picker-controls').hidden = !host;
-  $('picker-filter').value = '';
   pickerSlot = slot;
+  setText($('picker-title'), host ? 'Add a Codebox session' : 'Add a session');
+  $('picker-controls').hidden = false;
+  $('picker-filter').value = '';
   if (!$('picker-close').firstElementChild) $('picker-close').replaceChildren(closeIcon());
   $('picker').hidden = false;
-  (host ? $('picker-filter') : $('picker-close')).focus();
+  $('picker-filter').focus();
   clearInterval(pickerRefreshTimer);
-  if (!host) {
-    pickerMessage('Loading sessions…');
-    await refreshPicker(generation);
-    return;
+  for (const catalog of [localCatalog, sshCatalog]) {
+    if (Date.now() - catalog.updated >= catalogLifetime) catalog.sessions = null;
   }
-  if (Date.now() - sshCatalog.updated >= catalogLifetime) sshCatalog.sessions = null;
   pickerPins = new Set(sshState.pinned || []);
-  if (sshCatalog.sessions) renderSSHChoices(); else pickerMessage('Loading sessions…');
-  refreshCatalog(sshCatalog);
-  pickerRefreshTimer = setInterval(() => {
-    if (!document.hidden) refreshCatalog(sshCatalog);
-  }, 30000);
+  renderChoices();
+  function refresh() {
+    if (!pickerHost) refreshCatalog(localCatalog);
+    if (sshCatalog.host) refreshCatalog(sshCatalog);
+  }
+  refresh();
+  pickerRefreshTimer = setInterval(() => { if (!document.hidden) refresh(); }, 30000);
 }
 
-// Warm on connection and share an in-flight refresh across picker opens.
+// Reopening the picker shares an in-flight request. A failed source leaves
+// sessions from the other source and the previous successful snapshot usable.
 function refreshCatalog(catalog) {
   if (catalog.pending || expired) return;
-  markSSHRefresh(1);
-  catalog.pending = fetch('/admin/v1/ssh-codex/sessions?host=' + encodeURIComponent(catalog.host), {cache:'no-store'})
-    .then(async r => {
-      if (catalog !== sshCatalog || expired) return;
-      if (r.status === 401) { showExpired(); return; }
-      const data = await r.json();
-      if (catalog !== sshCatalog || expired) return;
-      if (!r.ok) throw new Error(data.error || 'Could not list Codebox sessions.');
-      catalog.sessions = data || [];
-      catalog.updated = Date.now();
-      if (catalog !== sshCatalog || pickerHost !== catalog.host || expired) return;
-      setText($('picker-sub'), 'Choose a session from ' + catalog.host + '.');
-      const list = $('picker-list');
-      const scroll = list.scrollTop;
-      const focused = document.activeElement.dataset.sessionId;
-      renderSSHChoices();
-      if (focused) (list.querySelector('[data-session-id="' + CSS.escape(focused) + '"]') || $('picker-filter')).focus({preventScroll:true});
-      list.scrollTop = scroll;
-    })
-    .catch(err => {
-      if (catalog !== sshCatalog || pickerHost !== catalog.host || expired) return;
-      if (catalog.sessions) {
-        setText($('picker-sub'), 'Could not refresh. Showing the last list from ' + catalog.host + '.');
-      } else pickerMessage(err.message);
-    })
-    .finally(() => { catalog.pending = null; markSSHRefresh(-1); });
+  const remote = catalog !== localCatalog;
+  if (remote) markSSHRefresh(1);
+  const url = remote ? '/admin/v1/ssh-codex/sessions?host=' + encodeURIComponent(catalog.host) : '/v1/live?catalog=all';
+  const request = FIXTURE && !remote ? Promise.resolve({ok:true, json:async()=>({sessions:fixtureLive})}) :
+    fetch(url, {cache:'no-store', credentials:'same-origin'});
+  catalog.pending = request.then(async r => {
+    if (expired || (remote && catalog !== sshCatalog)) return;
+    if (r.status === 401) { showExpired(); return; }
+    if (!r.ok) throw new Error('Could not refresh ' + (remote ? 'Codebox' : 'local') + ' sessions.');
+    const data = await r.json();
+    if (expired || (remote && catalog !== sshCatalog)) return;
+    catalog.sessions = (remote ? data : data.sessions) || [];
+    catalog.warning = data?.warning || '';
+    catalog.updated = Date.now();
+  }).catch(err => { catalog.warning = err.message + (catalog.sessions ? ' Showing the last list.' : ''); }).finally(() => {
+    catalog.pending = null;
+    if (remote) markSSHRefresh(-1);
+    if (!expired && !$('picker').hidden && (remote ? catalog === sshCatalog : !pickerHost)) renderChoices();
+  });
 }
 
 function closePicker() {
@@ -1401,78 +1398,92 @@ function closePicker() {
   pickerHost = '';
 }
 
-function renderSSHChoices() {
-  if (!pickerHost || !sshCatalog.sessions) return;
-  const host = pickerHost;
-  const generation = pickerGeneration;
+function renderChoices() {
+  if ($('picker').hidden) return;
   const filter = $('picker-filter').value.trim().toLowerCase();
   const issuesOnly = $('picker-issues').checked;
-  const visible = sshCatalog.sessions.filter(s =>
-    (!issuesOnly || /^\s*\d{6}(?!\d)/.test(s.title || '')) &&
-    [s.title, s.folder, s.id].some(v => (v || '').toLowerCase().includes(filter)));
-  if (!visible.length) {
-    pickerMessage(filter || issuesOnly ? 'No matching sessions.' : 'No unarchived Codex sessions on this host.');
-    return;
+  const rows = [];
+  const visible = (s, source) => (!issuesOnly || /^\s*\d{6}(?!\d)/.test(s.title || '')) &&
+    [s.title, s.folder, s.sessionId, s.id, s.agentId, s.app, source].some(v => v && v.toLowerCase().includes(filter));
+  if (!pickerHost) for (const s of localCatalog.sessions || []) {
+    const tool = s.tool || 'claude';
+    const source = [tool, s.app, 'local'].filter(Boolean).join(' · ');
+    if (visible(s,source)) rows.push(localChoice(s,source));
   }
   const onDeck = new Set(sshState.sessions.map(s => s.threadID));
-  $('picker-list').replaceChildren(...visible.map(s => {
-    const pinned = pickerPins.has(s.id);
-    const already = !pinned && onDeck.has(s.id);
-    const key = host + '/' + s.id;
-    const busy = pendingPins.has(key);
-    const btn = h('button', {type:'button', class:'toggle', 'data-session-id':s.id, disabled:already || busy,
-      text:busy ? (pinned ? 'removing…' : 'adding…') : pinned ? 'unpin' : already ? 'on the deck' : 'add'});
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      btn.textContent = pinned ? 'removing…' : 'adding…';
-      pendingPins.add(key);
-      const r = await api('/admin/v1/ssh-codex/pins', {host, id:s.id, pinned:!pinned}, true);
-      pendingPins.delete(key);
-      if (r.ok && sshState.host === host && r.data?.state?.host === host) {
-        ++sshRevision; // Ignore polls started before this change.
-        applySSHState(r.data.state);
-        render();
-      }
-      if (generation !== pickerGeneration) return;
-      if (!r.ok) {
-        renderSSHChoices();
-        setText($('picker-sub'), r.error);
-        return;
-      }
-      if (pinned) pickerPins.delete(s.id); else pickerPins.add(s.id);
-      closePicker();
-    });
-    return pickerRow(s.title || s.folder || s.id,
-      [s.status, lastActive(s), s.context?.window ? ctxPct(s) + '% context' : '',
-        s.folder, s.id].filter(Boolean).join(' · '), btn);
-  }));
-}
-$('picker-filter').addEventListener('input', renderSSHChoices);
-$('picker-issues').addEventListener('change', renderSSHChoices);
-
-async function refreshPicker(generation) {
-  const list = $('picker-list');
-  let sessions = [];
-  try {
-    const r = FIXTURE ? { ok: true, json: async () => ({ sessions: fixtureLive }) } : await fetch('/v1/live', { credentials: 'same-origin', cache: 'no-store' });
-    if (r.ok) sessions = (await r.json()).sessions || [];
-  } catch { /* offline: empty list */ }
-  if (generation !== pickerGeneration) return;
-  if (!sessions.length) {
-    list.replaceChildren(h('li', { class: 'picker-empty', text: 'No Claude Code session is running outside the deck right now. Start one in a terminal with claude, or on the deck with agentctl new.' }));
-    return;
+  for (const s of sshCatalog.sessions || []) {
+    if (visible(s,'Codex · Codebox')) rows.push(sshChoice(s,sshCatalog.host,onDeck));
   }
-  list.replaceChildren(...sessions.map((s) => {
-    const btn = h('button', { type: 'button', class: 'toggle', text: s.onBoard ? 'on the deck' : 'add', disabled: s.onBoard });
-    btn.addEventListener('click', async () => {
-      btn.disabled = true; btn.textContent = 'adding…';
-      const r = await api(`/v1/live/${encodeURIComponent(s.sessionId)}/add`, pickerSlot >= 0 ? { slot: pickerSlot } : {});
-      if (r.ok) closePicker(); else { btn.disabled = false; btn.textContent = `failed · ${r.error}`; }
-    });
-    return pickerRow(s.title || s.folder,
-      `${s.folder}${s.background ? ' · background' : ''} · started ${rel(s.started)} ago`, btn);
-  }));
+  const sources = [!pickerHost && localCatalog, sshCatalog.host && sshCatalog].filter(Boolean);
+  const warnings = sources.map(c=>c.warning).filter(Boolean);
+  setText($('picker-sub'), warnings.join(' ') || (pickerHost ? 'Choose a session from ' + pickerHost + '.' : localPickerText));
+  const list = $('picker-list'), scroll = list.scrollTop;
+  const focused = document.activeElement.dataset.sessionId;
+  if (rows.length) list.replaceChildren(...rows);
+  else if (sources.some(c=>!c.sessions && !c.warning)) pickerMessage('Loading sessions…');
+  else if (warnings.length) pickerMessage('No sessions available from the responding sources.');
+  else pickerMessage(filter || issuesOnly ? 'No matching sessions.' : 'No sessions found.');
+  if (focused) (list.querySelector('[data-session-id="' + CSS.escape(focused) + '"]') || $('picker-filter')).focus({preventScroll:true});
+  list.scrollTop = scroll;
 }
+
+function sshChoice(s, host, onDeck) {
+  const generation = pickerGeneration;
+  const pinned = pickerPins.has(s.id);
+  const already = !pinned && onDeck.has(s.id);
+  const key = host + '/' + s.id;
+  const busy = pendingPins.has(key);
+  const btn = h('button', {type:'button', class:'toggle', 'data-session-id':s.id, disabled:already || busy,
+    text:busy ? (pinned ? 'removing…' : 'adding…') : pinned ? 'unpin' : already ? 'on the deck' : 'add'});
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = pinned ? 'removing…' : 'adding…';
+    pendingPins.add(key);
+    const r = await api('/admin/v1/ssh-codex/pins', {host, id:s.id, pinned:!pinned}, true);
+    pendingPins.delete(key);
+    if (r.ok && sshState.host === host && r.data?.state?.host === host) {
+      ++sshRevision; // Ignore polls started before this change.
+      applySSHState(r.data.state);
+      render();
+    }
+    if (generation !== pickerGeneration) return;
+    if (!r.ok) {
+      renderChoices();
+      setText($('picker-sub'), r.error);
+      return;
+    }
+    if (pinned) pickerPins.delete(s.id); else pickerPins.add(s.id);
+    closePicker();
+  });
+  return pickerRow(s.title || s.folder || s.id,
+    ['Codex · Codebox', s.status, lastActive(s), s.context?.window ? ctxPct(s) + '% context' : '',
+      s.folder, s.id].filter(Boolean).join(' · '), btn);
+}
+
+function localChoice(s,source) {
+  const generation = pickerGeneration, key = 'local/' + s.sessionId;
+  const busy = pendingPins.has(key);
+  const btn = h('button', {type:'button', class:'toggle', 'data-session-id':key,
+    disabled:s.onBoard || busy, text:busy ? 'adding…' : s.onBoard ? 'on the deck' : 'add'});
+  btn.addEventListener('click', async () => {
+    pendingPins.add(key);
+    btn.disabled = true; btn.textContent = 'adding…';
+    const r = await api('/v1/live/' + encodeURIComponent(s.sessionId) + '/add', pickerSlot >= 0 ? {slot:pickerSlot} : {});
+    pendingPins.delete(key);
+    if (r.ok) {
+      s.onBoard = true;
+      if (generation === pickerGeneration) closePicker();
+      if (!FIXTURE) await loadState();
+    } else if (generation === pickerGeneration) {
+      renderChoices();
+      setText($('picker-sub'),r.error);
+    }
+  });
+  return pickerRow(s.title || s.folder || s.sessionId, [source, s.background ? 'background' : s.status,
+    s.folder, lastActive(s)].filter(Boolean).join(' · '), btn);
+}
+$('picker-filter').addEventListener('input', renderChoices);
+$('picker-issues').addEventListener('change', renderChoices);
 
 $('add-session').addEventListener('click', () => openPicker(-1));
 $('add-group').addEventListener('click', (e) => addGroup(e.currentTarget));
@@ -2281,7 +2292,8 @@ async function api(path, body, readJSON = false) {
 
 function showExpired() {
   expired = true;
-  if (pickerHost) closePicker();
+  if (!$('picker').hidden) closePicker();
+  localCatalog.sessions = null;
   sshCatalog.sessions = null;
   es?.close();
   $('expired').hidden = false;
