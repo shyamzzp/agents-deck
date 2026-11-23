@@ -130,7 +130,6 @@ function subsOnly(a) {
 
 function tileMeta(a) {
   if (a.sshHost && a.status === 'idle') return lastActive(a) || 'idle';
-  if (hungry(a)) return 'done · unreviewed';
   switch (a.status) {
     case 'running': return `${subsOnly(a) || verb(a.activity?.tool)} · ${ctxPct(a)}% ctx`;
     case 'waiting': {
@@ -142,7 +141,7 @@ function tileMeta(a) {
       if (w.kind === 'question') return `pick 1 of ${(w.options || []).length}`;
       return 'needs input';
     }
-    case 'idle': return ageMin(a.statusSince) < 120 ? `done · ${rel(a.statusSince)} ago` : `idle · ${rel(a.statusSince)}`;
+    case 'idle': return a.unseen || ageMin(a.statusSince) < 120 ? 'done' : `idle · ${rel(a.statusSince)}`;
     case 'error': return a.error?.message || 'error';
     case 'starting': return 'starting…';
     case 'exited': return a.lost ? 'lost with tmux' : a.resumable ? `ended · resumable` : `exited · ${rel(a.statusSince)} ago`;
@@ -156,7 +155,7 @@ function pillText(a) {
   switch (a.status) {
     case 'running': return `running · ${since}`;
     case 'waiting': return a.waiting?.kind === 'question' && a.waiting.context ? a.waiting.context : `needs you · ${since}`;
-    case 'idle': return a.unseen ? `idle · unreviewed · ${since}` : `idle · ${since}`;
+    case 'idle': return `idle · ${since}`;
     case 'error': return `error · ${since}`;
     case 'exited': return a.lost ? `lost with tmux · ${since}` : `exited · ${since}`;
     default: return a.status;
