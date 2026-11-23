@@ -73,6 +73,9 @@ func RecentThreads(window time.Duration) ([]Thread, error) {
 	return queryThreads(bin, db, " and coalesce(updated_at_ms,0) >= "+itoa(since)+" order by updated_at_ms desc limit 32")
 }
 
+// HistoryAvailable reports whether this installation has a saved thread index.
+func HistoryAvailable() bool { return stateDB() != "" }
+
 // AllThreads reads the unarchived history, including sessions outside the live window.
 func AllThreads() ([]Thread, error) {
 	db := stateDB()

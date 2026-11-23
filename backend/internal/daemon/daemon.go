@@ -38,7 +38,8 @@ type Config struct {
 	// cmux's socket access must be Automation).
 	Cmux *bool `json:"cmux"`
 	// CodexWindowHours: threads updated within this many hours are shown (default 6).
-	CodexWindowHours float64 `json:"codexWindowHours"`
+	CodexWindowHours float64  `json:"codexWindowHours"`
+	CodexPins        []string `json:"codexPins,omitempty"`
 	// ExitedTTLSeconds: how long exited agents stay visible (0 = 10 min, <0 = forever).
 	ExitedTTLSeconds int `json:"exitedTTLSeconds"`
 }
@@ -66,6 +67,7 @@ type Daemon struct {
 
 func New(st *store.Store, cfg Config, agentctl string) (*Daemon, error) {
 	d := &Daemon{Store: st, Cfg: cfg, Agentctl: agentctl}
+	d.codex.pins = cfg.CodexPins
 	b, err := claude.HooksSettings(agentctl)
 	if err != nil {
 		return nil, err
@@ -699,8 +701,7 @@ func (d *Daemon) Dismiss(id string) error {
 		return nil
 	}
 	if e.External {
-		d.hideExternal(e)
-		return nil
+		return d.hideExternal(e)
 	}
 	if e.A.Status != model.Exited {
 		_ = tmux.Kill(e.TmuxName)

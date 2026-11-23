@@ -248,6 +248,15 @@ func (d *Daemon) LiveJSON() any {
 // AddLive puts a hand-started session on the deck (and keeps it there whenever
 // it runs), at board position slot when slot >= 0 (an agent there swaps out).
 func (d *Daemon) AddLive(sessionID string, slot int) error {
+	if id, ok := strings.CutPrefix(sessionID, "deck:"); ok {
+		if _, exists := d.Store.Get(id); exists {
+			return nil
+		}
+		return server.ErrNotFound
+	}
+	if id, ok := strings.CutPrefix(sessionID, "codex:"); ok {
+		return d.addCodexThread(id, slot)
+	}
 	d.live.mu.Lock()
 	found := false
 	for _, c := range d.live.candidates {
