@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/brushknight/agents-deck/backend/internal/deskterm"
@@ -33,7 +34,11 @@ func (a *Admin) terminalInventory(ctx context.Context) (deskterm.Inventory, erro
 	}
 	ctx, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
-	return deskterm.Discover(ctx, host, ttys, ids)
+	inv, err := deskterm.Discover(ctx, host, ttys, ids)
+	if err == nil {
+		a.bindings.apply(&inv)
+	}
+	return inv, err
 }
 
 func (a *Admin) terminals(w http.ResponseWriter, r *http.Request) {
@@ -93,4 +98,72 @@ func (a *Admin) focusTerminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]string{"focused": p.Label()})
+}
+
+// An explicit link follows the live client and its terminal, never a window
+// number. Drop it when that SSH process exits or a different host is selected.
+type terminalBindings struct {
+	mu     sync.Mutex
+	byPane map[string]string
+}
+
+func (b *terminalBindings) apply(inv *deskterm.Inventory) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	live := map[string]bool{}
+	for _, p := range inv.HostPanes {
+		key := inv.Host + "/" + p.Key()
+		live[key] = true
+		if id := b.byPane[key]; id != "" && inv.Remote[id].App == "" {
+			p.Linked = true
+			inv.Remote[id] = p
+		}
+	}
+	for key := range b.byPane {
+		if !live[key] {
+			delete(b.byPane, key)
+		}
+	}
+}
+
+func (a *Admin) linkTerminal(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Host, ID, Mode, Key string }
+	if readBody(r, 2048, &req) != nil || !deskterm.ValidID(req.ID) || (req.Mode != "link" && req.Mode != "unlink") {
+		writeErr(w, 400, "invalid thread or link action")
+		return
+	}
+	inv, err := a.terminalInventory(r.Context())
+	if err != nil {
+		writeErr(w, 503, err.Error())
+		return
+	}
+	for _, p := range inv.HostPanes {
+		if req.Host != inv.Host || req.Key != p.Key() {
+			continue
+		}
+		b := &a.bindings
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		key := inv.Host + "/" + p.Key()
+		if req.Mode == "unlink" {
+			if b.byPane[key] != req.ID {
+				writeErr(w, 409, "the link changed; refresh")
+				return
+			}
+			delete(b.byPane, key)
+		} else {
+			if b.byPane == nil {
+				b.byPane = map[string]string{}
+			}
+			for k, id := range b.byPane {
+				if id == req.ID {
+					delete(b.byPane, k)
+				}
+			}
+			b.byPane[key] = req.ID
+		}
+		writeJSON(w, 200, map[string]string{"pane": p.Label()})
+		return
+	}
+	writeErr(w, 409, "the selected SSH connection is no longer open")
 }

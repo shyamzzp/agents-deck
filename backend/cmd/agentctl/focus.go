@@ -46,22 +46,37 @@ func focusCmd(args []string) error {
 	tab := fs.Bool("tab", false, "select the tab and keep its active pane")
 	hostTab := fs.Bool("host-tab", false, "select a codebox SSH tab without matching a thread")
 	hostPane := fs.Bool("host-pane", false, "select a connected codebox SSH pane")
+	link := fs.Bool("link-pane", false, "associate the specified thread with an existing codebox pane")
+	unlink := fs.Bool("unlink-pane", false, "remove a manually linked pane")
+	where := fs.String("location", "", "codebox window:tab:pane, for example 1:1:2")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	inv := paneInventory()
+	panes := inv.HostPanes
+	if *where != "" {
+		panes = nil
+		for _, p := range inv.HostPanes {
+			if fmt.Sprintf("%d:%d:%d", p.Window, p.Tab, p.Pane) == *where {
+				panes = append(panes, p)
+			}
+		}
+	}
+	if (*link || *unlink) && (!*remote || fs.NArg() != 1 || *link && *unlink || *hostPane || *hostTab) {
+		return errors.New("use focus --ssh --link-pane ID or --unlink-pane ID")
+	}
 	if *hostTab || *hostPane {
 		if !*remote || fs.NArg() != 0 || *hostTab && *hostPane {
 			return errors.New("usage: agentctl focus --ssh --host-tab or --host-pane")
 		}
-		if len(inv.HostPanes) != 1 {
-			return errors.New("select a specific connected codebox tab in the dashboard")
+		if len(panes) != 1 {
+			return errors.New("choose a connected codebox pane with --location window:tab:pane")
 		}
 		mode := "host-tab"
 		if *hostPane {
 			mode = "host-pane"
 		}
-		return focusPane(inv.Host, "", mode, inv.HostPanes[0].Key())
+		return focusPane(inv.Host, "", mode, panes[0].Key())
 	}
 	if fs.NArg() != 1 {
 		return errors.New("usage: agentctl focus [--ssh] [--tab] ID")
@@ -76,6 +91,25 @@ func focusCmd(args []string) error {
 			return err
 		}
 		p, ok := inv.Remote[a.ID]
+		if *link || *unlink {
+			action := "link"
+			if *unlink {
+				action = "unlink"
+				if !ok || !p.Linked {
+					return errors.New("this thread has no manual pane link")
+				}
+			} else {
+				if len(panes) != 1 {
+					return errors.New("choose the pane showing this thread with --location window:tab:pane")
+				}
+				p = panes[0]
+			}
+			if err := call("POST", "/admin/v1/terminals/link", map[string]string{"host": inv.Host, "id": a.ID, "key": p.Key(), "mode": action}, nil); err != nil {
+				return err
+			}
+			fmt.Printf("Pane %s: %s\n", action, p.Label())
+			return nil
+		}
 		if !ok {
 			return errors.New("no confirmed pane for this thread; use agentctl attach --ssh ID to open it")
 		}

@@ -21,12 +21,14 @@ import (
 var terminalScript string
 
 type Pane struct {
-	App    string `json:"app"`
-	Window int    `json:"window"`
-	Tab    int    `json:"tab"`
-	Pane   int    `json:"pane"`
-	TTY    string `json:"tty"`
-	ID     string `json:"id"`
+	Connection string `json:"connection,omitempty"`
+	Linked     bool   `json:"linked,omitempty"`
+	App        string `json:"app"`
+	Window     int    `json:"window"`
+	Tab        int    `json:"tab"`
+	Pane       int    `json:"pane"`
+	TTY        string `json:"tty"`
+	ID         string `json:"id"`
 }
 
 func (p Pane) Label() string {
@@ -75,6 +77,8 @@ func sshArgs(args []string) (string, []string) {
 	return dest, nil
 }
 
+func ValidID(id string) bool { return uuid.MatchString(id) }
+
 func resumeID(args []string) string {
 	if len(args) < 3 || filepath.Base(args[0]) != "codex" || args[1] != "resume" {
 		return ""
@@ -110,14 +114,14 @@ func Discover(ctx context.Context, host string, localTTY map[string]string, thre
 	if err != nil {
 		return inv, err
 	}
-	raw, err = exec.CommandContext(ctx, "/bin/ps", "-ww", "-U", u.Uid, "-o", "tty=,stat=,pid=,command=").Output()
+	raw, err = exec.CommandContext(ctx, "/bin/ps", "-ww", "-U", u.Uid, "-o", "tty=,stat=,pid=,lstart=,command=").Output()
 	if err != nil {
 		return inv, err
 	}
 	procs := map[string][][]string{}
 	for _, line := range strings.Split(string(raw), "\n") {
 		f := strings.Fields(line)
-		if len(f) >= 4 && strings.Contains(f[1], "+") && !strings.Contains(f[1], "T") {
+		if len(f) >= 9 && strings.Contains(f[1], "+") && !strings.Contains(f[1], "T") {
 			procs["/dev/"+f[0]] = append(procs["/dev/"+f[0]], f[2:])
 		}
 	}
@@ -129,7 +133,7 @@ func Discover(ctx context.Context, host string, localTTY map[string]string, thre
 			}
 		}
 		for _, f := range procs[p.TTY] {
-			args := f[1:]
+			args := f[6:]
 			if id := threadIDs[resumeID(args)]; id != "" && inv.Local[id].App == "" {
 				inv.Local[id] = p
 			}
@@ -148,6 +152,7 @@ func Discover(ctx context.Context, host string, localTTY map[string]string, thre
 				inv.Remote[id] = p
 			}
 			if len(command) == 0 {
+				p.Connection = strings.Join(f[:6], "-")
 				inv.HostPanes = append(inv.HostPanes, p)
 				bare[f[0]] = p
 			}
@@ -193,4 +198,4 @@ func Focus(ctx context.Context, p Pane, mode string) error {
 
 // Key identifies a pane during selection without trusting window indices,
 // which change when the user raises or rearranges windows.
-func (p Pane) Key() string { return p.App + "/" + p.ID }
+func (p Pane) Key() string { return p.App + "/" + p.ID + "/" + p.Connection }

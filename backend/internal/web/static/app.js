@@ -20,7 +20,7 @@ let terminals = {};
 const locationFor = a => a.sshHost
   ? (a.sshHost === terminals.host && terminals.remote?.[a.threadID])
   : terminals.local?.[a.id];
-const locationKey = p => p.app + '/' + p.id;
+const locationKey = p => p.app + '/' + p.id + '/' + (p.connection || '');
 const locationText = p => p.app + ' W' + p.window + ' T' + p.tab +
   (p.app === 'iTerm2' ? ' P' + p.pane : '');
 let selectedId = null;     // agent shown in the detail panel
@@ -1380,7 +1380,8 @@ function header(a) {
 function postAction(a, path, body) {
   if (path.startsWith('terminal:')) {
     const [,mode,...key] = path.split(':');
-    return api('/admin/v1/terminals/focus', {id:a.threadID || a.id,
+    const path = mode === 'link' || mode === 'unlink' ? '/admin/v1/terminals/link' : '/admin/v1/terminals/focus';
+    return api(path, {id:a.threadID || a.id,
       host:a.sshHost || '', mode, key:key.join(':')});
   }
   if (a.sshHost) {
@@ -1445,12 +1446,14 @@ function buildInfo(a) {
   const loc = locationFor(a);
   if (loc) {
     const key = locationKey(loc);
+    if (loc.linked) actions.append(actionButton(a,'Unlink pane','terminal:unlink:'+key,'narrow',note));
     if (loc.app === 'iTerm2') actions.append(actionButton(a,'Focus pane','terminal:pane:'+key,'solid',note));
     actions.append(actionButton(a,'Focus tab','terminal:tab:'+key,'narrow',note));
   }
   if (a.sshHost) {
     if (!loc && a.sshHost === terminals.host) {
       for (const p of terminals.hostPanes || []) {
+        actions.append(actionButton(a,'Link this thread to '+locationText(p),'terminal:link:'+locationKey(p),'narrow',note));
         if (p.app === 'iTerm2') actions.append(actionButton(a,'Focus codebox pane · '+locationText(p),'terminal:host-pane:'+locationKey(p),'narrow',note));
         actions.append(actionButton(a,'Focus codebox tab · '+locationText(p),'terminal:host-tab:'+locationKey(p),'narrow',note));
       }

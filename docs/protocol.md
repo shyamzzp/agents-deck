@@ -384,6 +384,7 @@ admin package checks this table against its own routes (`TestDocsListEveryCall`)
 | POST | `/admin/v1/open-data-folder` | – | `204`: shows the data folder in the file manager on this computer |
 | POST | `/admin/v1/ssh-codex/attach` | Open a recent remote session in macOS Terminal using its host and exact thread ID. |
 | GET | `/admin/v1/terminals` | Terminal locations for local and configured SSH sessions on this Mac. |
+| POST | `/admin/v1/terminals/link` | Link or unlink an identified thread and an existing interactive SSH pane for the life of that connection. |
 | POST | `/admin/v1/terminals/focus` | Recheck and select a matched pane, tab or explicitly chosen codebox tab. |
 | GET | `/admin/v1/ssh-codex` | SSH host, connection status and recent Codex session details. |
 | POST | `/admin/v1/ssh-codex` | Set the SSH destination with `host`, or clear it with an empty string. |
