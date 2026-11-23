@@ -88,6 +88,30 @@ void main() {
   Finder noteIn(String row, String text) =>
       find.descendant(of: find.byKey(Key(row)), matching: find.text(text));
 
+  testWidgets('the deck list holds deck pages and nothing else', (
+    tester,
+  ) async {
+    await pump(tester, const DeckLayout(fallback: DeckShape(5, 5)));
+
+    // The order of every row title on the screen. "needs you" must not be the
+    // first thing under the deck's pages, which is what it was.
+    final rows = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((w) => w.data ?? '')
+        .where((t) => t == 'all pages' || t == 'needs you' || t.startsWith('page '))
+        .toList();
+    expect(rows.first, 'all pages');
+    expect(
+      rows.indexOf('page 1') < rows.lastIndexOf('needs you'),
+      isTrue,
+      reason: 'the deck pages come before the needs you screen',
+    );
+
+    // The heading above the page rows names the deck, not the screens.
+    expect(find.text('the deck: one page'), findsOneWidget);
+    expect(find.text('the pages you can swipe to'), findsNothing);
+  });
+
   testWidgets('a page with its own grid says so', (tester) async {
     await pump(tester, const DeckLayout(fallback: DeckShape(5, 5)));
     expect(noteIn('shape-row-page-0', 'as above'), findsOneWidget);
@@ -101,12 +125,13 @@ void main() {
     expect(noteIn('shape-row-page-0', 'its own'), findsOneWidget);
   });
 
-  group('the Needs you screen is a page too', () {
-    testWidgets('it is listed, and follows the default until set', (
+  group('the Needs you screen, set on its own', () {
+    testWidgets('it has a row, and follows the default until set', (
       tester,
     ) async {
       await pump(tester, const DeckLayout(fallback: DeckShape(5, 5)));
-      expect(find.text('needs you'), findsOneWidget);
+      // Its heading and its row share the words, so match the row.
+      expect(find.byKey(const Key('shape-row-attention')), findsOneWidget);
       expect(noteIn('shape-row-attention', 'as above'), findsOneWidget);
     });
 
