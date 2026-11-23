@@ -440,6 +440,8 @@ function hatSVG(hat, oni, faded, animate = false) {
 // Poses of a working agent: its hat animates; every other pose keeps it still.
 const WORKING_POSES = new Set(['run', 'think', 'read', 'write', 'bash', 'web', 'plan', 'delegate', 'compact']);
 
+const SLEEP_MARK = '<text class="zt zz" x="14.8" y="-0.6" font-size="3.2">z</text><text class="zt zz" x="16.6" y="-2.4" font-size="2.3">z</text>';
+
 function spriteSVG(pose, species = 'claude', hat = null, opts = {}) {
   const bot = species === 'codex';
   const working = WORKING_POSES.has(pose);
@@ -522,7 +524,7 @@ function spriteSVG(pose, species = 'claude', hat = null, opts = {}) {
       eyes = '<rect class="b" x="4" y="3" width="1" height="1"/><rect class="b" x="9" y="3" width="1" height="1"/>'; break;
     default: // idle: asleep
       eyes = eyesShut;
-      bubble = '<text class="zt zz" x="14.8" y="-0.6" font-size="3.2">z</text><text class="zt zz" x="16.6" y="-2.4" font-size="2.3">z</text>';
+      bubble = SLEEP_MARK;
   }
   // The block's face sits half a row higher than the onigiri's.
   const face = bot ? eyes : `<g transform="translate(0 -0.5)">${eyes}</g>`;
@@ -1634,6 +1636,26 @@ function handoffButton(a, acc, note) {
   return b;
 }
 
+function updateStatusPill(pill, a) {
+  const label = pillText(a);
+  if (a.status !== 'idle' || !label.startsWith('idle')) {
+    pill.removeAttribute('title');
+    setText(pill, label);
+    return;
+  }
+  if (!pill.firstElementChild) {
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.setAttribute('class', 'idle-mark');
+    icon.setAttribute('viewBox', '14 -5 5 5');
+    icon.setAttribute('role', 'img');
+    icon.setAttribute('aria-label', 'Idle');
+    icon.innerHTML = SLEEP_MARK;
+    pill.replaceChildren(icon, document.createTextNode(''));
+  }
+  pill.title = 'Idle' + label.slice(4);
+  pill.lastChild.textContent = label.slice(4);
+}
+
 function header(a) {
   const spr = h('span', { class: 'd-spr' });
   const crew = h('span', { class: 'd-crew', role: 'img' });
@@ -1662,7 +1684,7 @@ function header(a) {
     spr.addEventListener('click', toggle);
     spr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
   }
-  return { el: h('div', { class: 'd-head' }, el, h('div', { class: 'd-id' }, title, ai), hats?.el), update: (x) => { setText(title, x.title); acct.update(x); setText(pill, pillText(x)); setText(ai, x.aiTitle || ''); ai.hidden = !x.aiTitle; crewUpdate(crew, x); setSprite(spr, poseOf(x), x.tool, x.hat); hats?.update(x); } };
+  return { el: h('div', { class: 'd-head' }, el, h('div', { class: 'd-id' }, title, ai), hats?.el), update: (x) => { setText(title, x.title); acct.update(x); updateStatusPill(pill, x); setText(ai, x.aiTitle || ''); ai.hidden = !x.aiTitle; crewUpdate(crew, x); setSprite(spr, poseOf(x), x.tool, x.hat); hats?.update(x); } };
 }
 
 function postAction(a, path, body) {
