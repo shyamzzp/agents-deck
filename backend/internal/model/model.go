@@ -50,6 +50,11 @@ type Server struct {
 	Time    time.Time `json:"time"`
 }
 
+// LastPromptMax is how much of an agent's last prompt the deck keeps: enough
+// for the sidebar on Home to show it all, mostly. Boards get the first 160
+// characters (link.options).
+const LastPromptMax = 1000
+
 type Agent struct {
 	ID   string `json:"id"`
 	Slot int    `json:"slot"`
@@ -68,7 +73,7 @@ type Agent struct {
 	ModelLabel    string     `json:"modelLabel"`
 	Effort        string     `json:"effort,omitempty"` // reasoning effort of its latest turn (low, medium, high, xhigh, max)
 	Activity      *Activity  `json:"activity"`
-	LastPrompt    string     `json:"lastPrompt"`
+	LastPrompt    string     `json:"lastPrompt"` // up to LastPromptMax characters; boards get the first 160
 	Waiting       *Prompt    `json:"waiting"`
 	Error         *ErrInfo   `json:"error"`
 	Tokens        Tokens     `json:"tokens"`
@@ -83,6 +88,7 @@ type Agent struct {
 	External      bool       `json:"external"`            // owned by another app (Codex): view and focus only
 	App           string     `json:"app,omitempty"`       // the app it runs in when not agentctl's: "orca", "herdr", "cmux" (answer, interrupt and focus work there)
 	Subagents     []Subagent `json:"subagents,omitempty"` // subagents still working, oldest first
+	Queued        int        `json:"queued"`              // prompts waiting to be typed in once its turn ends ("mode": "queue")
 	Hat           *Hat       `json:"hat,omitempty"`       // the pixel hat for its working folder (nil: none)
 	Account       *Account   `json:"account,omitempty"`   // the Claude account it runs in (nil: only one account is set up)
 	StartedAt     time.Time  `json:"startedAt"`

@@ -22,6 +22,7 @@ import (
 	"github.com/brushknight/agents-deck/backend/internal/firmware"
 	"github.com/brushknight/agents-deck/backend/internal/flash"
 	"github.com/brushknight/agents-deck/backend/internal/link"
+	"github.com/brushknight/agents-deck/backend/internal/proc"
 	"github.com/brushknight/agents-deck/backend/internal/serial"
 	"github.com/brushknight/agents-deck/backend/internal/service"
 	"github.com/brushknight/agents-deck/backend/internal/store"
@@ -116,6 +117,14 @@ type Admin struct {
 	// Bluetooth: boards over Bluetooth (ble.go; *ble.Uplinks, or the demo's).
 	// nil: this computer has none.
 	Bluetooth Bluetooth
+	// CPU: how much CPU the service and its helpers use (proc.CPUMeter).
+	// nil: 404.
+	CPU func() proc.CPUReport
+
+	// Tokens are the MCP access tokens (mcp.go); MCPURL is where MCP clients
+	// connect over HTTP (http://127.0.0.1:<port>/mcp). nil: no MCP section.
+	Tokens *devices.Tokens
+	MCPURL string
 
 	// NetworkOn: the network listener runs in this process (it starts or
 	// stops only with the service).
@@ -129,9 +138,14 @@ type Admin struct {
 	// (default 2 minutes); CheckEvery is the time between checks (a day).
 	FirstCheck, CheckEvery time.Duration
 
+	// Starter starts agents in a project's folder (the live daemon); nil:
+	// projects can be kept but not started (demo mode).
+	Starter Starter
+
 	bindings terminalBindings
 	ssh      sshWatch
 	cfgMu    sync.Mutex
+	projects projectStore
 	jobs     jobs
 	ports    portHolds
 	catMu    sync.Mutex
@@ -170,6 +184,10 @@ func (a *Admin) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/v1/ssh-codex", a.sshDashboard)
 	mux.HandleFunc("GET /admin/v1/agents", a.agents)
 	mux.HandleFunc("POST /admin/v1/accounts/{name}/color", a.accountColor)
+	mux.HandleFunc("POST /admin/v1/accounts/{name}/default", a.accountDefault)
+	mux.HandleFunc("GET /admin/v1/projects", a.projectsList)
+	mux.HandleFunc("POST /admin/v1/projects", a.projectsAdd)
+	mux.HandleFunc("POST /admin/v1/projects/{name}/{action}", a.projectAction)
 
 	mux.HandleFunc("GET /admin/v1/devices", a.listDevices)
 	mux.HandleFunc("POST /admin/v1/devices/{id}/{action}", a.deviceAction)
@@ -200,7 +218,12 @@ func (a *Admin) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/v1/update/check", a.updateCheck)
 	mux.HandleFunc("POST /admin/v1/update/apply", a.updateApply)
 
+	mux.HandleFunc("GET /admin/v1/mcp", a.mcpInfo)
+	mux.HandleFunc("POST /admin/v1/mcp/tokens", a.mcpCreate)
+	mux.HandleFunc("POST /admin/v1/mcp/tokens/{name}/{action}", a.mcpAction)
+
 	mux.HandleFunc("GET /admin/v1/diagnostics", a.diagnostics)
+	mux.HandleFunc("GET /admin/v1/cpu", a.cpu)
 	mux.HandleFunc("/admin/v1/", func(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no such call: see docs/protocol.md, Management API")
 	})
