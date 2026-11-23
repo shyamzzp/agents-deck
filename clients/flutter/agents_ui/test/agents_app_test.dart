@@ -55,6 +55,40 @@ FakeAgentsSource _twoAccounts() {
 }
 
 void main() {
+  testWidgets('the context gauge is drawn at the width it is given', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    Future<List<double>> strokes(double w) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: DeckHud.bg),
+          home: Scaffold(
+            body: AgentsApp(
+              source: FakeAgentsSource.demo(),
+              animate: false,
+              contextRingWidth: w,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      return tester
+          .widgetList<CustomPaint>(find.byType(CustomPaint))
+          .map((c) => c.foregroundPainter)
+          .whereType<ContextRingPainter>()
+          .map((r) => r.stroke)
+          .toList();
+    }
+
+    expect(await strokes(8), everyElement(8));
+    expect(await strokes(1), everyElement(1));
+  }, skip: false);
+
+
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     debugAgentsSetupHostname = 'panel';

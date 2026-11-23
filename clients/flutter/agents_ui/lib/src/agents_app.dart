@@ -41,7 +41,7 @@ class AgentsApp extends StatefulWidget {
     this.backButton = false,
     this.pageShapes = const [DeckShape.panel],
     this.attentionShape,
-    this.cardBorderWidth = 0,
+    this.contextRingWidth = ContextRingPainter.defaultStroke,
     this.leadingPage,
   }) : assert(pageShapes.length > 0, 'the deck needs a shape'),
        assert(
@@ -60,11 +60,11 @@ class AgentsApp extends StatefulWidget {
   /// A back button on agent cards, for hosts without an edge swipe.
   final bool backButton;
 
-  /// A border around each agent card, in points. 0 draws none, which is what
-  /// the desk panel and the boards do. The browser deck has the same knob
-  /// (agents.tileBorderWidth), and like that one it belongs to the display
-  /// showing the deck rather than to the service.
-  final double cardBorderWidth;
+  /// How thick the context gauge around each card is drawn, in points. It is
+  /// the card's border and its context meter at once, so this is the width of
+  /// the line the orange fills. Belongs to the display showing the deck
+  /// rather than to the service.
+  final double contextRingWidth;
 
   /// The shape the "Needs you" screen is drawn in; null follows the first
   /// page. It holds the sixteen spots the service gives it whatever the shape
@@ -543,7 +543,7 @@ class _AgentsAppState extends State<AgentsApp> {
                           agent: a,
                           state: state,
                           onOpen: _open,
-                          borderWidth: widget.cardBorderWidth,
+                          ringWidth: widget.contextRingWidth,
                         ),
                       )
                     : DeckGrid(
@@ -664,7 +664,7 @@ class _AgentsAppState extends State<AgentsApp> {
                       agent: a,
                       state: state,
                       onOpen: _open,
-                      borderWidth: widget.cardBorderWidth,
+                      ringWidth: widget.contextRingWidth,
                     ),
                     leave: false,
                   )
@@ -673,7 +673,7 @@ class _AgentsAppState extends State<AgentsApp> {
                     agent: a,
                     state: state,
                     onOpen: _open,
-                    borderWidth: widget.cardBorderWidth,
+                    ringWidth: widget.contextRingWidth,
                   ),
           )
         else
@@ -711,7 +711,7 @@ class AgentTile extends StatefulWidget {
     super.key,
     required this.agent,
     required this.state,
-    this.borderWidth = 0,
+    this.ringWidth = ContextRingPainter.defaultStroke,
     required this.onOpen,
   });
 
@@ -720,8 +720,8 @@ class AgentTile extends StatefulWidget {
   final void Function(BuildContext tileContext, GlobalKey tileKey, Agent a)
   onOpen;
 
-  /// A border around the card, in points; 0 draws none.
-  final double borderWidth;
+  /// How thick the context gauge around the card is drawn, in points.
+  final double ringWidth;
 
   @override
   State<AgentTile> createState() => _AgentTileState();
@@ -752,17 +752,10 @@ class _AgentTileState extends State<AgentTile> {
                     fraction: a.contextFraction,
                     color: look.ring,
                     track: look.ringTrack,
+                    stroke: widget.ringWidth,
                   ),
             child: Container(
-              decoration: BoxDecoration(
-                color: fill,
-                border: widget.borderWidth <= 0
-                    ? null
-                    : Border.all(
-                        color: pressed ? DeckHud.bg : look.meta,
-                        width: widget.borderWidth,
-                      ),
-              ),
+              color: fill,
               child: Stack(
                 children: [
                   if (look.stripes && !pressed)
@@ -972,17 +965,21 @@ class ContextRingPainter extends CustomPainter {
     required this.fraction,
     required this.color,
     required this.track,
+    this.stroke = defaultStroke,
   });
 
   final double fraction;
   final Color color;
   final Color track;
 
-  static const stroke = 4.0;
+  /// How thick the gauge is drawn, in points.
+  final double stroke;
+
+  static const defaultStroke = 4.0;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const h = stroke / 2;
+    final h = stroke / 2;
     final w = size.width, ht = size.height;
     final path = Path()
       ..moveTo(w / 2, h)
@@ -1009,7 +1006,10 @@ class ContextRingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(ContextRingPainter old) =>
-      old.fraction != fraction || old.color != color || old.track != track;
+      old.fraction != fraction ||
+      old.color != color ||
+      old.track != track ||
+      old.stroke != stroke;
 }
 
 /// Unused slot: near-black block with a faint frame.
