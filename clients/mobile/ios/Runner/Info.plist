@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Hold an agent that needs you to speak your answer; the microphone is only open while you hold it.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>What you say is turned into text on this device, by Apple's own speech recognition, and sent to the agent's terminal.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>agents deck reaches the deck running on your Mac over your local network, so the agents on it show here.</string>
 	<key>UIApplicationSceneManifest</key>

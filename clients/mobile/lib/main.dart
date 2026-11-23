@@ -25,6 +25,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'dictate_sheet.dart';
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const DeckApp());
@@ -288,6 +290,9 @@ class _DeckAppState extends State<DeckApp> {
   bool _looked = false;
   DeckLayout _layout = const DeckLayout();
 
+  /// The agent being spoken to, while the dictation sheet is open.
+  Agent? _dictating;
+
   @override
   void initState() {
     super.initState();
@@ -362,52 +367,74 @@ class _DeckAppState extends State<DeckApp> {
   @override
   Widget build(BuildContext context) {
     final source = _source;
+    final dictating = _dictating;
     return WidgetsApp(
       color: DeckHud.accent,
       debugShowCheckedModeBanner: false,
       builder: (context, _) => ColoredBox(
         color: DeckHud.bg,
-        child: SafeArea(
-          child: switch ((source, _looked)) {
-            // backButton: false. Dragging the card to the right goes back
-            // (agent_detail's own gesture), so the "<" was only taking 63
-            // points of a 357 point row off "focus terminal".
-            //
-            // 5x5 rather than the panel's 4x4: a tablet has the room for 25
-            // agents at once, and paging through a long deck four at a time is
-            // the thing that wears thin on a screen you hold. The cost is that
-            // pages no longer begin where the panel's do, since a slot's page
-            // is its number over the page size.
-            (final AgentsSource s, _) => AgentsApp(
-              source: s,
-              backButton: false,
-              pageShapes: _layout.pageShapes,
-              attentionShape: _layout.attentionShape,
-              contextRingWidth: _layout.ring,
-              pageTitles: _layout.titles,
-              onRenamePage: _setTitle,
-              // A phone has no menu bar to hang settings off, so they get a
-              // page of their own at the far left. The deck still opens.
-              leadingPage: ConfigPage(
-                layout: _layout,
-                onPage: _setPage,
-                onFallback: _setFallback,
-                onAttention: _setAttention,
-                onRing: _setRing,
-                onTheme: _setTheme,
-                deck: _deckName(),
-                source: s,
+        child: Stack(
+          children: [
+            SafeArea(
+              child: switch ((source, _looked)) {
+                // backButton: false. Dragging the card to the right goes back
+                // (agent_detail's own gesture), so the "<" was only taking 63
+                // points of a 357 point row off "focus terminal".
+                //
+                // 5x5 rather than the panel's 4x4: a tablet has the room for 25
+                // agents at once, and paging through a long deck four at a time is
+                // the thing that wears thin on a screen you hold. The cost is that
+                // pages no longer begin where the panel's do, since a slot's page
+                // is its number over the page size.
+                (final AgentsSource s, _) => AgentsApp(
+                  source: s,
+                  backButton: false,
+                  pageShapes: _layout.pageShapes,
+                  attentionShape: _layout.attentionShape,
+                  contextRingWidth: _layout.ring,
+                  pageTitles: _layout.titles,
+                  onRenamePage: _setTitle,
+                  // Held on the "Needs you" screen: speak the answer. The sheet
+                  // opens over the deck rather than as a route, since this app
+                  // has no navigator of its own.
+                  onHoldAttention: (a) => setState(() => _dictating = a),
+                  // A phone has no menu bar to hang settings off, so they get a
+                  // page of their own at the far left. The deck still opens.
+                  leadingPage: ConfigPage(
+                    layout: _layout,
+                    onPage: _setPage,
+                    onFallback: _setFallback,
+                    onAttention: _setAttention,
+                    onRing: _setRing,
+                    onTheme: _setTheme,
+                    deck: _deckName(),
+                    source: s,
+                  ),
+                ),
+                // Until the directory has been asked for there is nothing to say:
+                // showing "not paired yet" first would be a lie on every launch.
+                (_, false) => const SizedBox.shrink(),
+                _ => PairingScreen(
+                  reason: _reason,
+                  path: _path,
+                  onPaired: () => unawaited(_check()),
+                ),
+              },
+            ),
+            if (dictating != null && source != null)
+              Positioned.fill(
+                child: DictateSheet(
+                  key: ValueKey('dictate-${dictating.id}'),
+                  agent:
+                      source.snapshot.value.state?.agents
+                          .where((x) => x.id == dictating.id)
+                          .firstOrNull ??
+                      dictating,
+                  source: source,
+                  onClose: () => setState(() => _dictating = null),
+                ),
               ),
-            ),
-            // Until the directory has been asked for there is nothing to say:
-            // showing "not paired yet" first would be a lie on every launch.
-            (_, false) => const SizedBox.shrink(),
-            _ => PairingScreen(
-              reason: _reason,
-              path: _path,
-              onPaired: () => unawaited(_check()),
-            ),
-          },
+          ],
         ),
       ),
     );
