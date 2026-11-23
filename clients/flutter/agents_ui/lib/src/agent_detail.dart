@@ -796,33 +796,20 @@ class _AgentDetailState extends State<AgentDetail> {
       ),
     );
     // Whose it is, kept at the far end so the clock can have the mascot's
-    // side to itself.
-    final who = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (a.account case final acc?) ...[
-          ConstrainedBox(
+    // side to itself. The colour square that used to sit beside the clock is
+    // gone: the critter is already drawn in the tool's own colour.
+    final who = a.account == null
+        ? const SizedBox.shrink()
+        : ConstrainedBox(
             key: const Key('agent-account'),
-            constraints: const BoxConstraints(maxWidth: 120),
+            constraints: const BoxConstraints(maxWidth: 160),
             child: Text(
-              acc.name,
+              a.account!.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: DeckHud.mono(size: 15, color: ink),
             ),
-          ),
-          const SizedBox(width: 10),
-        ],
-        // The tool's colour, or its Claude account's.
-        Container(
-          width: 8,
-          height: 8,
-          color: a.account == null
-              ? agentToolColor(a.tool)
-              : hatColor(a.account!.color).$1,
-        ),
-      ],
-    );
+          );
     // The status sits where the clock used to, beside the critter, so the
     // title below has the whole width. A phone has little of it to spare.
     return Column(
@@ -856,9 +843,10 @@ class _AgentDetailState extends State<AgentDetail> {
                 cut: cut,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 4),
             // Both sit on the row's bottom edge, so the clock lines up with
-            // the mascot's feet rather than floating beside its head.
+            // the mascot's feet rather than floating beside its head, and it
+            // sits right against the sprite.
             Flexible(child: clock),
             const SizedBox(width: 12),
             Expanded(
