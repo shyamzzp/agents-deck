@@ -47,42 +47,106 @@ const _settingsFile = 'settings.json';
 /// the tiles stop being readable on a tablet, let alone a phone.
 const gridRange = [2, 3, 4, 5, 6];
 
-/// The deck as it is shaped before anyone says otherwise: a tablet has the
-/// room for 25 at once, and the last page's shape repeats for the rest.
-const defaultShapes = [DeckShape(5, 5)];
+/// A tablet has the room for 25 agents at once.
+const defaultShape = DeckShape(5, 5);
 
-List<DeckShape> _shapesFromJson(Object? j) {
-  if (j is! List || j.isEmpty) return defaultShapes;
-  final out = <DeckShape>[];
-  for (final row in j) {
-    if (row is! List || row.length != 2) continue;
-    final c = row[0], r = row[1];
-    if (c is int && r is int && gridRange.contains(c) && gridRange.contains(r)) {
-      out.add(DeckShape(c, r));
+/// The deck's shape: one shape for every page, and any page that wants its
+/// own.
+///
+/// It is held this way, rather than as a list where the last entry repeats,
+/// because the two read differently when a page is changed. In a list of one,
+/// "page 1" is also every other page, so setting it sets them all. Here a page
+/// is either its own or the default, and nothing else moves.
+class DeckLayout {
+  const DeckLayout({this.fallback = defaultShape, this.perPage = const {}});
+
+  /// Every page that has not been given its own shape.
+  final DeckShape fallback;
+
+  /// By page index, 0 first. Never holds a shape equal to [fallback]: that is
+  /// not an override, it is the default, and keeping it would leave a page
+  /// pinned behind later changes to the default.
+  final Map<int, DeckShape> perPage;
+
+  DeckShape shapeOf(int page) => perPage[page] ?? fallback;
+
+  /// With a page set to [shape], or back to the default when they are equal.
+  DeckLayout withPage(int page, DeckShape shape) {
+    final next = {...perPage};
+    if (shape == fallback) {
+      next.remove(page);
+    } else {
+      next[page] = shape;
     }
+    return DeckLayout(fallback: fallback, perPage: next);
   }
-  return out.isEmpty ? defaultShapes : out;
+
+  /// With the default set to [shape]; any page that was overridden to exactly
+  /// that stops being an override.
+  DeckLayout withFallback(DeckShape shape) => DeckLayout(
+    fallback: shape,
+    perPage: {
+      for (final e in perPage.entries)
+        if (e.value != shape) e.key: e.value,
+    },
+  );
+
+  /// The shapes [AgentsApp] wants: one per page, the last repeating. The
+  /// default goes last so every page past the overrides gets it.
+  List<DeckShape> get pageShapes {
+    if (perPage.isEmpty) return [fallback];
+    final highest = perPage.keys.reduce((a, b) => a > b ? a : b);
+    return [for (var p = 0; p <= highest + 1; p++) shapeOf(p)];
+  }
+
+  Map<String, Object?> toJson() => {
+    'default': [fallback.columns, fallback.rows],
+    'pages': {
+      for (final e in perPage.entries)
+        '${e.key}': [e.value.columns, e.value.rows],
+    },
+  };
+
+  static DeckShape? _shape(Object? j) {
+    if (j is! List || j.length != 2) return null;
+    final c = j[0], r = j[1];
+    if (c is! int || r is! int) return null;
+    if (!gridRange.contains(c) || !gridRange.contains(r)) return null;
+    return DeckShape(c, r);
+  }
+
+  static DeckLayout fromJson(Object? j) {
+    if (j is! Map) return const DeckLayout();
+    final fallback = _shape(j['default']) ?? defaultShape;
+    final pages = <int, DeckShape>{};
+    final raw = j['pages'];
+    if (raw is Map) {
+      for (final e in raw.entries) {
+        final page = int.tryParse('${e.key}');
+        final shape = _shape(e.value);
+        if (page != null && page >= 0 && shape != null && shape != fallback) {
+          pages[page] = shape;
+        }
+      }
+    }
+    return DeckLayout(fallback: fallback, perPage: pages);
+  }
 }
 
-Future<List<DeckShape>> loadShapes(String docs) async {
+Future<DeckLayout> loadLayout(String docs) async {
   try {
-    final j = jsonDecode(await File('$docs/$_settingsFile').readAsString());
-    return _shapesFromJson(j is Map ? j['pages'] : null);
+    return DeckLayout.fromJson(
+      jsonDecode(await File('$docs/$_settingsFile').readAsString()),
+    );
   } catch (_) {
-    return defaultShapes; // not written yet, or unreadable
+    return const DeckLayout(); // not written yet, or unreadable
   }
 }
 
-Future<void> saveShapes(String docs, List<DeckShape> shapes) async {
+Future<void> saveLayout(String docs, DeckLayout layout) async {
   final f = File('$docs/$_settingsFile');
   await f.parent.create(recursive: true);
-  await f.writeAsString(
-    jsonEncode({
-      'pages': [
-        for (final s in shapes) [s.columns, s.rows],
-      ],
-    }),
-  );
+  await f.writeAsString(jsonEncode(layout.toJson()));
 }
 
 class DeckApp extends StatefulWidget {
@@ -98,7 +162,7 @@ class _DeckAppState extends State<DeckApp> {
   String? _docs;
   String? _reason;
   bool _looked = false;
-  List<DeckShape> _shapes = defaultShapes;
+  DeckLayout _layout = const DeckLayout();
 
   @override
   void initState() {
@@ -111,31 +175,33 @@ class _DeckAppState extends State<DeckApp> {
   Future<void> _check() async {
     final docs = _docs ?? (await getApplicationDocumentsDirectory()).path;
     final path = '$docs/${AgentsConfig.fileName}';
-    final shapes = await loadShapes(docs);
+    final layout = await loadLayout(docs);
     final (cfg, why) = AgentsConfig.load(env: const {}, paths: [path]);
     if (!mounted) return;
     setState(() {
       _docs = docs;
       _path = path;
-      _shapes = shapes;
+      _layout = layout;
       _reason = why;
       _looked = true;
       if (cfg != null) _source ??= HttpAgentsClient(loadConfig: bundleLoader(path));
     });
   }
 
-  /// Sets page [i]'s shape, lengthening the list when a later page is given
-  /// one of its own (every page up to it has to be written down first, since
-  /// the list is read in order).
-  Future<void> _setShape(int i, DeckShape shape) async {
+  /// Sets one page's shape. Only that page moves: the others keep whatever
+  /// they had, which is the whole point of holding a default separately.
+  Future<void> _setPage(int page, DeckShape shape) =>
+      _store(_layout.withPage(page, shape));
+
+  /// Sets the shape every page without one of its own is drawn in.
+  Future<void> _setFallback(DeckShape shape) =>
+      _store(_layout.withFallback(shape));
+
+  Future<void> _store(DeckLayout layout) async {
     final docs = _docs;
     if (docs == null) return;
-    final next = [
-      for (var p = 0; p <= (i > _shapes.length - 1 ? i : _shapes.length - 1); p++)
-        p == i ? shape : deckShapeOf(_shapes, p),
-    ];
-    setState(() => _shapes = next);
-    await saveShapes(docs, next);
+    setState(() => _layout = layout);
+    await saveLayout(docs, layout);
   }
 
   /// The deck this device is paired with, for the config page to name.
@@ -167,12 +233,13 @@ class _DeckAppState extends State<DeckApp> {
             (final AgentsSource s, _) => AgentsApp(
               source: s,
               backButton: true,
-              pageShapes: _shapes,
+              pageShapes: _layout.pageShapes,
               // A phone has no menu bar to hang settings off, so they get a
               // page of their own at the far left. The deck still opens.
               leadingPage: ConfigPage(
-                shapes: _shapes,
-                onShape: _setShape,
+                layout: _layout,
+                onPage: _setPage,
+                onFallback: _setFallback,
                 deck: _deckName(),
                 source: s,
               ),
@@ -384,23 +451,21 @@ class _Button extends StatelessWidget {
 /// The page at the far left of the deck: what a menu bar would hold on a
 /// desktop. The deck opens on its own first page, so this is somewhere you go
 /// rather than somewhere you land.
-///
-/// Each page of the deck gets its own shape here. A page holds as many agents
-/// as it has cells, so changing one moves where the later pages begin; the
-/// agents keep their places.
 class ConfigPage extends StatelessWidget {
   const ConfigPage({
     super.key,
-    required this.shapes,
-    required this.onShape,
+    required this.layout,
+    required this.onPage,
+    required this.onFallback,
     required this.source,
     this.deck,
   });
 
-  final List<DeckShape> shapes;
-  final void Function(int page, DeckShape shape) onShape;
+  final DeckLayout layout;
+  final void Function(int page, DeckShape shape) onPage;
+  final void Function(DeckShape shape) onFallback;
 
-  /// Watched for how many pages the deck currently needs.
+  /// Watched for how many pages the deck currently has.
   final AgentsSource source;
 
   /// The paired deck, named for confirmation; null before it is read.
@@ -412,12 +477,7 @@ class ConfigPage extends StatelessWidget {
       valueListenable: source.snapshot,
       builder: (context, snap, _) {
         final slots = snap.state?.agents.map((a) => a.slot) ?? const <int>[];
-        final used = deckPageCount(shapes, slots);
-        // The pages the deck actually has, and one spare so the next can be
-        // shaped before an agent lands on it. Deliberately not driven by how
-        // many shapes are stored: shaping the spare would then add another,
-        // and that one another, without end.
-        final listed = (used + 1).clamp(2, 8);
+        final pages = deckPageCount(layout.pageShapes, slots);
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
           children: [
@@ -429,27 +489,43 @@ class ConfigPage extends StatelessWidget {
             ),
             const SizedBox(height: 22),
             Text(
-              'agents per page',
+              'every page',
               style: DeckHud.mono(size: 14, color: DeckHud.ink),
             ),
             const SizedBox(height: 6),
             Text(
-              'Each page of the deck is drawn in its own grid. A page holds '
-              'as many agents as it has cells, so changing one moves where the '
-              'pages after it begin. An agent keeps its place either way.\n\n'
-              'A page marked empty has no agents on it yet, so reshaping it '
-              'changes nothing you can see until the pages before it fill. The '
-              'desk panel and the boards always draw 4 x 4.',
+              'The grid each page of the deck is drawn in. A page holds as many '
+              'agents as it has cells, so making this smaller spreads the same '
+              'agents over more pages. They keep their places.',
               style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
-            const SizedBox(height: 16),
-            for (var i = 0; i < listed; i++) ...[
+            const SizedBox(height: 12),
+            _ShapeRow(
+              key: const Key('shape-row-default'),
+              title: 'all pages',
+              shape: layout.fallback,
+              accent: true,
+              onShape: onFallback,
+            ),
+            const SizedBox(height: 22),
+            Text(
+              pages == 1 ? 'this page' : 'these $pages pages',
+              style: DeckHud.mono(size: 14, color: DeckHud.ink),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'A page can be given a grid of its own. The rest stay as above.',
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
+            ),
+            const SizedBox(height: 12),
+            for (var i = 0; i < pages; i++) ...[
               if (i > 0) const SizedBox(height: 8),
-              _PageRow(
-                page: i,
-                shape: deckShapeOf(shapes, i),
-                inUse: i < used,
-                onShape: (sh) => onShape(i, sh),
+              _ShapeRow(
+                key: Key('shape-row-page-$i'),
+                title: 'page ${i + 1}',
+                note: layout.perPage.containsKey(i) ? 'its own' : 'as above',
+                shape: layout.shapeOf(i),
+                onShape: (sh) => onPage(i, sh),
               ),
             ],
             const SizedBox(height: 22),
@@ -465,25 +541,27 @@ class ConfigPage extends StatelessWidget {
   }
 }
 
-/// One page's shape: its columns and its rows, each a stepper.
-class _PageRow extends StatelessWidget {
-  const _PageRow({
-    required this.page,
+/// One grid setting: a title, its columns and its rows.
+class _ShapeRow extends StatelessWidget {
+  const _ShapeRow({
+    super.key,
+    required this.title,
     required this.shape,
-    required this.inUse,
     required this.onShape,
+    this.note,
+    this.accent = false,
   });
 
-  final int page;
-  final DeckShape shape;
+  final String title;
 
-  /// False for a page no agent has reached yet: shown, but dimmed.
-  final bool inUse;
+  /// Whether this page follows the default or has been given its own.
+  final String? note;
+  final DeckShape shape;
+  final bool accent;
   final void Function(DeckShape) onShape;
 
   @override
   Widget build(BuildContext context) {
-    final ink = inUse ? DeckHud.ink : DeckHud.dim;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       color: DeckHud.panel,
@@ -494,15 +572,18 @@ class _PageRow extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  inUse ? 'page ${page + 1}' : 'page ${page + 1} \u00b7 empty',
-                  style: DeckHud.mono(size: 13, color: ink),
+                  title,
+                  style: DeckHud.mono(size: 13, color: DeckHud.ink),
                 ),
               ),
+              if (note case final n?)
+                Text(n, style: DeckHud.mono(size: 11, color: DeckHud.dim)),
+              const SizedBox(width: 10),
               Text(
                 'holds ${shape.cells}',
                 style: DeckHud.mono(
                   size: 12,
-                  color: inUse ? DeckHud.accent : DeckHud.dim,
+                  color: accent ? DeckHud.accent : DeckHud.dim,
                 ),
               ),
             ],
@@ -511,12 +592,14 @@ class _PageRow extends StatelessWidget {
           Row(
             children: [
               _Stepper(
+                key: const Key('cols'),
                 label: 'cols',
                 value: shape.columns,
                 onChange: (v) => onShape(DeckShape(v, shape.rows)),
               ),
               const SizedBox(width: 14),
               _Stepper(
+                key: const Key('rows'),
                 label: 'rows',
                 value: shape.rows,
                 onChange: (v) => onShape(DeckShape(shape.columns, v)),
@@ -531,6 +614,7 @@ class _PageRow extends StatelessWidget {
 
 class _Stepper extends StatelessWidget {
   const _Stepper({
+    super.key,
     required this.label,
     required this.value,
     required this.onChange,
