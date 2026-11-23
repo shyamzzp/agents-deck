@@ -1,4 +1,6 @@
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -108,7 +110,23 @@ class _AgentsAppState extends State<AgentsApp> {
   /// pager is held still until the tile lands.
   bool _dragging = false;
 
+  /// Picking a card up and carrying it. [_heldId] is the agent in hand,
+  /// [_heldSlot] where it came from, [_overSlot] the cell it is over now.
+  static const _holdDelay = Duration(milliseconds: 220);
+  final _cellKeys = <int, GlobalKey>{};
+  final _deckKey = GlobalKey();
+  Timer? _holdTimer;
+  Timer? _edgeTimer;
+  String? _heldId;
+  int? _heldSlot;
+  int? _overSlot;
+  Offset _pointer = Offset.zero;
+  Size _heldSize = const Size(120, 120);
+
   int get _lead => widget.leadingPage == null ? 0 : 1;
+
+  /// How many deck pages the last build drew.
+  int _pages = 1;
   late int _view = 1 + _lead;
   late final _pager = PageController(initialPage: 1 + _lead);
 
@@ -329,6 +347,19 @@ class _AgentsAppState extends State<AgentsApp> {
   /// Long-press a tile and drop it on another to swap the two agents, or on
   /// a free cell to move it there. Positions are stored by the daemon, so the
   /// web board follows.
+  /// A cell of the deck, and the whole of picking a tile up and putting it
+  /// down.
+  ///
+  /// This does not use LongPressDraggable. That recognizer competes in the
+  /// gesture arena with the pager either side of it and loses: measured on a
+  /// phone, holds of 0.7 to 1.2 s that travelled 170 px started nothing at
+  /// all, because DelayedMultiDragGestureRecognizer gives up once the pointer
+  /// passes touch slop before its delay is up -- which is what a drag is.
+  ///
+  /// A Listener sees the pointer without entering the arena, so nothing can
+  /// take it away. The tile arms on a timer whether or not the finger has
+  /// moved, and from then on the tile itself follows the finger; the cell
+  /// under it is found by asking each cell where it is.
   Widget _swapCell(
     AgentsState state, {
     required int slot,
@@ -336,49 +367,114 @@ class _AgentsAppState extends State<AgentsApp> {
     String title = '',
     required Widget child,
   }) {
-    return LayoutBuilder(
-      builder: (context, box) {
-        final target = DragTarget<String>(
-          onWillAcceptWithDetails: (d) => d.data != id,
-          onAcceptWithDetails: (d) => widget.source.move(d.data, slot),
-          builder: (context, candidates, _) => Stack(
-            fit: StackFit.expand,
-            children: [
-              child,
-              if (candidates.isNotEmpty)
-                IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: DeckHud.ink, width: 3),
-                    ),
-                  ),
+    final key = _cellKeys.putIfAbsent(slot, GlobalKey.new);
+    final held = _heldId != null && _heldSlot == slot;
+    final over = _heldId != null && _overSlot == slot && _heldSlot != slot;
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: id == null ? null : (e) => _armHold(id, slot, e),
+      onPointerMove: _heldId == null ? null : (e) => _holdMoved(e),
+      onPointerUp: (e) => _holdEnded(),
+      onPointerCancel: (e) => _holdEnded(),
+      child: Stack(
+        key: key,
+        fit: StackFit.expand,
+        children: [
+          // The tile it came from stays in place, faded, so where it was is
+          // still readable while it is in hand.
+          held ? Opacity(opacity: 0.25, child: child) : child,
+          if (over)
+            IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border.all(color: DeckHud.ink, width: 3),
                 ),
-            ],
-          ),
-        );
-        if (id == null) return target;
-        return LongPressDraggable<String>(
-          data: id,
-          delay: const Duration(milliseconds: 350),
-          hapticFeedbackOnStart: true,
-          onDragStarted: () => setState(() => _dragging = true),
-          onDragEnd: (_) {
-            if (mounted) setState(() => _dragging = false);
-          },
-          onDraggableCanceled: (_, _) {
-            if (mounted) setState(() => _dragging = false);
-          },
-          feedback: SizedBox(
-            width: box.maxWidth,
-            height: box.maxHeight,
-            child: _DragGhost(title: title),
-          ),
-          childWhenDragging: Opacity(opacity: 0.35, child: child),
-          child: target,
-        );
-      },
+              ),
+            ),
+        ],
+      ),
     );
   }
+
+  /// Picks a tile up after [_holdDelay], moved or not.
+  void _armHold(String id, int slot, PointerDownEvent e) {
+    _holdTimer?.cancel();
+    _pointer = e.position;
+    final box = _cellKeys[slot]?.currentContext?.findRenderObject();
+    if (box is RenderBox && box.hasSize) _heldSize = box.size;
+    _holdTimer = Timer(_holdDelay, () {
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _heldId = id;
+        _heldSlot = slot;
+        _overSlot = slot;
+        _dragging = true;
+      });
+    });
+  }
+
+  void _holdMoved(PointerMoveEvent e) {
+    if (_heldId == null) return;
+    final slot = _slotUnder(e.position);
+    setState(() {
+      _pointer = e.position;
+      if (slot != null) _overSlot = slot;
+    });
+    _turnPageAtEdge(e.position);
+  }
+
+  /// Carried to the left or right edge of the deck, the page turns, the way
+  /// an icon carried to the edge of a home screen does.
+  void _turnPageAtEdge(Offset p) {
+    if (_edgeTimer != null) return; // one turn at a time
+    final box = _deckKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return;
+    final rect = box.localToGlobal(Offset.zero) & box.size;
+    const margin = 44.0;
+    final step = p.dx <= rect.left + margin
+        ? -1
+        : p.dx >= rect.right - margin
+        ? 1
+        : 0;
+    if (step == 0) return;
+    final next = _view + step;
+    // Never back past the "Needs you" page: a card belongs to the deck.
+    if (next < 1 + _lead || next > _pages + _lead) return;
+    _goTo(next);
+    _edgeTimer = Timer(const Duration(milliseconds: 700), () {
+      _edgeTimer = null;
+    });
+  }
+
+  void _holdEnded() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    final id = _heldId, from = _heldSlot, to = _overSlot;
+    if (id != null && to != null && to != from) {
+      widget.source.move(id, to);
+    }
+    if (_heldId != null) {
+      setState(() {
+        _heldId = null;
+        _heldSlot = null;
+        _overSlot = null;
+        _dragging = false;
+      });
+    }
+  }
+
+  /// Which cell is under [p], by asking every cell on this page where it is.
+  int? _slotUnder(Offset p) {
+    for (final e in _cellKeys.entries) {
+      final box = e.value.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) continue;
+      final rect = box.localToGlobal(Offset.zero) & box.size;
+      if (rect.contains(p)) return e.key;
+    }
+    return null;
+  }
+
 
   /// Pages of 16 slots (page = slot ~/ 16), side by side, with the "Needs
   /// you" screen before the first: swipe between them, scroll, use the arrow
@@ -387,7 +483,12 @@ class _AgentsAppState extends State<AgentsApp> {
   Widget _deck(AgentsState state) {
     _watchFlights(state);
     _reportView(state);
-    final pages = _pageCount(state.agents.map((a) => a.slot));
+    // While a card is in hand there is always one more page than the deck
+    // needs, so it can be carried somewhere new; it stays only if something
+    // is put on it.
+    final pages =
+        _pageCount(state.agents.map((a) => a.slot)) + (_heldId == null ? 0 : 1);
+    _pages = pages;
     if (_view > pages + _lead) _view = pages + _lead;
     final hot = {
       for (final a in state.agents)
@@ -408,8 +509,11 @@ class _AgentsAppState extends State<AgentsApp> {
         return KeyEventResult.handled;
       },
       child: Padding(
+        key: _deckKey,
         padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-        child: Column(
+        child: Stack(
+          children: [
+            Column(
           children: [
             Expanded(
               child: PageView.builder(
@@ -453,7 +557,48 @@ class _AgentsAppState extends State<AgentsApp> {
                 onAttention: () => _goTo(_lead),
               ),
             ),
+              ],
+            ),
+            // The card in hand: the tile itself, following the finger. Not a
+            // stand-in for it.
+            if (_carried(state) case final a?) _carriedCard(a, state),
           ],
+        ),
+      ),
+    );
+  }
+
+  Agent? _carried(AgentsState state) {
+    final id = _heldId;
+    if (id == null) return null;
+    for (final a in state.agents) {
+      if (a.id == id) return a;
+    }
+    return null;
+  }
+
+  /// The carried card, centred on the finger and a little larger, so it reads
+  /// as lifted off the deck.
+  Widget _carriedCard(Agent a, AgentsState state) {
+    final box = _deckKey.currentContext?.findRenderObject();
+    final origin = box is RenderBox && box.hasSize
+        ? box.localToGlobal(Offset.zero)
+        : Offset.zero;
+    final local = _pointer - origin;
+    return Positioned(
+      left: local.dx - _heldSize.width / 2,
+      top: local.dy - _heldSize.height / 2,
+      width: _heldSize.width,
+      height: _heldSize.height,
+      child: IgnorePointer(
+        child: Transform.scale(
+          scale: 1.08,
+          child: AgentTile(
+            key: ValueKey('carried-${a.id}'),
+            agent: a,
+            state: state,
+            onOpen: (_, _, _) {},
+          ),
         ),
       ),
     );
@@ -569,6 +714,7 @@ class AgentTile extends StatefulWidget {
 }
 
 class _AgentTileState extends State<AgentTile> {
+
   static const _tileDesign = 170.0;
   final _tileKey = GlobalKey();
 
@@ -796,30 +942,6 @@ class _StripesPainter extends CustomPainter {
 }
 
 /// What follows the finger while a tile is dragged.
-class _DragGhost extends StatelessWidget {
-  const _DragGhost({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: DeckHud.panel.withValues(alpha: 0.9),
-        border: Border.all(color: DeckHud.ink, width: 2),
-      ),
-      alignment: Alignment.center,
-      padding: const EdgeInsets.all(10),
-      child: Text(
-        title,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-        style: DeckHud.mono(size: 16, color: DeckHud.ink),
-      ),
-    );
-  }
-}
 
 /// The tile's border as a context gauge: [fraction] of the perimeter, drawn
 /// clockwise from the top centre over a faint full-length track.
