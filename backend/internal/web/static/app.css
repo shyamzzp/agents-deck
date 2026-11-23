@@ -503,7 +503,7 @@ body.offline .main { opacity: 0.4; }
   overflow-wrap: anywhere;
 }
 .d-ai { color: var(--d-dim); font-size: 14px; margin-top: -4px; }
-.d-right { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; flex-shrink: 0; }
+.d-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 0; }
 .d-close {
   width: 36px; height: 36px; border-radius: 0; padding: 0;
   background: transparent; color: var(--d-fg); border: 1px solid var(--d-dim); cursor: pointer;
@@ -511,13 +511,14 @@ body.offline .main { opacity: 0.4; }
 }
 .d-close svg { width: 12px; height: 12px; }
 .d-close:active { background: var(--d-fg); color: var(--d-bg); }
-.d-pillrow { display: flex; align-items: center; gap: 8px; }
+.d-pillrow { display: flex; align-items: center; gap: 6px; max-width: 100%; }
+.d-pillrow .d-close, .d-pillrow .chip { flex: none; }
 .d-pillrow .chip { width: 8px; height: 8px; background: var(--chip); }
 .d-acct { display: inline-flex; align-items: center; gap: 6px; margin-top: -4px; color: var(--dim); font-family: var(--f-label); font-size: 12px; }
 .d-acct[hidden] { display: none; }
 .p-accent .d-pillrow .chip { box-shadow: 0 0 0 1px var(--bg); }
 .pill {
-  font-size: 14px; padding: 4px 12px; border-radius: 8px; white-space: nowrap;
+  font-size: 14px; padding: 4px 8px; border-radius: 8px; overflow-wrap: anywhere;
   background: var(--d-fg); color: var(--d-bg);
 }
 .p-question .pill, .p-error .pill { background: var(--accent); color: var(--bg); }
