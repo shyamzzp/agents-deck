@@ -1136,7 +1136,10 @@ class _AgentDetailState extends State<AgentDetail> {
           if (state.lastActiveText(a) case final active when active.isNotEmpty)
             Row(
               children: [
-                _label('last prompt', DeckHud.dim),
+                _label(
+                  a.queuedNext.isEmpty ? 'last prompt' : 'queued next',
+                  DeckHud.dim,
+                ),
                 const Spacer(),
                 Text(
                   active,
@@ -1146,7 +1149,10 @@ class _AgentDetailState extends State<AgentDetail> {
               ],
             )
           else
-            _label('last prompt', DeckHud.dim),
+            _label(
+              a.queuedNext.isEmpty ? 'last prompt' : 'queued next',
+              DeckHud.dim,
+            ),
           const SizedBox(height: 8),
           // As many lines of it as fit, and never none: what the agent was
           // last asked is half of why the card is open. On a phone that
@@ -1161,12 +1167,22 @@ class _AgentDetailState extends State<AgentDetail> {
                   final lines = ((box.maxHeight - 10) / (15 * 1.45))
                       .floor()
                       .clamp(1, 4);
+                  // A prompt the deck has queued is shown instead of the
+                  // last one: it is what goes in next, and it is the thing
+                  // someone looking at the card wants to see arrive.
+                  final queued = a.queuedNext.isNotEmpty;
+                  final text = queued
+                      ? a.queuedNext
+                      : (a.lastPrompt.isEmpty ? '—' : a.lastPrompt);
                   return Text(
-                    a.lastPrompt.isEmpty ? '—' : a.lastPrompt,
+                    text,
                     key: const Key('agent-last-prompt'),
                     maxLines: lines,
                     overflow: TextOverflow.ellipsis,
-                    style: DeckHud.rm(15, DeckHud.ink).merge(style),
+                    style: DeckHud.rm(
+                      15,
+                      queued ? DeckHud.accent : DeckHud.ink,
+                    ).merge(style),
                   );
                 },
               ),

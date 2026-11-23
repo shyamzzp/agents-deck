@@ -1249,6 +1249,7 @@ func serve(args []string) error {
 	}
 	srv.Queue = queue.Open(queuePath)
 	st.Queued = srv.Queue.Agents
+	st.QueuedText = srv.Queue.Texts
 	go srv.RunQueue(context.Background())
 	errc := make(chan error, 4)
 	// The default Wi-Fi network for boards plugged in over USB: its password in

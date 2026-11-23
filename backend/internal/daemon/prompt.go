@@ -27,14 +27,49 @@ var (
 // terminal can't be typed into. With interrupt, a working agent (or one
 // waiting on a question) gets Esc first.
 func (d *Daemon) Prompt(id, text string, interrupt bool) error {
-	return d.stampActive(id, d.prompt(id, text, interrupt, false))
+	return d.sent(id, text, d.stampActive(id, d.prompt(id, text, interrupt, false)))
 }
 
 // Type types the prompt in now, also while the agent works: the tool's own
 // queue takes it, as when you type ahead in its chat. An agent asking a
 // question refuses it (the text would answer the question).
 func (d *Daemon) Type(id, text string) error {
-	return d.stampActive(id, d.prompt(id, text, false, true))
+	return d.sent(id, text, d.stampActive(id, d.prompt(id, text, false, true)))
+}
+
+// sent records a prompt the deck typed in as the agent's last prompt, at once.
+//
+// Claude Code writes a prompt to its transcript when it submits it to the
+// model, and holds anything typed during a turn in its own queue until that
+// turn ends. Waiting for the transcript would leave the card showing the
+// previous prompt for as long as the agent takes, which is exactly when
+// someone is looking at it. The hooks (or the transcript, for a watched
+// session) write the same text again later.
+func (d *Daemon) sent(id, text string, err error) error {
+	if err != nil {
+		return err
+	}
+	line := oneLine(text)
+	if line == "" {
+		return nil
+	}
+	d.Store.Update(id, func(e *store.Entry) bool {
+		if e.A.LastPrompt == line {
+			return false
+		}
+		e.A.LastPrompt = line
+		return true
+	})
+	return nil
+}
+
+// oneLine is the prompt as a card draws it: one line, clipped.
+func oneLine(text string) string {
+	line := strings.Join(strings.Fields(text), " ")
+	if r := []rune(line); len(r) > model.LastPromptMax {
+		return string(r[:model.LastPromptMax])
+	}
+	return line
 }
 
 func (d *Daemon) prompt(id, text string, interrupt, ahead bool) error {

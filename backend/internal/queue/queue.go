@@ -189,6 +189,21 @@ func (q *Queue) Agents() map[string]int {
 	return out
 }
 
+// Texts is the text of each agent's next waiting prompt, so the deck can show
+// what it is about to type in rather than only how many are waiting.
+func (q *Queue) Texts() map[string]string {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.load()
+	out := map[string]string{}
+	for _, it := range q.items {
+		if _, seen := out[it.Agent]; !seen {
+			out[it.Agent] = it.Text
+		}
+	}
+	return out
+}
+
 // Cancel takes one waiting prompt of agent out of the queue.
 func (q *Queue) Cancel(agent, id string) (Item, bool, error) {
 	q.mu.Lock()
