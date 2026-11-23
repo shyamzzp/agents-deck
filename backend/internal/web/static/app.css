@@ -40,7 +40,6 @@
   /* the three that carry alpha, so they follow whatever the theme sets */
   --scrim: color-mix(in srgb, var(--bg) 72%, transparent);
   --ring-track-on-accent: color-mix(in srgb, var(--bg) 25%, transparent);
-  --zebra: color-mix(in srgb, var(--accent) 16%, transparent);
 
   --tool-claude: #C98B6B;
   --tool-codex: #4FB3A6;
@@ -767,11 +766,6 @@ body.panel-mode.paged .grid { aspect-ratio: auto; height: calc(var(--pv) - 30px)
 .pagebar .page { width: 30px; height: 8px; padding: 0; border: 0; border-radius: 4px; background: var(--line-2); cursor: pointer; transition: width .2s; }
 .pagebar .page.hot { background: var(--accent); }
 .pagebar .page.on { width: 56px; background: var(--ink); }
-
-/* hungry: finished, not yet reviewed — static stripes mark an unread result */
-.tile.hungry { --body: var(--accent); --meta: var(--accent); --label: var(--ink);
-  background-image: repeating-linear-gradient(135deg, var(--zebra) 0 12px, transparent 12px 24px);
-  background-size: 34px 34px; }
 
 /* ---------- "needs you": one screen left of the deck's first page ----------
    Drawn as a page of the deck: the same grid, tiles and free cells. Only the
