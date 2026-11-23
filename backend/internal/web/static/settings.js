@@ -4,7 +4,7 @@
 
 import { buildPicker, themes, followThemeChanges } from './theme.js';
 
-import { titleWidth, titleWidthKey, titleWidths } from './layout.js';
+import { titleSize, titleSizeKey, titleSizes } from './layout.js';
 
 const PAGES = ['general', 'agents', 'appearance', 'layout', 'boards', 'network', 'updates', 'troubleshoot', 'about'];
 const SCOPES = [
@@ -1728,16 +1728,16 @@ function drawAppearance() {
 }
 
 function drawLayout() {
-  const width = titleWidth();
+  const size = titleSize();
   const select = h('select', {
-    id: 'drawer-title-width',
+    id: 'drawer-title-size',
     onchange: e => {
-      try { localStorage.setItem(titleWidthKey, e.target.value); }
-      catch { e.target.value = String(width); toast('Could not save the title width in this browser.', true); }
+      try { localStorage.setItem(titleSizeKey, e.target.value); }
+      catch { e.target.value = String(size); toast('Could not save the title size in this browser.', true); }
     },
-  }, titleWidths.map(n => h('option', { value: n, selected: n === width }, n + '%')));
-  return row(h('label', { for: 'drawer-title-width' }, 'Session title width'),
-    'Percentage of the session drawer available to the title in this browser.', [select]);
+  }, titleSizes.map(n => h('option', { value: n, selected: n === size }, n + ' px')));
+  return row(h('label', { for: 'drawer-title-size' }, 'Session title font size'),
+    'Text size of the title in the session drawer.', [select]);
 }
 
 const DRAW = {

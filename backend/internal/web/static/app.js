@@ -5,15 +5,15 @@
 import { needsYou as needsYouScreen, packed, simulate, SPOTS } from './attention.js';
 
 import { followThemeChanges } from './theme.js';
-import { titleWidth, titleWidthKey } from './layout.js';
+import { titleSize, titleSizeKey } from './layout.js';
 
-function applyTitleWidth() {
-  document.documentElement.style.setProperty('--drawer-title-width', titleWidth() + '%');
+function applyTitleSize() {
+  document.documentElement.style.setProperty('--drawer-title-size', titleSize() + 'px');
 }
-applyTitleWidth();
-addEventListener('pageshow', applyTitleWidth);
+applyTitleSize();
+addEventListener('pageshow', applyTitleSize);
 addEventListener('storage', e => {
-  if (e.key === titleWidthKey || e.key === null) applyTitleWidth();
+  if (e.key === titleSizeKey || e.key === null) applyTitleSize();
 });
 
 const $ = (id) => document.getElementById(id);

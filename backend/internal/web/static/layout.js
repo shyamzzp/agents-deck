@@ -1,11 +1,11 @@
 // Drawer layout preferences belong to the browser displaying the deck.
-export const titleWidthKey = 'agents.drawerTitleWidth';
-export const titleWidths = [60, 70, 80, 90, 95, 100];
+export const titleSizeKey = 'agents.drawerTitleSize';
+export const titleSizes = [16, 18, 20, 22, 24, 26, 28, 32, 36];
 
-export function titleWidth() {
+export function titleSize() {
   try {
-    const width = Number(localStorage.getItem(titleWidthKey));
-    if (titleWidths.includes(width)) return width;
+    const size = Number(localStorage.getItem(titleSizeKey));
+    if (titleSizes.includes(size)) return size;
   } catch { /* use the default when storage is unavailable */ }
-  return 95;
+  return 24;
 }

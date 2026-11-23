@@ -488,7 +488,7 @@ body.offline .main { opacity: 0.4; }
 .hatpick-foot { display: flex; align-items: center; gap: 12px; }
 .hatpick-foot .toggle:disabled { opacity: 0.5; cursor: default; }
 .hatpick-note { color: var(--accent); font-size: 13px; }
-.d-id { width: var(--drawer-title-width, 95%); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.d-id { width: 100%; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .d-spr { width: 54px; flex-shrink: 0; line-height: 0; }
 .d-spr svg { width: 100%; height: auto; overflow: visible; }
 .d-mascots { display: flex; align-items: flex-end; gap: 14px; }
@@ -499,7 +499,7 @@ body.offline .main { opacity: 0.4; }
 .d-crew-n { font-family: var(--f-label); font-size: 12px; color: var(--d-dim); margin-left: 6px; white-space: nowrap; }
 .d-title:focus { outline: none; }
 .d-title {
-  margin: 0; font-family: var(--f-head); font-weight: 700; font-size: 28px; letter-spacing: -0.3px;
+  margin: 0; font-family: var(--f-head); font-weight: 700; font-size: var(--drawer-title-size, 24px); letter-spacing: -0.3px;
   overflow-wrap: anywhere;
 }
 .d-ai { color: var(--d-dim); font-size: 14px; margin-top: -4px; }
@@ -632,7 +632,6 @@ body.offline .main { opacity: 0.4; }
   .clock { font-size: 17px; }
   .tile .name { font-size: 15px; }
   .tile .meta { font-size: 12px; }
-  .d-title { font-size: 24px; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .btn { font-size: 16px; }
   .btn.narrow { flex: 1 1 0; }
