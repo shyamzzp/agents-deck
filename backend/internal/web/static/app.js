@@ -1229,8 +1229,7 @@ async function openPicker(slot = -1, host = '') {
   pickerHost = host;
   setText($('picker-title'), host ? 'Add a Codebox session' : 'add a running session');
   setText($('picker-sub'), host ? 'Choose a session from ' + host + '.' : localPickerText);
-  $('picker-filter').hidden = !host;
-  $('picker-issues-label').hidden = !host;
+  $('picker-controls').hidden = !host;
   $('picker-filter').value = '';
   pickerSlot = slot;
   if (!$('picker-close').firstElementChild) $('picker-close').replaceChildren(closeIcon());
