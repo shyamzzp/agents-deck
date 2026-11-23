@@ -38,7 +38,13 @@ class AgentsApp extends StatefulWidget {
     this.pairingCard,
     this.visible,
     this.backButton = false,
+    this.gridColumns = DeckGrid.defaultColumns,
+    this.gridRows = DeckGrid.defaultRows,
   }) : assert(
+         gridColumns > 0 && gridRows > 0,
+         'the deck needs at least one cell',
+       ),
+       assert(
          (openCard == null) == (cardHost == null),
          'openCard and cardHost come together',
        );
@@ -53,6 +59,14 @@ class AgentsApp extends StatefulWidget {
 
   /// A back button on agent cards, for hosts without an edge swipe.
   final bool backButton;
+
+  /// The deck's page: 4x4 as the desk panel and the boards draw it, which is
+  /// also how slots are numbered. A bigger page fits more agents on a screen
+  /// that has the room, at the cost of its page boundaries no longer lining up
+  /// with the panel's. The "Needs you" screen is not affected: the protocol
+  /// fixes it at sixteen spots.
+  final int gridColumns;
+  final int gridRows;
 
   /// Whether anyone can see the board (a menu bar window that hides): the
   /// critters stop animating while false. Null = always visible.
@@ -78,7 +92,7 @@ class _AgentsAppState extends State<AgentsApp> {
   int _view = 1;
   final _pager = PageController(initialPage: 1);
 
-  static const _cells = DeckGrid.columns * DeckGrid.rows;
+  int get _cells => widget.gridColumns * widget.gridRows;
 
   @override
   void dispose() {
@@ -371,7 +385,12 @@ class _AgentsAppState extends State<AgentsApp> {
                           onOpen: _open,
                         ),
                       )
-                    : DeckGrid(cells: _cellsFor(state, v - 1), square: false),
+                    : DeckGrid(
+                        cells: _cellsFor(state, v - 1),
+                        square: false,
+                        columns: widget.gridColumns,
+                        rows: widget.gridRows,
+                      ),
               ),
             ),
             SizedBox(
@@ -416,8 +435,10 @@ class _AgentsAppState extends State<AgentsApp> {
     }
     Widget fly(Agent a, int slot, Widget tile, {required bool leave}) => _Fly(
       key: ValueKey('fly-$_flight-${a.id}'),
-      col: (slot - start) % DeckGrid.columns,
-      row: (slot - start) ~/ DeckGrid.columns,
+      col: (slot - start) % widget.gridColumns,
+      row: (slot - start) ~/ widget.gridColumns,
+      columns: widget.gridColumns,
+      rows: widget.gridRows,
       leave: leave,
       corner: leave ? _leaveCorner : _arriveCorner,
       delay: Duration.zero, // all at once: a swarm
@@ -807,6 +828,8 @@ class _Fly extends StatefulWidget {
     super.key,
     required this.col,
     required this.row,
+    required this.columns,
+    required this.rows,
     required this.leave,
     required this.corner,
     required this.delay,
@@ -814,6 +837,9 @@ class _Fly extends StatefulWidget {
   });
 
   final int col, row;
+
+  /// The page's shape, so a tile flies off the edge it is actually nearest.
+  final int columns, rows;
   final bool leave;
   final String corner; // top-left | top-right | bottom-left | bottom-right
   final Duration delay;
@@ -850,8 +876,8 @@ class _FlyState extends State<_Fly> with SingleTickerProviderStateMixin {
     final left = widget.corner.endsWith('left');
     final top = widget.corner.startsWith('top');
     final corner = Offset(
-      left ? -1.0 - widget.col : DeckGrid.columns - widget.col.toDouble(),
-      top ? -1.0 - widget.row : DeckGrid.rows - widget.row.toDouble(),
+      left ? -1.0 - widget.col : widget.columns - widget.col.toDouble(),
+      top ? -1.0 - widget.row : widget.rows - widget.row.toDouble(),
     );
     return AnimatedBuilder(
       animation: _c,

@@ -83,7 +83,20 @@ class _DeckAppState extends State<DeckApp> {
         color: DeckHud.bg,
         child: SafeArea(
           child: switch ((source, _looked)) {
-            (final AgentsSource s, _) => AgentsApp(source: s),
+            // backButton: a phone has no Esc and no edge swipe of its own,
+            // so without it an opened agent card is a one-way door.
+            //
+            // 5x5 rather than the panel's 4x4: a tablet has the room for 25
+            // agents at once, and paging through a long deck four at a time is
+            // the thing that wears thin on a screen you hold. The cost is that
+            // pages no longer begin where the panel's do, since a slot's page
+            // is its number over the page size.
+            (final AgentsSource s, _) => AgentsApp(
+              source: s,
+              backButton: true,
+              gridColumns: 5,
+              gridRows: 5,
+            ),
             // Until the directory has been asked for there is nothing to say:
             // showing "not paired yet" first would be a lie on every launch.
             (_, false) => const SizedBox.shrink(),
