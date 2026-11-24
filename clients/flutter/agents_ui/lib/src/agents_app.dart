@@ -294,12 +294,6 @@ class _AgentsAppState extends State<AgentsApp> {
           onClose: close,
           onVisible: _cardVisible,
           showBack: widget.backButton,
-          // The quick list is drawn as the board this agent was picked from:
-          // the "Needs you" screen has its own shape, every other page its
-          // own or the default.
-          taskShape: _view - 1 - _lead < 0
-              ? (widget.attentionShape ?? _shape(0))
-              : _shape(_view - 1 - _lead),
         ),
       ),
     );
