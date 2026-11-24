@@ -60,7 +60,8 @@ func Tail(e *store.Entry) bool {
 	}
 	defer f.Close()
 	if st, err := f.Stat(); err != nil || st.Size() < e.Offset {
-		e.Offset, e.Usage, e.Pending, e.Prompts = 0, nil, "", 0 // truncated or replaced
+		// Truncated or replaced: everything read of it is read again.
+		e.Offset, e.Usage, e.Pending, e.Prompts, e.History = 0, nil, "", 0, nil
 	} else if st.Size() == e.Offset {
 		return false
 	}
@@ -129,6 +130,9 @@ func Tail(e *store.Entry) bool {
 				// two are reconciled below.
 				if p, ok := l.prompt(); ok {
 					e.Prompts++
+					// Every one of them, in the order they were asked: the
+					// card lists them behind the turn count.
+					e.History = append(e.History, p)
 					if p != e.A.LastPrompt {
 						e.A.LastPrompt = p
 					}

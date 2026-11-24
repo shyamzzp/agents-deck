@@ -312,3 +312,25 @@ func auditNote(r *http.Request, s string) {
 		*p = s
 	}
 }
+
+// PromptHistory is GET /v1/agents/{id}/prompts: every prompt of the session,
+// newest first, as the card lists them behind its turn count. They are read
+// out of the agent's own transcript (claude.Tail), so a session the deck only
+// watches has them too.
+type PromptHistory struct {
+	Turn int    `json:"turn"` // 1 for the first prompt of the session
+	Text string `json:"text"`
+}
+
+func (s *Server) getPrompts(w http.ResponseWriter, r *http.Request) {
+	e, ok := s.Store.Get(r.PathValue("id"))
+	if !ok {
+		writeErr(w, http.StatusNotFound, ErrNotFound.Error())
+		return
+	}
+	out := make([]PromptHistory, 0, len(e.History))
+	for i := len(e.History) - 1; i >= 0; i-- {
+		out = append(out, PromptHistory{Turn: i + 1, Text: e.History[i]})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"prompts": out})
+}

@@ -105,6 +105,18 @@ abstract class AgentsSource {
   /// turn short.
   Future<AgentsResult> prompt(String agentId, String text, {String mode});
 
+  /// `GET /v1/agents/{id}/prompts` — every prompt of the session, newest
+  /// first, as the card lists them behind its turn count.
+  Future<List<AgentPrompted>> prompts(String agentId);
+
+  /// `POST /v1/agents/{id}/tasks {"text", "name"}` — keeps a prompt as one of
+  /// the agent's own tasks, which the quick list draws beside the built-in
+  /// ones. An empty name is taken from the text.
+  Future<AgentsResult> addTask(String agentId, String text, {String name});
+
+  /// `POST /v1/agents/{id}/tasks/{taskId}/remove` — takes one away again.
+  Future<AgentsResult> removeTask(String agentId, String taskId);
+
   /// `GET /v1/live` — Claude sessions started by hand in other terminals.
   Future<List<LiveSession>> liveSessions();
 
@@ -606,6 +618,27 @@ class HttpAgentsClient implements AgentsSource {
       return const [];
     }
   }
+
+  @override
+  Future<List<AgentPrompted>> prompts(String agentId) async => [
+    for (final x in await _getList(['v1', 'agents', agentId, 'prompts'], 'prompts'))
+      AgentPrompted.fromJson(x),
+  ];
+
+  @override
+  Future<AgentsResult> addTask(String agentId, String text, {String name = ''}) =>
+      _postPath(['v1', 'agents', agentId, 'tasks'], {
+        'text': text,
+        if (name.isNotEmpty) 'name': name,
+      }, false, const Duration(seconds: 10));
+
+  @override
+  Future<AgentsResult> removeTask(String agentId, String taskId) => _postPath(
+    ['v1', 'agents', agentId, 'tasks', taskId, 'remove'],
+    const <String, Object?>{},
+    false,
+    const Duration(seconds: 10),
+  );
 
   @override
   Future<List<LiveSession>> liveSessions() async => [

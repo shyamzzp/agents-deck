@@ -336,6 +336,31 @@ class FakeAgentsSource implements AgentsSource {
   @override
   Future<List<LiveSession>> liveSessions() async => List.of(live);
 
+  /// The prompt history a demo fleet answers with, newest first.
+  List<AgentPrompted> prompted = const [];
+
+  @override
+  Future<List<AgentPrompted>> prompts(String agentId) async {
+    calls.add(('prompts', agentId, null));
+    return List.of(prompted);
+  }
+
+  @override
+  Future<AgentsResult> addTask(
+    String agentId,
+    String text, {
+    String name = '',
+  }) async {
+    calls.add(('addTask', agentId, {'text': text, 'name': name}));
+    return AgentsResult.ok;
+  }
+
+  @override
+  Future<AgentsResult> removeTask(String agentId, String taskId) async {
+    calls.add(('removeTask', agentId, {'taskId': taskId}));
+    return AgentsResult.ok;
+  }
+
   @override
   Future<AgentsResult> setHat(
     String agentId, {
