@@ -501,21 +501,30 @@ class _AgentDetailState extends State<AgentDetail> {
       _busy = true;
       _note = null;
     });
-    // "now": typed into the session and entered, rather than queued behind
-    // whatever it is doing.
-    final r = await widget.source.prompt(widget.agentId, ask.text, mode: 'now');
-    if (!mounted) return;
-    Haptics.fire(r.isOk ? HapticWhen.sent : HapticWhen.problem);
-    setState(() {
-      _busy = false;
-      _askSent = r.isOk ? i : -1;
-      _note = r.isOk ? null : (r.message ?? 'could not send');
-    });
-    if (r.isOk) {
-      // The tile says "sent" for a moment, then goes back to its name.
-      Timer(_sentHold, () {
-        if (mounted) setState(() => _askSent = -1);
+    // See _speakTask: busy has to come back off even if this throws.
+    try {
+      // "now": typed into the session and entered, rather than queued behind
+      // whatever it is doing.
+      final r = await widget.source.prompt(
+        widget.agentId,
+        ask.text,
+        mode: 'now',
+      );
+      if (!mounted) return;
+      Haptics.fire(r.isOk ? HapticWhen.sent : HapticWhen.problem);
+      setState(() {
+        _busy = false;
+        _askSent = r.isOk ? i : -1;
+        _note = r.isOk ? null : (r.message ?? 'could not send');
       });
+      if (r.isOk) {
+        // The tile says "sent" for a moment, then goes back to its name.
+        Timer(_sentHold, () {
+          if (mounted) setState(() => _askSent = -1);
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -548,17 +557,22 @@ class _AgentDetailState extends State<AgentDetail> {
     final said = await listen(a);
     if (!mounted || said == null || said.trim().isEmpty) return;
     setState(() => _busy = true);
-    final r = await widget.source.addTask(
-      widget.agentId,
-      said.trim(),
-      slot: cell,
-    );
-    if (!mounted) return;
-    Haptics.fire(r.isOk ? HapticWhen.sent : HapticWhen.problem);
-    setState(() {
-      _busy = false;
-      _note = r.isOk ? null : (r.message ?? 'could not keep it');
-    });
+    try {
+      final r = await widget.source.addTask(
+        widget.agentId,
+        said.trim(),
+        slot: cell,
+      );
+      if (!mounted) return;
+      Haptics.fire(r.isOk ? HapticWhen.sent : HapticWhen.problem);
+      setState(
+        () => _note = r.isOk ? null : (r.message ?? 'could not keep it'),
+      );
+    } finally {
+      // Whatever happened, the card is not busy any more: a throw here used
+      // to leave it busy for good, and a busy card answers nothing.
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   /// Keeps a prompt from the history as one of the agent's own tasks, which
@@ -720,10 +734,13 @@ class _AgentDetailState extends State<AgentDetail> {
                               : () => setState(() => _taskAt = r * columns + c),
                         ),
                         // An empty cell is where a new task is spoken into,
-                        // for a host that has a microphone to offer.
+                        // for a host that has a microphone to offer. A tap
+                        // does it as well as a hold: a tap on an empty cell
+                        // has nothing else it could mean, and a hold inside a
+                        // scroller is a gesture people miss.
                         _ => _EmptyAskCell(
                           key: Key('ask-empty-${r * columns + c}'),
-                          onHold: widget.onSpeakTask == null || _busy
+                          onSpeak: widget.onSpeakTask == null
                               ? null
                               : () => unawaited(_speakTask(r * columns + c)),
                         ),
@@ -2344,16 +2361,16 @@ class _TaskDialog extends StatelessWidget {
 /// new task is made of whatever was said; where the host has no microphone it
 /// is the deck's plain empty cell and does nothing.
 class _EmptyAskCell extends StatelessWidget {
-  const _EmptyAskCell({super.key, required this.onHold});
+  const _EmptyAskCell({super.key, required this.onSpeak});
 
-  final VoidCallback? onHold;
+  final VoidCallback? onSpeak;
 
   @override
   Widget build(BuildContext context) {
-    if (onHold == null) return const AgentsEmptyTile();
+    if (onSpeak == null) return const AgentsEmptyTile();
     return Pressable(
-      onTap: null,
-      onLongPress: onHold,
+      onTap: onSpeak,
+      onLongPress: onSpeak,
       builder: (context, pressed) => DecoratedBox(
         decoration: BoxDecoration(
           color: pressed ? DeckHud.panel : agentsEmptyFill,
@@ -2363,8 +2380,9 @@ class _EmptyAskCell extends StatelessWidget {
         ),
         child: Center(
           child: Text(
-            // Held, this cell listens: say the task and it lands here.
-            'hold\nto speak',
+            // Tapped or held, this cell listens: say the task and it
+            // lands here.
+            'tap to\nspeak',
             textAlign: TextAlign.center,
             style: DeckHud.mono(
               size: 11,
