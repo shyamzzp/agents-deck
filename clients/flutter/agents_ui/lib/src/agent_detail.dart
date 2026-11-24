@@ -621,27 +621,45 @@ class _AgentDetailState extends State<AgentDetail> {
     final asks = _asksFor(a);
     final columns = _askColumns(context);
     final rows = (asks.length + columns - 1) ~/ columns;
-    return GridView.count(
+    // Rows of cells, not a GridView: a grid of its own brings a Scrollable
+    // with it, and a Scrollable that cannot scroll still takes the drag that
+    // starts on it, so the card behind it stayed put under a thumb.
+    return Column(
       key: const Key('asks-grid'),
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.zero,
-      crossAxisCount: columns,
-      mainAxisSpacing: DeckGrid.gap,
-      crossAxisSpacing: DeckGrid.gap,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        for (final (i, ask) in asks.indexed)
-          _AskTile(
-            key: Key('ask-$i'),
-            ask: ask,
-            sent: _askSent == i,
-            // Held, not tapped: a tap used to send the prompt the moment it
-            // landed, which is a lot to do by accident on a board of tiles.
-            // Holding one opens what can be done with it.
-            onHold: _busy ? null : () => setState(() => _taskAt = i),
+        for (var r = 0; r < rows; r++) ...[
+          if (r > 0) const SizedBox(height: DeckGrid.gap),
+          Row(
+            children: [
+              // The gap lives inside each cell rather than between them, so
+              // the cells divide the row exactly and none of it overflows.
+              for (var c = 0; c < columns; c++)
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      left: c == 0 ? 0 : DeckGrid.gap / 2,
+                      right: c == columns - 1 ? 0 : DeckGrid.gap / 2,
+                    ),
+                    child: AspectRatio(
+                      aspectRatio: 1,
+                      child: switch (r * columns + c) {
+                        final i when i < asks.length => _AskTile(
+                          key: Key('ask-$i'),
+                          ask: asks[i],
+                          sent: _askSent == i,
+                          onHold: _busy
+                              ? null
+                              : () => setState(() => _taskAt = i),
+                        ),
+                        _ => const AgentsEmptyTile(),
+                      },
+                    ),
+                  ),
+                ),
+            ],
           ),
-        for (var i = asks.length; i < columns * rows; i++)
-          const AgentsEmptyTile(),
+        ],
       ],
     );
   }
@@ -1077,11 +1095,17 @@ class _AgentDetailState extends State<AgentDetail> {
                         style: DeckHud.rm(22, DeckHud.ink, weight: 700),
                       ),
                       const SizedBox(width: 12),
-                      Text(
-                        a.contextWindow > 0
-                            ? '${compactCount(a.contextUsed)} / ${compactCount(a.contextWindow)}'
-                            : '--',
-                        style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                      // Flexible, since "410k / 1m" beside "context" and a
+                      // percentage is wider than a phone at its narrowest.
+                      Flexible(
+                        child: Text(
+                          a.contextWindow > 0
+                              ? '${compactCount(a.contextUsed)} / ${compactCount(a.contextWindow)}'
+                              : '--',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                        ),
                       ),
                       const Spacer(),
                       Text(
