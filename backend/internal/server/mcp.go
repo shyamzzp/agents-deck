@@ -353,10 +353,10 @@ var mcpTools = []mcpTool{
 		})},
 	{Name: "list_sessions", Title: "List other sessions",
 		Description: "Claude sessions running on this computer that the deck didn't start (in other terminals, or in the background), " +
-			"and whether each is on the deck. They can be watched (add_session) but not given prompts. Needs scope admin.",
+			"and whether each is on the deck. They can be watched (add_session) but not given prompts. Needs scope act.",
 		InputSchema: schema(nil, map[string]any{}), Annotations: map[string]any{"readOnlyHint": true}},
 	{Name: "add_session", Title: "Watch a session",
-		Description: "Puts a session from list_sessions on the deck, watched: you see its status, but it stays read-only (it runs in its own terminal). Needs scope admin.",
+		Description: "Puts a session from list_sessions on the deck, watched: you see its status, but it stays read-only (it runs in its own terminal). Needs scope act.",
 		InputSchema: schema([]string{"session_id"}, map[string]any{"session_id": prop("string", "sessionId from list_sessions.")})},
 }
 

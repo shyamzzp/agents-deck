@@ -20,17 +20,22 @@ import (
 // ---- network listener: TLS 1.3, one client certificate per device ----------
 
 // NeedScope is the scope an API request needs: reading is view; acting on an
-// agent is act; stopping, restarting or adding agents is admin.
+// agent, and putting a session that is already running on the deck, is act;
+// stopping, restarting or starting agents is admin.
 func NeedScope(method, path string) devices.Scope {
 	if method == http.MethodGet {
 		if path == "/v1/live" {
-			return devices.Admin // lists sessions outside the deck, to add them
+			// The sessions someone started by hand, to put one on the deck.
+			// Act, not admin: it starts nothing, and a device that can type
+			// into an agent can certainly see which sessions exist. A screen
+			// with view only still cannot.
+			return devices.Act
 		}
 		return devices.View
 	}
 	switch {
 	case strings.HasSuffix(path, "/dismiss"), strings.HasSuffix(path, "/resume"), strings.HasSuffix(path, "/handoff"),
-		path == "/v1/restore", strings.HasPrefix(path, "/v1/live/"):
+		path == "/v1/restore":
 		return devices.Admin
 	}
 	return devices.Act
