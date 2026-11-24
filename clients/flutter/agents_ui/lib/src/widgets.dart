@@ -175,6 +175,9 @@ class DeckShape {
 
   int get cells => columns * rows;
 
+  /// This shape's rows, or more where something taller has to fit in it.
+  int rowsFor(int needed) => needed > rows ? needed : rows;
+
   static const panel = DeckShape(DeckGrid.defaultColumns, DeckGrid.defaultRows);
 
   @override

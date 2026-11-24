@@ -39,25 +39,15 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('the grid shows every ask, and scrolls to the last', (
-    tester,
-  ) async {
+  testWidgets('the board shows every ask at once', (tester) async {
     await card(tester);
     await openAsks(tester);
-    // A grid, not a slider: more than one is on the screen at once.
-    expect(find.text('verify-changes'), findsOneWidget);
-    expect(find.text('run-tests'), findsOneWidget);
-
-    // The last one is reachable by scrolling, not by swiping through the rest.
-    await tester.scrollUntilVisible(
-      find.byKey(Key('ask-${agentAsks.length - 1}')),
-      240,
-      scrollable: find.descendant(
-        of: find.byKey(const Key('asks-grid')),
-        matching: find.byType(Scrollable),
-      ),
-    );
-    expect(find.text(agentAsks.last.label), findsOneWidget);
+    // A board, not a slider and no longer a scroller: the tasks sit in the
+    // cells of the page the agent was picked from, all of them on the screen.
+    for (final ask in agentAsks) {
+      expect(find.text(ask.label), findsOneWidget, reason: ask.label);
+    }
+    expect(find.byKey(Key('ask-${agentAsks.length - 1}')), findsOneWidget);
     await tester.pumpAndSettle();
   });
 
