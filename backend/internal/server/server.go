@@ -27,6 +27,7 @@ import (
 	"github.com/brushknight/agents-deck/backend/internal/pki"
 	"github.com/brushknight/agents-deck/backend/internal/queue"
 	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/brushknight/agents-deck/backend/internal/tasks"
 )
 
 // Controller performs agent actions; the live daemon and demo mode implement it.
@@ -127,6 +128,10 @@ type Server struct {
 	// Queue holds prompts sent with "mode": "queue" until their agent is
 	// idle (queue.go; RunQueue types them in). nil: queueing is off.
 	Queue *queue.Queue
+
+	// Tasks holds the tasks an agent has been given of its own, beside the
+	// deck's built-in ones. nil: an agent keeps none.
+	Tasks *tasks.Store
 	// DeviceURL is how devices reach the network listener (https://host:port).
 	DeviceURL string
 	// ServerFingerprint is the network listener's certificate SHA-256.
@@ -258,6 +263,10 @@ func (s *Server) api() *http.ServeMux {
 		s.act(w, s.prompt(p, r.PathValue("id"), text, mode == "interrupt"))
 	})
 	mux.HandleFunc("GET /v1/agents/{id}/queue", s.getQueue)
+	mux.HandleFunc("GET /v1/agents/{id}/prompts", s.getPrompts)
+	mux.HandleFunc("GET /v1/agents/{id}/tasks", s.getTasks)
+	mux.HandleFunc("POST /v1/agents/{id}/tasks", s.addTask)
+	mux.HandleFunc("POST /v1/agents/{id}/tasks/{taskId}/remove", s.removeTask)
 	mux.HandleFunc("POST /v1/agents/{id}/queue/{qid}/cancel", s.cancelQueued)
 	mux.HandleFunc("POST /v1/agents/{id}/focus", func(w http.ResponseWriter, r *http.Request) {
 		s.act(w, s.Ctl.Focus(r.PathValue("id")))

@@ -90,6 +90,7 @@ type Agent struct {
 	Subagents     []Subagent `json:"subagents,omitempty"`  // subagents still working, oldest first
 	Queued        int        `json:"queued"`               // prompts waiting to be typed in once its turn ends ("mode": "queue")
 	QueuedNext    string     `json:"queuedNext,omitempty"` // the text of the next of those, for the card to show
+	Tasks         []Task     `json:"tasks,omitempty"`      // tasks kept for this agent, beside the deck's built-in ones
 	Hat           *Hat       `json:"hat,omitempty"`        // the pixel hat for its working folder (nil: none)
 	Account       *Account   `json:"account,omitempty"`    // the Claude account it runs in (nil: only one account is set up)
 	StartedAt     time.Time  `json:"startedAt"`
@@ -154,4 +155,13 @@ type Tokens struct {
 type Context struct {
 	Used   int64 `json:"used"`
 	Window int64 `json:"window"`
+}
+
+// Task is one of an agent's own tasks: a prompt kept under a short name, which
+// the card draws as a tile beside the deck's built-in ones (internal/tasks).
+type Task struct {
+	ID    string    `json:"id"`
+	Name  string    `json:"name"`
+	Text  string    `json:"text"`
+	Added time.Time `json:"added"`
 }

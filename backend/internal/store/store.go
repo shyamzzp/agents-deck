@@ -53,9 +53,13 @@ type Entry struct {
 	Usage   map[string]msgUsage `json:"-"` // message id -> last usage seen
 	Pending string              `json:"-"` // partial trailing line
 	Prompts int                 `json:"-"` // prompts counted in the transcript (hooks count their own)
-	PromptN int                 `json:"promptN"`
-	Menu    bool                `json:"-"`              // current prompt is an arrow-key menu, not numbered
-	Form    *Form               `json:"form,omitempty"` // the open question form, walked one step at a time
+	// History is every prompt of the session, oldest first, as they were read
+	// out of the transcript. Rebuilt on restart with the rest of the
+	// transcript accounting, so it is never persisted.
+	History []string `json:"-"`
+	PromptN int      `json:"promptN"`
+	Menu    bool     `json:"-"`              // current prompt is an arrow-key menu, not numbered
+	Form    *Form    `json:"form,omitempty"` // the open question form, walked one step at a time
 }
 
 type msgUsage struct {
@@ -185,6 +189,9 @@ type Store struct {
 	Groups func() []model.Group
 	// Queued counts each agent's queued prompts (nil: no queue).
 	Queued func() map[string]int
+
+	// TaskList is each agent's own tasks (nil: the deck keeps none).
+	TaskList func() map[string][]model.Task
 
 	// QueuedText is the text of each agent's next queued prompt (nil: none).
 	QueuedText func() map[string]string
@@ -472,7 +479,7 @@ func (s *Store) Snapshot() model.State {
 		places = append(places, where{e.Account, e.Transcript})
 	}
 	hat, account := s.Hat, s.Account
-	groups, queued, queuedText := s.Groups, s.Queued, s.QueuedText
+	groups, queued, queuedText, taskList := s.Groups, s.Queued, s.QueuedText, s.TaskList
 	s.mu.Unlock()
 	var counts map[string]int
 	if queued != nil {
@@ -482,9 +489,14 @@ func (s *Store) Snapshot() model.State {
 	if queuedText != nil {
 		next = queuedText()
 	}
+	var own map[string][]model.Task
+	if taskList != nil {
+		own = taskList()
+	}
 	for i := range agents {
 		agents[i].Queued = counts[agents[i].ID]
 		agents[i].QueuedNext = next[agents[i].ID]
+		agents[i].Tasks = own[agents[i].ID]
 		if hat != nil {
 			agents[i].Hat = hat(agents[i].Cwd)
 		}

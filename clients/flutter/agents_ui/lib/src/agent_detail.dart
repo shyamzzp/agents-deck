@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import 'theme.dart';
 import 'widgets.dart';
@@ -410,6 +411,18 @@ class _AgentDetailState extends State<AgentDetail> {
                         : const EdgeInsets.fromLTRB(36, 34, 36, 30),
                     child: child,
                   ),
+                  if (_history)
+                    Positioned.fill(
+                      child: _PromptDrawer(
+                        key: const Key('prompt-drawer'),
+                        source: widget.source,
+                        agentId: widget.agentId,
+                        tight: tight,
+                        onClose: () => setState(() => _history = false),
+                        onSend: (text) => unawaited(_sendAgain(text)),
+                        onKeep: (text) => unawaited(_keep(text)),
+                      ),
+                    ),
                 ],
               ),
             );
@@ -438,7 +451,9 @@ class _AgentDetailState extends State<AgentDetail> {
     );
   }
 
-  Future<void> _ask(int i) async {
+  Future<void> _ask(Agent a, int i) async {
+    final asks = _asksFor(a);
+    if (i >= asks.length) return;
     setState(() {
       _busy = true;
       _note = null;
@@ -447,7 +462,7 @@ class _AgentDetailState extends State<AgentDetail> {
     // whatever it is doing.
     final r = await widget.source.prompt(
       widget.agentId,
-      agentAsks[i].text,
+      asks[i].text,
       mode: 'now',
     );
     if (!mounted) return;
@@ -466,6 +481,44 @@ class _AgentDetailState extends State<AgentDetail> {
 
   /// Which task said "sent" last; -1 for none.
   int _askSent = -1;
+
+  /// The prompts drawer, opened from the turn count.
+  bool _history = false;
+
+  /// Takes one of the agent's own tasks off its grid (held, not tapped).
+  Future<void> _dropTask(Agent a, String taskId) async {
+    final r = await widget.source.removeTask(a.id, taskId);
+    if (!mounted) return;
+    setState(
+      () => _note = r.isOk ? null : (r.message ?? 'could not remove it'),
+    );
+  }
+
+  /// Keeps a prompt from the history as one of the agent's own tasks, which
+  /// puts it in the quick list beside the built-in ones.
+  Future<void> _keep(String text) async {
+    final r = await widget.source.addTask(widget.agentId, text);
+    if (!mounted) return;
+    setState(() {
+      _note = r.isOk ? null : (r.message ?? 'could not keep it');
+      if (r.isOk) _history = false;
+    });
+  }
+
+  /// Sends a prompt from the history again, as a task tile does.
+  Future<void> _sendAgain(String text) async {
+    setState(() {
+      _busy = true;
+      _note = null;
+    });
+    final r = await widget.source.prompt(widget.agentId, text, mode: 'now');
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _note = r.isOk ? 'sent' : (r.message ?? 'could not send');
+      if (r.isOk) _history = false;
+    });
+  }
 
   Future<void> _setHat(
     Agent a, {
@@ -491,6 +544,20 @@ class _AgentDetailState extends State<AgentDetail> {
   /// card's scroller. A page with fewer cells than the list has simply takes
   /// more rows: a task that cannot be reached is worse than a board a row
   /// taller than the deck's.
+  /// Everything the quick list offers for [a]: the eight every agent has, and
+  /// then the ones kept for this agent (newest last, as they were made).
+  List<AgentAsk> _asksFor(Agent a) => [
+    ...agentAsks,
+    for (final t in a.tasks)
+      AgentAsk(
+        t.name.isEmpty ? 'task' : t.name,
+        t.text,
+        // A task made from a prompt is a prompt: the critter is thinking.
+        CritterPose.think,
+        id: t.id,
+      ),
+  ];
+
   Widget _askBoard(bool tight, Agent a) {
     // The deck can only type into a session it can reach. One inside another
     // app refuses with 422 and says why, so the card says it here rather than
@@ -503,9 +570,10 @@ class _AgentDetailState extends State<AgentDetail> {
         style: DeckHud.mono(size: tight ? 13 : 15, color: DeckHud.dim),
       );
     }
+    final asks = _asksFor(a);
     final shape = widget.taskShape ?? const DeckShape(3, 3);
     final columns = shape.columns;
-    final rows = shape.rowsFor((agentAsks.length + columns - 1) ~/ columns);
+    final rows = shape.rowsFor((asks.length + columns - 1) ~/ columns);
     return GridView.count(
       key: const Key('asks-grid'),
       shrinkWrap: true,
@@ -515,14 +583,19 @@ class _AgentDetailState extends State<AgentDetail> {
       mainAxisSpacing: DeckGrid.gap,
       crossAxisSpacing: DeckGrid.gap,
       children: [
-        for (final (i, ask) in agentAsks.indexed)
+        for (final (i, ask) in asks.indexed)
           _AskTile(
             key: Key('ask-$i'),
             ask: ask,
             sent: _askSent == i,
-            onTap: _busy ? null : () => _ask(i),
+            onTap: _busy ? null : () => _ask(a, i),
+            // A task of the agent's own can be taken away again; the eight
+            // every agent has cannot.
+            onHold: ask.id == null
+                ? null
+                : () => unawaited(_dropTask(a, ask.id!)),
           ),
-        for (var i = agentAsks.length; i < columns * rows; i++)
+        for (var i = asks.length; i < columns * rows; i++)
           const AgentsEmptyTile(),
       ],
     );
@@ -1004,46 +1077,60 @@ class _AgentDetailState extends State<AgentDetail> {
                             ('turns', '${a.turns}'),
                           ].indexed)
                             Expanded(
-                              child: Container(
-                                padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
-                                decoration: BoxDecoration(
-                                  border: i == 0
-                                      ? null
-                                      : Border(
-                                          left: BorderSide(
-                                            color: _rule,
-                                            width: 0.5,
+                              child: GestureDetector(
+                                // The turn count is a door: behind it are the
+                                // prompts it counts.
+                                behavior: HitTestBehavior.opaque,
+                                onTap: label == 'turns' && a.turns > 0
+                                    ? () => setState(() => _history = true)
+                                    : null,
+                                child: Container(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    8,
+                                    7,
+                                    8,
+                                    8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    border: i == 0
+                                        ? null
+                                        : Border(
+                                            left: BorderSide(
+                                              color: _rule,
+                                              width: 0.5,
+                                            ),
                                           ),
+                                  ),
+                                  child: Column(
+                                    // Centred in the cell, not pushed to its left edge:
+                                    // "turns" holds the shortest figure of the four, so
+                                    // left-aligned it looked as though its cell had been
+                                    // given all its room on the right.
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    // The label at the top of the cell and the figure on
+                                    // its floor: a cell whose label wraps to two lines
+                                    // would otherwise lift its figure above the rest.
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      _label(label, DeckHud.dim),
+                                      const SizedBox(height: 6),
+                                      // 18, not 22: four of these across a phone was
+                                      // the widest thing on the card, and "3.1m" does
+                                      // not need to be read from across the desk.
+                                      Text(
+                                        value,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: DeckHud.rm(
+                                          18,
+                                          DeckHud.ink,
+                                          weight: 600,
                                         ),
-                                ),
-                                child: Column(
-                                  // Centred in the cell, not pushed to its left edge:
-                                  // "turns" holds the shortest figure of the four, so
-                                  // left-aligned it looked as though its cell had been
-                                  // given all its room on the right.
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  // The label at the top of the cell and the figure on
-                                  // its floor: a cell whose label wraps to two lines
-                                  // would otherwise lift its figure above the rest.
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    _label(label, DeckHud.dim),
-                                    const SizedBox(height: 6),
-                                    // 18, not 22: four of these across a phone was
-                                    // the widest thing on the card, and "3.1m" does
-                                    // not need to be read from across the desk.
-                                    Text(
-                                      value,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: DeckHud.rm(
-                                        18,
-                                        DeckHud.ink,
-                                        weight: 600,
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -1999,18 +2086,276 @@ class CardBackButton extends StatelessWidget {
   }
 }
 
-/// A task's colour, from whichever theme is on: the three tools' own, the two
-/// that mean well and badly, and the deck's ink for the quiet ones.
-Color askColor(CritterPose pose) => switch (pose) {
-  CritterPose.read => DeckHud.toolCodex,
-  CritterPose.bash => DeckHud.ok,
-  CritterPose.write => DeckHud.toolClaude,
-  CritterPose.run => DeckHud.accent,
-  CritterPose.delegate => DeckHud.toolGemini,
-  CritterPose.plan => DeckHud.toolGemini,
-  CritterPose.error => DeckHud.bad,
-  _ => DeckHud.ink,
-};
+/// Every prompt of the session, behind the turn count that counts them.
+///
+/// It comes in from the left over the card and takes part of its width, so
+/// the agent it belongs to is still there behind it. A row carries what was
+/// asked; its three actions send it again, keep it as a task on the agent's
+/// grid, or copy it.
+class _PromptDrawer extends StatefulWidget {
+  const _PromptDrawer({
+    super.key,
+    required this.source,
+    required this.agentId,
+    required this.tight,
+    required this.onClose,
+    required this.onSend,
+    required this.onKeep,
+  });
+
+  final AgentsSource source;
+  final String agentId;
+  final bool tight;
+  final VoidCallback onClose;
+  final void Function(String text) onSend;
+  final void Function(String text) onKeep;
+
+  @override
+  State<_PromptDrawer> createState() => _PromptDrawerState();
+}
+
+class _PromptDrawerState extends State<_PromptDrawer> {
+  List<AgentPrompted>? _rows;
+  String? _problem;
+
+  /// Which row has its actions open; one at a time, so a list of two hundred
+  /// stays a list.
+  int? _open;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    try {
+      final rows = await widget.source.prompts(widget.agentId);
+      if (mounted) setState(() => _rows = rows);
+    } catch (e) {
+      if (mounted) setState(() => _problem = '$e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = _rows;
+    return Stack(
+      children: [
+        // The rest of the card closes it.
+        Positioned.fill(
+          child: GestureDetector(
+            key: const Key('prompt-drawer-scrim'),
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onClose,
+            child: ColoredBox(color: DeckHud.bg.withValues(alpha: 0.72)),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FractionallySizedBox(
+            // Part of the card, not all of it: the agent stays in sight.
+            widthFactor: widget.tight ? 0.82 : 0.46,
+            child: GestureDetector(
+              // Taps inside the drawer are the drawer's own.
+              behavior: HitTestBehavior.opaque,
+              onTap: () {},
+              onHorizontalDragEnd: (d) {
+                if ((d.primaryVelocity ?? 0) < -240) widget.onClose();
+              },
+              child: Container(
+                color: DeckHud.panel,
+                padding: EdgeInsets.fromLTRB(
+                  widget.tight ? 14 : 20,
+                  widget.tight ? 14 : 20,
+                  widget.tight ? 10 : 16,
+                  widget.tight ? 10 : 16,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'prompts',
+                            style: DeckHud.rm(
+                              widget.tight ? 20 : 24,
+                              DeckHud.ink,
+                              weight: 700,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          key: const Key('prompt-drawer-close'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: widget.onClose,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Text(
+                              '\u00d7',
+                              style: DeckHud.rm(22, DeckHud.dim, weight: 700),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(switch ((rows, _problem)) {
+                      (_, final String p) => p,
+                      (null, _) => 'reading the session\u2026',
+                      (final List<AgentPrompted> r, _) =>
+                        r.isEmpty
+                            ? 'nothing asked yet'
+                            : '${r.length} asked, newest first',
+                    }, style: DeckHud.mono(size: 12, color: DeckHud.dim)),
+                    const SizedBox(height: 10),
+                    if (rows != null)
+                      Expanded(
+                        child: ListView.builder(
+                          key: const Key('prompt-list'),
+                          padding: EdgeInsets.zero,
+                          itemCount: rows.length,
+                          itemBuilder: (context, i) => _PromptRow(
+                            key: Key('prompt-$i'),
+                            row: rows[i],
+                            open: _open == i,
+                            tight: widget.tight,
+                            onTap: () =>
+                                setState(() => _open = _open == i ? null : i),
+                            onSend: () => widget.onSend(rows[i].text),
+                            onKeep: () => widget.onKeep(rows[i].text),
+                          ),
+                        ),
+                      )
+                    else
+                      const Spacer(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One prompt in the drawer: its turn number, what was asked, and the three
+/// things that can be done with it once it is tapped.
+class _PromptRow extends StatelessWidget {
+  const _PromptRow({
+    super.key,
+    required this.row,
+    required this.open,
+    required this.tight,
+    required this.onTap,
+    required this.onSend,
+    required this.onKeep,
+  });
+
+  final AgentPrompted row;
+  final bool open;
+  final bool tight;
+  final VoidCallback onTap;
+  final VoidCallback onSend;
+  final VoidCallback onKeep;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Pressable(
+            onTap: onTap,
+            builder: (context, pressed) => Container(
+              color: pressed || open ? DeckHud.bg : const Color(0x00000000),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 34,
+                    child: Text(
+                      '${row.turn}',
+                      style: DeckHud.mono(size: 12, color: DeckHud.dim),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      row.text,
+                      maxLines: open ? 8 : 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: DeckHud.rm(
+                        tight ? 13 : 15,
+                        DeckHud.ink,
+                      ).merge(const TextStyle(height: 1.35)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (open) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const SizedBox(width: 34),
+                _PromptAction(
+                  key: const Key('prompt-send'),
+                  label: 'send again',
+                  onTap: onSend,
+                ),
+                const SizedBox(width: 8),
+                _PromptAction(
+                  key: const Key('prompt-keep'),
+                  label: 'make a task',
+                  onTap: onKeep,
+                ),
+                const SizedBox(width: 8),
+                _PromptAction(
+                  key: const Key('prompt-copy'),
+                  label: 'copy',
+                  onTap: () => unawaited(
+                    Clipboard.setData(ClipboardData(text: row.text)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PromptAction extends StatelessWidget {
+  const _PromptAction({super.key, required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+    onTap: onTap,
+    builder: (context, pressed) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: pressed ? DeckHud.ink : const Color(0x00000000),
+        border: Border.all(color: DeckHud.dim, width: 0.5),
+      ),
+      child: Text(
+        label,
+        style: DeckHud.mono(
+          size: 12,
+          color: pressed ? DeckHud.bg : DeckHud.ink,
+        ),
+      ),
+    ),
+  );
+}
 
 /// One task on the quick list, drawn as the deck draws an agent: the picture
 /// where the critter goes, the name under it, and the ink invert on a press.
@@ -2023,49 +2368,61 @@ class _AskTile extends StatelessWidget {
     required this.ask,
     required this.sent,
     required this.onTap,
+    this.onHold,
   });
 
   final AgentAsk ask;
   final bool sent;
   final VoidCallback? onTap;
 
+  /// Held rather than tapped: takes a task of the agent's own away. Null for
+  /// the eight every agent has, which cannot be removed.
+  final VoidCallback? onHold;
+
   @override
   Widget build(BuildContext context) {
     return Pressable(
       onTap: onTap,
+      onLongPress: onHold,
       builder: (context, pressed) {
         final on = pressed || sent;
         final fill = on ? DeckHud.ink : DeckHud.panel;
-        // Each task in a colour the theme brought with it, so the board reads
-        // as a board rather than eight grey squares. No frame around it: the
-        // deck's own tiles have none either.
-        final ink = on ? DeckHud.bg : askColor(ask.pose);
+        // One colour for every task, the agent colour of whichever theme is
+        // on: what tells them apart is the hat, as it does on the deck. No
+        // frame around it either, since the deck's own tiles have none.
+        final ink = on ? DeckHud.bg : DeckHud.ink;
         return DecoratedBox(
           decoration: BoxDecoration(color: fill),
           child: FittedBox(
             child: SizedBox.square(
               dimension: 170,
+              // The name is Flexible so a two-line one cannot push the
+              // column past the design cell: 21 points of it fits, and a
+              // longer word is ellipsised rather than overflowing.
               child: Column(
                 children: [
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 18),
                   CritterSprite(
                     pose: ask.pose,
                     species: CritterSpecies.claude,
+                    hat: autoHatFor(ask.label),
                     centerBody: true,
                     showBubble: false,
                     width: 92,
                     body: ink,
                     cut: fill,
                   ),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: 150,
-                    child: Text(
-                      sent ? 'sent' : ask.label,
-                      maxLines: 2,
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                      style: DeckHud.mono(size: 16, color: ink),
+                  const SizedBox(height: 10),
+                  Flexible(
+                    child: SizedBox(
+                      width: 158,
+                      child: Text(
+                        sent ? 'sent' : ask.label,
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: DeckHud.mono(size: 21, color: ink),
+                      ),
                     ),
                   ),
                 ],

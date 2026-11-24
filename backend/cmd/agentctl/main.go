@@ -43,6 +43,7 @@ import (
 	"github.com/brushknight/agents-deck/backend/internal/service"
 	"github.com/brushknight/agents-deck/backend/internal/sim"
 	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/brushknight/agents-deck/backend/internal/tasks"
 	"github.com/brushknight/agents-deck/backend/internal/tmux"
 	"github.com/brushknight/agents-deck/backend/internal/web"
 )
@@ -1250,6 +1251,8 @@ func serve(args []string) error {
 	srv.Queue = queue.Open(queuePath)
 	st.Queued = srv.Queue.Agents
 	st.QueuedText = srv.Queue.Texts
+	srv.Tasks = tasks.Open(tasks.Default(paths.Data()))
+	st.TaskList = srv.Tasks.All
 	go srv.RunQueue(context.Background())
 	errc := make(chan error, 4)
 	// The default Wi-Fi network for boards plugged in over USB: its password in

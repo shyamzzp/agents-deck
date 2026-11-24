@@ -305,6 +305,7 @@ class Agent {
     this.subagents = const [],
     this.queued = 0,
     this.queuedNext = '',
+    this.tasks = const [],
     this.hat,
     this.account,
     this.startedAt,
@@ -375,6 +376,10 @@ class Agent {
   /// The text of the next of those, so the card can say what is about to go
   /// in rather than only how many are waiting.
   final String queuedNext;
+
+  /// Tasks kept for this agent, drawn in the quick list beside the built-in
+  /// ones (oldest first, as they were made).
+  final List<AgentTask> tasks;
 
   /// The pixel hat for its working folder; null = none.
   final AgentHat? hat;
@@ -469,6 +474,10 @@ class Agent {
       ],
       queued: _int(j['queued']),
       queuedNext: _str(j['queuedNext']),
+      tasks: [
+        if (j['tasks'] case final List l)
+          for (final x in l) ?AgentTask.fromJson(x),
+      ],
       startedAt: _time(j['startedAt']),
       updatedAt: _time(j['updatedAt']),
       lastActive: _time(j['lastActive']),
@@ -730,13 +739,50 @@ String agentPillLabel(Agent a, AgentsState state, [DateTime? localNow]) {
   };
 }
 
+/// One prompt of a session's history (`GET /v1/agents/{id}/prompts`), with
+/// its turn number: the first prompt of the session is turn 1, which is what
+/// the figure in the card's "turns" cell counts.
+class AgentPrompted {
+  const AgentPrompted({required this.turn, required this.text});
+
+  final int turn;
+  final String text;
+
+  static AgentPrompted fromJson(Map<String, dynamic> j) =>
+      AgentPrompted(turn: _int(j['turn']), text: _str(j['text']));
+}
+
+/// One task kept for an agent, beside the deck's built-in ones: a prompt
+/// under a short name, drawn as a tile in the same grid.
+class AgentTask {
+  const AgentTask({required this.id, required this.name, required this.text});
+
+  final String id;
+  final String name;
+  final String text;
+
+  static AgentTask? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final m = j.cast<String, dynamic>();
+    final id = _str(m['id']);
+    final text = _str(m['text']);
+    if (id.isEmpty || text.isEmpty) return null;
+    return AgentTask(id: id, name: _str(m['name']), text: text);
+  }
+}
+
 /// A line to type into a session, from the card's quick list.
 ///
 /// These are the things asked of a coding agent again and again, so they are
 /// worth a tap rather than a keyboard: the text is what the local dashboard's
 /// message box would send.
 class AgentAsk {
-  const AgentAsk(this.label, this.text, this.pose);
+  const AgentAsk(this.label, this.text, this.pose, {this.id});
+
+  /// Set for a task kept for one agent (its handle, for taking it away);
+  /// null for the eight every agent has.
+
+  final String? id;
 
   /// What the card shows, hyphenated: it reads as the name of a task rather
   /// than a sentence, and fits a cell on a phone.
