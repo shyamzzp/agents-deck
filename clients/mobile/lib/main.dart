@@ -318,6 +318,10 @@ class _DeckAppState extends State<DeckApp> {
   bool _looked = false;
   DeckLayout _layout = const DeckLayout();
 
+  /// Someone waiting on what is being said: a new task spoken into an empty
+  /// cell of a card's quick list. The deck asks for it, the sheet fills it.
+  Completer<String?>? _speaking;
+
   /// The agent being spoken to, while the dictation sheet is open.
   Agent? _dictating;
 
@@ -433,6 +437,17 @@ class _DeckAppState extends State<DeckApp> {
                   // opens over the deck rather than as a route, since this app
                   // has no navigator of its own.
                   onHoldAttention: (a) => setState(() => _dictating = a),
+                  // Holding an empty cell of a card's quick list: the phone
+                  // listens, and the card keeps what was said as a task in
+                  // that cell, named by the service in its own short way.
+                  onSpeakTask: (agent) {
+                    final waiting = Completer<String?>();
+                    setState(() {
+                      _speaking = waiting;
+                      _dictating = agent;
+                    });
+                    return waiting.future;
+                  },
                   // A phone has no menu bar to hang settings off, so they get a
                   // page of their own at the far left. The deck still opens.
                   leadingPage: ConfigPage(
@@ -461,13 +476,30 @@ class _DeckAppState extends State<DeckApp> {
               Positioned.fill(
                 child: DictateSheet(
                   key: ValueKey('dictate-${dictating.id}'),
+                  // Speaking a task: what is said comes back to the card,
+                  // which keeps it in the cell that was held. Otherwise it
+                  // goes to the agent's terminal.
+                  onSaid: _speaking == null
+                      ? null
+                      : (said) {
+                          _speaking?.complete(said);
+                          _speaking = null;
+                        },
+                  heading: _speaking == null ? null : 'say the task',
+                  sendLabel: _speaking == null ? 'send' : 'make task',
                   agent:
                       source.snapshot.value.state?.agents
                           .where((x) => x.id == dictating.id)
                           .firstOrNull ??
                       dictating,
                   source: source,
-                  onClose: () => setState(() => _dictating = null),
+                  onClose: () => setState(() {
+                    // Closed without saying anything: whoever asked gets
+                    // nothing rather than waiting for ever.
+                    _speaking?.complete(null);
+                    _speaking = null;
+                    _dictating = null;
+                  }),
                 ),
               ),
           ],

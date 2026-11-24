@@ -46,6 +46,7 @@ class AgentsApp extends StatefulWidget {
     this.pageTitles = const {},
     this.onRenamePage,
     this.onHoldAttention,
+    this.onSpeakTask,
   }) : assert(pageShapes.length > 0, 'the deck needs a shape'),
        assert(
          (openCard == null) == (cardHost == null),
@@ -90,6 +91,11 @@ class AgentsApp extends StatefulWidget {
   /// slot 25 and its third at 41. An agent keeps its slot through all of it;
   /// only which page shows it moves.
   final List<DeckShape> pageShapes;
+
+  /// Asks the host to listen and hands back what was said, for holding an
+  /// empty cell of an agent's quick list: what comes back is kept as a task
+  /// in that cell. Null on a host with no microphone.
+  final Future<String?> Function(Agent agent)? onSpeakTask;
 
   /// Holding an agent on the "Needs you" screen. The phone speaks to it:
   /// dictation, then the text goes to the agent's terminal. Null on a host
@@ -294,6 +300,7 @@ class _AgentsAppState extends State<AgentsApp> {
           onClose: close,
           onVisible: _cardVisible,
           showBack: widget.backButton,
+          onSpeakTask: widget.onSpeakTask,
         ),
       ),
     );

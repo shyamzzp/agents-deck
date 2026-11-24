@@ -755,11 +755,20 @@ class AgentPrompted {
 /// One task kept for an agent, beside the deck's built-in ones: a prompt
 /// under a short name, drawn as a tile in the same grid.
 class AgentTask {
-  const AgentTask({required this.id, required this.name, required this.text});
+  const AgentTask({
+    required this.id,
+    required this.name,
+    required this.text,
+    this.slot = 0,
+  });
 
   final String id;
   final String name;
   final String text;
+
+  /// The cell of the quick list it was made in, counted from the board's
+  /// first cell; 0 lets it fall in after the ones before it.
+  final int slot;
 
   static AgentTask? fromJson(Object? j) {
     if (j is! Map) return null;
@@ -767,7 +776,12 @@ class AgentTask {
     final id = _str(m['id']);
     final text = _str(m['text']);
     if (id.isEmpty || text.isEmpty) return null;
-    return AgentTask(id: id, name: _str(m['name']), text: text);
+    return AgentTask(
+      id: id,
+      name: _str(m['name']),
+      text: text,
+      slot: _int(m['slot']),
+    );
   }
 }
 
@@ -777,12 +791,15 @@ class AgentTask {
 /// worth a tap rather than a keyboard: the text is what the local dashboard's
 /// message box would send.
 class AgentAsk {
-  const AgentAsk(this.label, this.text, this.pose, {this.id});
+  const AgentAsk(this.label, this.text, this.pose, {this.id, this.slot = 0});
 
   /// Set for a task kept for one agent (its handle, for taking it away);
   /// null for the eight every agent has.
 
   final String? id;
+
+  /// For a task of an agent's own: the cell it was made in.
+  final int slot;
 
   /// What the card shows, hyphenated: it reads as the name of a task rather
   /// than a sentence, and fits a cell on a phone.

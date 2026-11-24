@@ -18,6 +18,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -105,7 +106,7 @@ func (s *Store) All() map[string][]Task {
 // Add keeps text as one of agent's tasks under name (or a name taken from the
 // text when it is empty) and returns it. A task whose text is already kept is
 // not kept twice.
-func (s *Store) Add(agent, name, text string) (Task, error) {
+func (s *Store) Add(agent, name, text string, slot int) (Task, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return Task{}, ErrEmpty
@@ -126,11 +127,17 @@ func (s *Store) Add(agent, name, text string) (Task, error) {
 			return t, nil
 		}
 	}
-	t := Task{ID: id(), Name: name, Text: text, Added: time.Now().UTC()}
+	if slot < 0 {
+		slot = 0
+	}
+	t := Task{ID: id(), Name: name, Text: text, Slot: slot, Added: time.Now().UTC()}
 	list := append(s.byID[agent], t)
 	if len(list) > Max {
 		list = list[len(list)-Max:]
 	}
+	// By the cell each was made in, so the board draws them where they were
+	// put; two in the same cell keep the order they were made in.
+	sort.SliceStable(list, func(i, j int) bool { return list[i].Slot < list[j].Slot })
 	s.byID[agent] = list
 	s.save()
 	return t, nil
@@ -171,12 +178,22 @@ func (s *Store) Forget(agent string) {
 // that carry meaning, hyphenated, as the built-in tasks are named
 // ("push-github", "verify-changes").
 func ShortName(text string) string {
+	// Caveman: articles, pronouns, modals and politeness carry nothing, so a
+	// spoken "can you please run the tests again and tell me" becomes
+	// run-tests-again.
 	skip := map[string]bool{
 		"the": true, "a": true, "an": true, "to": true, "of": true,
 		"and": true, "for": true, "in": true, "on": true, "with": true,
 		"please": true, "can": true, "you": true, "your": true, "it": true,
 		"this": true, "that": true, "me": true, "my": true, "is": true,
 		"are": true, "be": true, "do": true, "then": true, "so": true,
+		"could": true, "would": true, "should": true, "will": true,
+		"want": true, "need": true, "like": true, "just": true, "also": true,
+		"now": true, "we": true, "i": true, "us": true, "let": true,
+		"lets": true, "have": true, "has": true, "get": true, "got": true,
+		"make": true, "sure": true, "there": true, "here": true, "about": true,
+		"from": true, "into": true, "at": true, "by": true, "as": true,
+		"all": true, "some": true, "any": true, "its": true, "their": true,
 	}
 	var words []string
 	for _, w := range strings.Fields(strings.ToLower(text)) {
@@ -190,10 +207,17 @@ func ShortName(text string) string {
 		}
 	}
 	if len(words) == 0 {
-		// Nothing but small words: take the text as it came.
-		words = strings.Fields(strings.ToLower(text))
-		if len(words) > 3 {
-			words = words[:3]
+		// Nothing but small words: take the text as it came, still without
+		// the punctuation a name has no use for.
+		for _, w := range strings.Fields(strings.ToLower(text)) {
+			w = strings.Trim(w, ".,:;!?\"'`()[]{}")
+			if w == "" {
+				continue
+			}
+			words = append(words, w)
+			if len(words) == 3 {
+				break
+			}
 		}
 	}
 	return clip(strings.Join(words, "-"), NameMax)
