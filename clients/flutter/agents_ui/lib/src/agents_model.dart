@@ -872,12 +872,17 @@ class LiveSession {
     this.started,
     this.onBoard = false,
     this.background = false,
+    this.lastActive,
   });
 
   final String sessionId;
   final String title;
   final String folder;
   final DateTime? started;
+
+  /// When it last said anything. The picker is ordered by this: a session
+  /// resumed this morning may have begun a fortnight ago.
+  final DateTime? lastActive;
   final bool onBoard;
 
   /// Runs without a terminal (`claude --bg`, or one the desktop app runs).
@@ -888,6 +893,7 @@ class LiveSession {
     title: _str(j['title']),
     folder: _str(j['folder']),
     started: _time(j['started']),
+    lastActive: _time(j['lastActive']),
     onBoard: j['onBoard'] == true,
     background: j['background'] == true,
   );
