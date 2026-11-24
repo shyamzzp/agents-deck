@@ -6,6 +6,8 @@ library;
 
 import 'dart:convert';
 
+import 'critter.dart';
+
 /// Agent lifecycle as reported by the daemon. [unknown] covers statuses a
 /// newer daemon may add; it renders like [idle].
 enum AgentStatus { starting, running, waiting, idle, error, exited, unknown }
@@ -734,7 +736,7 @@ String agentPillLabel(Agent a, AgentsState state, [DateTime? localNow]) {
 /// worth a tap rather than a keyboard: the text is what the local dashboard's
 /// message box would send.
 class AgentAsk {
-  const AgentAsk(this.label, this.text, this.icon);
+  const AgentAsk(this.label, this.text, this.pose);
 
   /// What the card shows, hyphenated: it reads as the name of a task rather
   /// than a sentence, and fits a cell on a phone.
@@ -743,9 +745,9 @@ class AgentAsk {
   /// What the agent is told.
   final String text;
 
-  /// The pixel icon drawn above the label (a key of pixelIcons), in the
-  /// colour of whichever theme is on.
-  final String icon;
+  /// The critter pose drawn above the label, so a task is pictured the way
+  /// an agent is: reading, running a command, writing, handing work on.
+  final CritterPose pose;
 }
 
 /// The quick list, in the order it is swiped through.
@@ -755,46 +757,46 @@ const agentAsks = [
     'Verify the changes you have made: re-read them, check they do '
         'what was asked, and say plainly what you checked and what you '
         'did not.',
-    'vscode',
+    CritterPose.read,
   ),
   AgentAsk(
     'run-tests',
     'Run the test suite and report the result verbatim, including '
         'any failures.',
-    'python',
+    CritterPose.bash,
   ),
   AgentAsk(
     'commit-changes',
     'Commit the current changes with a message that says why, not '
         'just what.',
-    'git',
+    CritterPose.write,
   ),
   AgentAsk(
     'push-github',
     'Push the committed changes to the remote on GitHub. Do not '
         'push to any upstream remote.',
-    'github',
+    CritterPose.run,
   ),
   AgentAsk(
     'open-pr',
     'Open a pull request for this branch against the default '
         'branch, with a description of what changed and how it was '
         'checked.',
-    'gitlab',
+    CritterPose.delegate,
   ),
   AgentAsk(
     'what-changed',
     'Summarise what you have changed so far, file by file, and what '
         'is left.',
-    'rss',
+    CritterPose.plan,
   ),
   AgentAsk(
     'fix-failures',
     'Find out why the failing tests fail and fix the cause, not the '
         'test.',
-    'jira',
+    CritterPose.error,
   ),
-  AgentAsk('carry-on', 'Carry on with what you were doing.', 'claude'),
+  AgentAsk('carry-on', 'Carry on with what you were doing.', CritterPose.think),
 ];
 
 /// A Claude session started by hand in another terminal (`GET /v1/live`),

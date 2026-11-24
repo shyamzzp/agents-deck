@@ -1,5 +1,7 @@
-// The quick list: a double tap on a card's title opens it, and tapping an ask
-// puts that line on the agent's queue (POST /v1/agents/{id}/prompt).
+// The tasks on an agent's card: they sit under the last prompt, in the cells
+// of the page the agent was picked from, and tapping one types that line into
+// the session (POST /v1/agents/{id}/prompt). A double tap on the title or on
+// an empty part of the card scrolls down to them.
 
 import 'package:agents_deck_ui/agents_deck_ui.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +25,24 @@ void main() {
     return source;
   }
 
+  /// The tasks sit at the bottom of the card, so a test that taps one scrolls
+  /// the card's own scroller to it first, as a thumb would.
+  Future<void> scrollToAsks(WidgetTester tester) async {
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('ask-0')),
+      300,
+      // The grid inside is a Scrollable too (it just never scrolls), so the
+      // card's own one is the first of the two.
+      scrollable: find
+          .descendant(
+            of: find.byKey(const Key('agent-scroll')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pump();
+  }
+
   Future<void> openAsks(WidgetTester tester) async {
     await tester.tap(find.byKey(const Key('agent-title')));
     await tester.pump(const Duration(milliseconds: 50));
@@ -30,12 +50,20 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('a double tap on the title opens the quick list', (tester) async {
+  testWidgets('the tasks are on the card itself', (tester) async {
     await card(tester);
-    expect(find.byKey(const Key('asks-grid')), findsNothing);
-    await openAsks(tester);
     expect(find.byKey(const Key('asks-grid')), findsOneWidget);
     expect(find.text('verify-changes'), findsOneWidget);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a double tap on the title brings them into view', (
+    tester,
+  ) async {
+    await card(tester);
+    await openAsks(tester);
+    expect(find.byKey(const Key('asks-grid')), findsOneWidget);
+    expect(tester.takeException(), isNull);
     await tester.pumpAndSettle();
   });
 
@@ -51,9 +79,8 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('a double tap on empty space opens it too', (tester) async {
+  testWidgets('a double tap on empty space reaches them too', (tester) async {
     await card(tester);
-    expect(find.byKey(const Key('asks-grid')), findsNothing);
     // The detector sits under the content, so an empty part of the card
     // reaches it while a button over it does not.
     // The gap the Spacer leaves between the card's text and its buttons is
@@ -64,6 +91,7 @@ void main() {
     await tester.tapAt(gap);
     await tester.pump();
     expect(find.byKey(const Key('asks-grid')), findsOneWidget);
+    expect(tester.takeException(), isNull);
     await tester.pumpAndSettle();
   });
 
@@ -76,13 +104,12 @@ void main() {
     await tester.tap(find.text('focus terminal'));
     await tester.pump();
     expect(source.calls.where((c) => c.$1 == 'focus'), hasLength(1));
-    expect(find.byKey(const Key('asks-grid')), findsNothing);
     await tester.pumpAndSettle();
   });
 
   testWidgets('tapping an ask types it into the session', (tester) async {
     final source = await card(tester);
-    await openAsks(tester);
+    await scrollToAsks(tester);
     await tester.tap(find.byKey(const Key('ask-0')));
     await tester.pump();
 
@@ -93,22 +120,12 @@ void main() {
     // Queued, so asking while it works does not cut the turn short.
     // "now": typed in and entered, not queued behind the current turn.
     expect(sent.single.$3?['mode'], 'now');
-    // The card says "sent" for a moment before it closes itself.
+    // The tile says "sent" for a moment, then goes back to its name.
+    expect(find.text('sent'), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('asks-grid')), findsNothing);
-  });
-
-  testWidgets('it can be closed again without sending anything', (
-    tester,
-  ) async {
-    final source = await card(tester);
-    await openAsks(tester);
-    await tester.tap(find.byKey(const Key('asks-close')));
-    await tester.pump();
-    expect(find.byKey(const Key('asks-grid')), findsNothing);
-    expect(source.calls.where((c) => c.$1 == 'prompt'), isEmpty);
-    await tester.pumpAndSettle();
+    expect(find.text('sent'), findsNothing);
+    expect(find.text(agentAsks.first.label), findsOneWidget);
   });
 
   testWidgets('a watched terminal session can be told', (tester) async {
