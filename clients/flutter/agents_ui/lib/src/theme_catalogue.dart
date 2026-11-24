@@ -25,6 +25,11 @@ class DeckTheme {
     required this.ink,
     required this.dim,
     required this.accent,
+    required this.toolClaude,
+    required this.toolCodex,
+    required this.toolGemini,
+    required this.ok,
+    required this.bad,
   });
 
   /// Reads one entry of themes.json. The deck's own token names are in there
@@ -44,6 +49,11 @@ class DeckTheme {
       ink: at('--ink', const Color(0xFFE8E4DC)),
       dim: at('--dim', const Color(0xFF7A776F)),
       accent: at('--accent', const Color(0xFFFF4D00)),
+      toolClaude: at('--tool-claude', const Color(0xFFC98B6B)),
+      toolCodex: at('--tool-codex', const Color(0xFF4FB3A6)),
+      toolGemini: at('--tool-gemini', const Color(0xFF6F8FD8)),
+      ok: at('--ok', const Color(0xFF6FD69A)),
+      bad: at('--bad', const Color(0xFFF2766B)),
     );
   }
 
@@ -57,6 +67,14 @@ class DeckTheme {
   final Color ink;
   final Color dim;
   final Color accent;
+
+  /// The three tools' colours and the two signal colours, which the deck
+  /// paints tiles and tasks with.
+  final Color toolClaude;
+  final Color toolCodex;
+  final Color toolGemini;
+  final Color ok;
+  final Color bad;
 }
 
 Color? _parseHex(String s) {

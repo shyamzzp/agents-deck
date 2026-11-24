@@ -1997,6 +1997,19 @@ class CardBackButton extends StatelessWidget {
   }
 }
 
+/// A task's colour, from whichever theme is on: the three tools' own, the two
+/// that mean well and badly, and the deck's ink for the quiet ones.
+Color askColor(CritterPose pose) => switch (pose) {
+  CritterPose.read => DeckHud.toolCodex,
+  CritterPose.bash => DeckHud.ok,
+  CritterPose.write => DeckHud.toolClaude,
+  CritterPose.run => DeckHud.accent,
+  CritterPose.delegate => DeckHud.toolGemini,
+  CritterPose.plan => DeckHud.toolGemini,
+  CritterPose.error => DeckHud.bad,
+  _ => DeckHud.ink,
+};
+
 /// One task on the quick list, drawn as the deck draws an agent: the picture
 /// where the critter goes, the name under it, and the ink invert on a press.
 ///
@@ -2021,12 +2034,12 @@ class _AskTile extends StatelessWidget {
       builder: (context, pressed) {
         final on = pressed || sent;
         final fill = on ? DeckHud.ink : DeckHud.panel;
-        final ink = on ? DeckHud.bg : DeckHud.ink;
-        return Container(
-          decoration: BoxDecoration(
-            color: fill,
-            border: Border.all(color: on ? DeckHud.ink : DeckHud.dim),
-          ),
+        // Each task in a colour the theme brought with it, so the board reads
+        // as a board rather than eight grey squares. No frame around it: the
+        // deck's own tiles have none either.
+        final ink = on ? DeckHud.bg : askColor(ask.pose);
+        return DecoratedBox(
+          decoration: BoxDecoration(color: fill),
           child: FittedBox(
             child: SizedBox.square(
               dimension: 170,

@@ -9,9 +9,9 @@ import 'agents_model.dart';
 /// Corner-chip colour per agent tool (the only non-palette colours in the
 /// app, as small as the deck's configured tile chips).
 Color agentToolColor(String tool) => switch (tool) {
-  'claude' => const Color(0xFFC98B6B),
-  'codex' => const Color(0xFF4FB3A6),
-  'gemini' => const Color(0xFF6F8FD8),
+  'claude' => DeckHud.toolClaude,
+  'codex' => DeckHud.toolCodex,
+  'gemini' => DeckHud.toolGemini,
   _ => DeckHud.dim,
 };
 
