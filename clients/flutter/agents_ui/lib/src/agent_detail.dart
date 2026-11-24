@@ -35,7 +35,6 @@ class AgentDetail extends StatefulWidget {
     required this.onClose,
     this.onVisible,
     this.showBack = false,
-    this.taskShape,
   });
 
   final AgentsSource source;
@@ -49,11 +48,6 @@ class AgentDetail extends StatefulWidget {
   /// A back button left of the mascot, for hosts without an edge swipe
   /// (the menu bar app). The desk panel closes cards with its swipe.
   final bool showBack;
-
-  /// The shape of the page this agent was opened from, so the quick list is
-  /// drawn as that same board: the tasks sit in its cells, the same size as
-  /// the agents they were opened over. Null draws the list as a plain grid.
-  final DeckShape? taskShape;
 
   @override
   State<AgentDetail> createState() => _AgentDetailState();
@@ -604,6 +598,14 @@ class _AgentDetailState extends State<AgentDetail> {
       ),
   ];
 
+  /// How many tasks go across: four on a phone, and on a tablet ten held
+  /// sideways or seven upright, which is how each of them is actually held.
+  int _askColumns(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    if (size.shortestSide < 600) return 4;
+    return size.width >= size.height ? 10 : 7;
+  }
+
   Widget _askBoard(bool tight, Agent a) {
     // The deck can only type into a session it can reach. One inside another
     // app refuses with 422 and says why, so the card says it here rather than
@@ -617,9 +619,8 @@ class _AgentDetailState extends State<AgentDetail> {
       );
     }
     final asks = _asksFor(a);
-    final shape = widget.taskShape ?? const DeckShape(3, 3);
-    final columns = shape.columns;
-    final rows = shape.rowsFor((asks.length + columns - 1) ~/ columns);
+    final columns = _askColumns(context);
+    final rows = (asks.length + columns - 1) ~/ columns;
     return GridView.count(
       key: const Key('asks-grid'),
       shrinkWrap: true,
@@ -2611,12 +2612,14 @@ class _AskTile extends StatelessWidget {
           child: FittedBox(
             child: SizedBox.square(
               dimension: 170,
-              // The name is Flexible so a two-line one cannot push the
-              // column past the design cell: 21 points of it fits, and a
-              // longer word is ellipsised rather than overflowing.
+              // Centred in the cell both ways: the critter and the name sit
+              // in the middle of the box rather than hanging from its top.
+              // The name is Flexible so a two-line one cannot push the column
+              // past the design cell; a longer word is ellipsised.
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const SizedBox(height: 18),
                   CritterSprite(
                     pose: ask.pose,
                     species: CritterSpecies.claude,
