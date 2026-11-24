@@ -24,6 +24,7 @@ void main() {
             onAttention: (sh) => log.add('needs you -> $sh'),
             onRing: (w) => log.add('ring -> $w'),
             onTheme: (t) => log.add('theme -> ${t?.name ?? 'agents deck'}'),
+            onHaptics: (h) => log.add('haptics -> ${h.on} ${h.strength.name}'),
           ),
         ),
       ),
@@ -49,20 +50,14 @@ void main() {
       .toList();
 
   testWidgets('a page row asks for that page alone', (tester) async {
-    final log = await pump(
-      tester,
-      const DeckLayout(fallback: DeckShape(5, 5)),
-    );
+    final log = await pump(tester, const DeckLayout(fallback: DeckShape(5, 5)));
     await tester.tap(step('shape-row-page-0', '−'));
     await tester.pump();
     expect(log, ['page 0 -> 4x5'], reason: 'page 1, not every page');
   });
 
   testWidgets('the all-pages row asks for the default', (tester) async {
-    final log = await pump(
-      tester,
-      const DeckLayout(fallback: DeckShape(5, 5)),
-    );
+    final log = await pump(tester, const DeckLayout(fallback: DeckShape(5, 5)));
     expect(find.text('all pages'), findsOneWidget);
     await tester.tap(step('shape-row-default', '−'));
     await tester.pump();
@@ -78,9 +73,9 @@ void main() {
     // list grew by one on every tap because its floor came from the settings.
     await pump(
       tester,
-      const DeckLayout(fallback: DeckShape(5, 5)).
-          withPage(3, const DeckShape(2, 2)).
-          withPage(6, const DeckShape(3, 3)),
+      const DeckLayout(
+        fallback: DeckShape(5, 5),
+      ).withPage(3, const DeckShape(2, 2)).withPage(6, const DeckShape(3, 3)),
     );
     expect(titles(tester), ['page 1']);
   });

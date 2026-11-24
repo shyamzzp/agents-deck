@@ -9,6 +9,7 @@ import 'agents_client.dart';
 import 'agents_model.dart';
 import 'agents_style.dart';
 import 'critter.dart';
+import 'haptics.dart';
 import 'agents_app.dart';
 
 /// How long the "sent" invert holds before the card closes itself.
@@ -505,6 +506,7 @@ class _AgentDetailState extends State<AgentDetail> {
       mode: 'now',
     );
     if (!mounted) return;
+    Haptics.fire(r.isOk ? HapticWhen.sent : HapticWhen.problem);
     setState(() {
       _busy = false;
       _askSent = r.isOk ? i : -1;
@@ -541,6 +543,7 @@ class _AgentDetailState extends State<AgentDetail> {
   Future<void> _keep(String text) async {
     final r = await widget.source.addTask(widget.agentId, text);
     if (!mounted) return;
+    Haptics.fire(r.isOk ? HapticWhen.sent : HapticWhen.problem);
     setState(() {
       _note = r.isOk ? null : (r.message ?? 'could not keep it');
       if (r.isOk) _history = false;
@@ -555,6 +558,7 @@ class _AgentDetailState extends State<AgentDetail> {
     });
     final r = await widget.source.prompt(widget.agentId, text, mode: 'now');
     if (!mounted) return;
+    Haptics.fire(r.isOk ? HapticWhen.sent : HapticWhen.problem);
     setState(() {
       _busy = false;
       _note = r.isOk ? 'sent' : (r.message ?? 'could not send');

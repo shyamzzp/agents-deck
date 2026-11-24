@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import 'haptics.dart';
 import 'theme.dart';
 
 /// A tap target that rebuilds with `pressed` while a finger or the mouse is
@@ -46,11 +47,17 @@ class _PressableState extends State<Pressable> {
       onTapDown: (_) => _press(true),
       onTapUp: (_) => _press(false),
       onTapCancel: () => _press(false),
-      onTap: tap,
+      onTap: tap == null
+          ? null
+          : () {
+              Haptics.fire(HapticWhen.tap);
+              tap();
+            },
       onLongPress: widget.onLongPress == null
           ? null
           : () {
               _press(false);
+              Haptics.fire(HapticWhen.hold);
               widget.onLongPress!();
             },
       child: widget.builder(context, _down),

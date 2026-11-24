@@ -80,6 +80,7 @@ class DeckLayout {
     this.ring = defaultRingWidth,
     this.theme,
     this.titles = const {},
+    this.haptics = const HapticSettings(on: true),
   });
 
   /// Every page that has not been given its own shape.
@@ -103,6 +104,10 @@ class DeckLayout {
   /// with no name of its own is called "page N".
   final Map<int, String> titles;
 
+  /// What the deck feels like on this device. On by default here: a phone
+  /// has a taptic engine and the deck is prodded without looking at it.
+  final HapticSettings haptics;
+
   DeckShape shapeOf(int page) => perPage[page] ?? fallback;
 
   /// The "Needs you" screen, which is a page you swipe to like any other even
@@ -116,6 +121,7 @@ class DeckLayout {
     ring: ring,
     theme: theme,
     titles: titles,
+    haptics: haptics,
   );
 
   DeckLayout withRing(double width) => DeckLayout(
@@ -125,6 +131,7 @@ class DeckLayout {
     ring: ringWidths.contains(width) ? width : ring,
     theme: theme,
     titles: titles,
+    haptics: haptics,
   );
 
   /// With a page set to [shape], or back to the default when they are equal.
@@ -142,6 +149,7 @@ class DeckLayout {
       ring: ring,
       theme: theme,
       titles: titles,
+      haptics: haptics,
     );
   }
 
@@ -157,6 +165,7 @@ class DeckLayout {
     ring: ring,
     theme: theme,
     titles: titles,
+    haptics: haptics,
   );
 
   /// With the deck painted in the scheme called [name]; null is the stock
@@ -168,6 +177,18 @@ class DeckLayout {
     ring: ring,
     theme: name == stockThemeName ? null : name,
     titles: titles,
+    haptics: haptics,
+  );
+
+  /// With the haptics set as they have been changed.
+  DeckLayout withHaptics(HapticSettings h) => DeckLayout(
+    fallback: fallback,
+    perPage: perPage,
+    attention: attention,
+    ring: ring,
+    theme: theme,
+    titles: titles,
+    haptics: h,
   );
 
   /// With a page renamed, or back to its default name when [name] is empty.
@@ -185,6 +206,7 @@ class DeckLayout {
       ring: ring,
       theme: theme,
       titles: next,
+      haptics: haptics,
     );
   }
 
@@ -203,6 +225,9 @@ class DeckLayout {
     'theme': ?theme,
     if (titles.isNotEmpty)
       'titles': {for (final e in titles.entries) '${e.key}': e.value},
+    // Only when they have been changed, as the page names are: a settings
+    // file of defaults says nothing.
+    if (haptics != const HapticSettings(on: true)) 'haptics': haptics.toJson(),
     'pages': {
       for (final e in perPage.entries)
         '${e.key}': [e.value.columns, e.value.rows],
@@ -255,6 +280,9 @@ class DeckLayout {
           : defaultRingWidth,
       theme: j['theme'] is String ? j['theme'] as String : null,
       titles: _titles(j['titles']),
+      haptics: j['haptics'] == null
+          ? const HapticSettings(on: true)
+          : HapticSettings.fromJson(j['haptics']),
     );
   }
 }
@@ -349,6 +377,13 @@ class _DeckAppState extends State<DeckApp> {
   Future<void> _setTitle(int page, String name) =>
       _store(_layout.withTitle(page, name));
 
+  /// Sets what the deck feels like, and lets it be felt at once rather than
+  /// after the next launch.
+  Future<void> _setHaptics(HapticSettings h) async {
+    Haptics.settings = h;
+    await _store(_layout.withHaptics(h));
+  }
+
   Future<void> _store(DeckLayout layout) async {
     final docs = _docs;
     if (docs == null) return;
@@ -407,6 +442,7 @@ class _DeckAppState extends State<DeckApp> {
                     onAttention: _setAttention,
                     onRing: _setRing,
                     onTheme: _setTheme,
+                    onHaptics: _setHaptics,
                     deck: _deckName(),
                     source: s,
                   ),
@@ -645,6 +681,7 @@ class ConfigPage extends StatefulWidget {
     required this.onAttention,
     required this.onRing,
     required this.onTheme,
+    required this.onHaptics,
     required this.source,
     this.deck,
   });
@@ -655,6 +692,10 @@ class ConfigPage extends StatefulWidget {
   final void Function(DeckShape shape) onAttention;
   final void Function(double width) onRing;
   final void Function(DeckTheme? theme) onTheme;
+
+  /// Sets what the deck feels like: on or off, how hard, which moments, and
+  /// the shape of each.
+  final void Function(HapticSettings haptics) onHaptics;
 
   /// Watched for how many pages the deck currently has.
   final AgentsSource source;
@@ -756,8 +797,19 @@ class _ConfigPageState extends State<ConfigPage> {
     ];
   }
 
+  /// What a moment is called in the settings, in the deck's own words.
+  String _hapticTitle(HapticWhen w) => switch (w) {
+    HapticWhen.tap => 'a tap answered',
+    HapticWhen.hold => 'something held',
+    HapticWhen.sent => 'a prompt went',
+    HapticWhen.problem => 'something refused',
+    HapticWhen.page => 'a page turned',
+    HapticWhen.needsYou => 'an agent needs you',
+  };
+
   @override
   Widget build(BuildContext context) {
+    final h = layout.haptics;
     return ValueListenableBuilder<AgentsSnapshot>(
       valueListenable: widget.source.snapshot,
       builder: (context, snap, _) {
@@ -860,6 +912,79 @@ class _ConfigPageState extends State<ConfigPage> {
             ),
             const SizedBox(height: 12),
             ..._themeSection(),
+            const SizedBox(height: 22),
+            Text('haptics', style: DeckHud.mono(size: 14, color: DeckHud.ink)),
+            const SizedBox(height: 6),
+            Text(
+              'What the deck feels like under a thumb. The moments that buzz '
+              'are set one by one, and each can be given a shape: one pulse, '
+              'two, three, or a pulse that settles.',
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
+            ),
+            const SizedBox(height: 12),
+            _HapticRow(
+              key: const Key('haptics-on'),
+              title: 'haptics',
+              note: h.on ? 'on' : 'off',
+              child: _Switch(
+                on: h.on,
+                onTap: () => widget.onHaptics(h.copyWith(on: !h.on)),
+              ),
+            ),
+            if (h.on) ...[
+              const SizedBox(height: 8),
+              _HapticRow(
+                key: const Key('haptics-strength'),
+                title: 'how hard',
+                child: _Choice<HapticStrength>(
+                  values: HapticStrength.values,
+                  value: h.strength,
+                  label: (v) => v.name,
+                  onPick: (v) {
+                    widget.onHaptics(h.copyWith(strength: v));
+                    Haptics.fire(HapticWhen.tap);
+                  },
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'which moments',
+                style: DeckHud.mono(size: 13, color: DeckHud.ink),
+              ),
+              const SizedBox(height: 8),
+              for (final w in HapticWhen.values) ...[
+                _HapticRow(
+                  key: Key('haptics-kind-${w.name}'),
+                  title: _hapticTitle(w),
+                  note: h.kinds.contains(w) ? null : 'off',
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (h.kinds.contains(w)) ...[
+                        _Choice<HapticPattern>(
+                          values: HapticPattern.values,
+                          value: h.patternOf(w),
+                          label: (p) => p.name,
+                          onPick: (p) {
+                            widget.onHaptics(h.withPattern(w, p));
+                            Haptics.settings = h.withPattern(w, p);
+                            Haptics.fire(w);
+                          },
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      _Switch(
+                        on: h.kinds.contains(w),
+                        onTap: () => widget.onHaptics(
+                          h.withKind(w, !h.kinds.contains(w)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+              ],
+            ],
             const SizedBox(height: 22),
             Text(
               'Swipe right for the deck.',
@@ -979,6 +1104,119 @@ class _Stepper extends StatelessWidget {
       ],
     );
   }
+}
+
+/// One haptics setting: what it is called, what it is set to, and the control
+/// that changes it. Laid out like the grid rows above it.
+class _HapticRow extends StatelessWidget {
+  const _HapticRow({
+    super.key,
+    required this.title,
+    required this.child,
+    this.note,
+  });
+
+  final String title;
+  final String? note;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+    color: DeckHud.panel,
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: DeckHud.mono(size: 13, color: DeckHud.ink),
+          ),
+        ),
+        if (note case final n?) ...[
+          Text(n, style: DeckHud.mono(size: 11, color: DeckHud.dim)),
+          const SizedBox(width: 10),
+        ],
+        child,
+      ],
+    ),
+  );
+}
+
+/// A switch in the deck's own style: a square that fills when it is on.
+class _Switch extends StatelessWidget {
+  const _Switch({required this.on, required this.onTap});
+
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: onTap,
+    child: Container(
+      width: 46,
+      height: 26,
+      alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        border: Border.all(color: on ? DeckHud.accent : DeckHud.dim),
+      ),
+      child: Container(
+        width: 18,
+        height: 18,
+        color: on ? DeckHud.accent : DeckHud.dim,
+      ),
+    ),
+  );
+}
+
+/// One of a handful of choices, side by side: the chosen one is filled.
+class _Choice<T> extends StatelessWidget {
+  const _Choice({
+    super.key,
+    required this.values,
+    required this.value,
+    required this.label,
+    required this.onPick,
+  });
+
+  final List<T> values;
+  final T value;
+  final String Function(T v) label;
+  final void Function(T v) onPick;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      for (final v in values) ...[
+        if (v != values.first) const SizedBox(width: 4),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onPick(v),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+            decoration: BoxDecoration(
+              color: v == value ? DeckHud.ink : null,
+              border: Border.all(
+                color: v == value ? DeckHud.ink : DeckHud.dim,
+                width: 0.5,
+              ),
+            ),
+            child: Text(
+              label(v),
+              style: DeckHud.mono(
+                size: 11,
+                color: v == value ? DeckHud.bg : DeckHud.dim,
+              ),
+            ),
+          ),
+        ),
+      ],
+    ],
+  );
 }
 
 /// One scheme: its five colours, its name, and whether it is a light one.
