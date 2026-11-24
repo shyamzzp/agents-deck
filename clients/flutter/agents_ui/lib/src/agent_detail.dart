@@ -897,10 +897,6 @@ class _AgentDetailState extends State<AgentDetail> {
     );
   }
 
-  /// The table's hairlines: the dim ink at a third, so the rules hold the
-  /// figures apart without drawing the eye themselves.
-  Color get _rule => DeckHud.dim.withValues(alpha: 0.35);
-
   Widget _label(String text, Color color) =>
       Text(text, style: DeckHud.mono(size: 14, color: color));
 
@@ -2086,6 +2082,11 @@ class CardBackButton extends StatelessWidget {
   }
 }
 
+/// A table's hairlines: the dim ink at a third, so the rules hold the cells
+/// apart without drawing the eye themselves. The figures on the card and the
+/// prompts in the drawer are ruled with the same line.
+Color get _rule => DeckHud.dim.withValues(alpha: 0.35);
+
 /// Every prompt of the session, behind the turn count that counts them.
 ///
 /// It comes in from the left over the card and takes part of its width, so
@@ -2212,19 +2213,27 @@ class _PromptDrawerState extends State<_PromptDrawer> {
                     const SizedBox(height: 10),
                     if (rows != null)
                       Expanded(
-                        child: ListView.builder(
-                          key: const Key('prompt-list'),
-                          padding: EdgeInsets.zero,
-                          itemCount: rows.length,
-                          itemBuilder: (context, i) => _PromptRow(
-                            key: Key('prompt-$i'),
-                            row: rows[i],
-                            open: _open == i,
-                            tight: widget.tight,
-                            onTap: () =>
-                                setState(() => _open = _open == i ? null : i),
-                            onSend: () => widget.onSend(rows[i].text),
-                            onKeep: () => widget.onKeep(rows[i].text),
+                        child: DecoratedBox(
+                          // A table, as the card's figures are: one hairline
+                          // round the lot and one under every row.
+                          decoration: BoxDecoration(
+                            border: Border.all(color: _rule, width: 0.5),
+                          ),
+                          child: ListView.builder(
+                            key: const Key('prompt-list'),
+                            padding: EdgeInsets.zero,
+                            itemCount: rows.length,
+                            itemBuilder: (context, i) => _PromptRow(
+                              key: Key('prompt-$i'),
+                              row: rows[i],
+                              open: _open == i,
+                              tight: widget.tight,
+                              last: i == rows.length - 1,
+                              onTap: () =>
+                                  setState(() => _open = _open == i ? null : i),
+                              onSend: () => widget.onSend(rows[i].text),
+                              onKeep: () => widget.onKeep(rows[i].text),
+                            ),
                           ),
                         ),
                       )
@@ -2249,6 +2258,7 @@ class _PromptRow extends StatelessWidget {
     required this.row,
     required this.open,
     required this.tight,
+    required this.last,
     required this.onTap,
     required this.onSend,
     required this.onKeep,
@@ -2257,74 +2267,103 @@ class _PromptRow extends StatelessWidget {
   final AgentPrompted row;
   final bool open;
   final bool tight;
+
+  /// The last row of the table, which draws no rule under itself.
+  final bool last;
   final VoidCallback onTap;
   final VoidCallback onSend;
   final VoidCallback onKeep;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+    final rule = BorderSide(color: _rule, width: 0.5);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(bottom: last && !open ? BorderSide.none : rule),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Pressable(
             onTap: onTap,
-            builder: (context, pressed) => Container(
+            builder: (context, pressed) => ColoredBox(
               color: pressed || open ? DeckHud.bg : const Color(0x00000000),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 34,
-                    child: Text(
-                      '${row.turn}',
-                      style: DeckHud.mono(size: 12, color: DeckHud.dim),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // The turn is a cell of its own, ruled off from the text,
+                    // so the numbers line up down the table.
+                    Container(
+                      width: 40,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(border: Border(right: rule)),
+                      alignment: Alignment.topRight,
+                      child: Text(
+                        '${row.turn}',
+                        style: DeckHud.mono(size: 12, color: DeckHud.dim),
+                      ),
                     ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      row.text,
-                      maxLines: open ? 8 : 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: DeckHud.rm(
-                        tight ? 13 : 15,
-                        DeckHud.ink,
-                      ).merge(const TextStyle(height: 1.35)),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
+                        child: Text(
+                          row.text,
+                          maxLines: open ? 8 : 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: DeckHud.rm(
+                            tight ? 13 : 15,
+                            DeckHud.ink,
+                          ).merge(const TextStyle(height: 1.35)),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-          if (open) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                const SizedBox(width: 34),
-                _PromptAction(
-                  key: const Key('prompt-send'),
-                  label: 'send again',
-                  onTap: onSend,
+          if (open)
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: DeckHud.bg,
+                border: Border(
+                  top: rule,
+                  bottom: last ? BorderSide.none : rule,
                 ),
-                const SizedBox(width: 8),
-                _PromptAction(
-                  key: const Key('prompt-keep'),
-                  label: 'make a task',
-                  onTap: onKeep,
-                ),
-                const SizedBox(width: 8),
-                _PromptAction(
-                  key: const Key('prompt-copy'),
-                  label: 'copy',
-                  onTap: () => unawaited(
-                    Clipboard.setData(ClipboardData(text: row.text)),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 46),
+                  _PromptAction(
+                    key: const Key('prompt-send'),
+                    label: 'send again',
+                    onTap: onSend,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  _PromptAction(
+                    key: const Key('prompt-keep'),
+                    label: 'make a task',
+                    onTap: onKeep,
+                  ),
+                  const SizedBox(width: 8),
+                  _PromptAction(
+                    key: const Key('prompt-copy'),
+                    label: 'copy',
+                    onTap: () => unawaited(
+                      Clipboard.setData(ClipboardData(text: row.text)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ),
             ),
-          ],
         ],
       ),
     );
