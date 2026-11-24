@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import 'agents_model.dart';
 import 'hats.dart';
+import 'theme.dart';
 
 /// The agents app's pixel critter: Claude's flat 12×6 block with 1×2 arms
 /// at its sides, on short legs, in an 18×13 cell box (the top 4 rows hold
@@ -887,13 +888,26 @@ class _CritterPainter extends CustomPainter {
 }
 
 /// A hat colour's main tone and shade (unknown names fall back to ink).
-(Color, Color) hatColor(String name) => switch (name) {
-  'teal' => (const Color(0xFF4FB3A6), const Color(0xFF2F7F75)),
-  'blue' => (const Color(0xFF6F8FD8), const Color(0xFF4A63A3)),
-  'yellow' => (const Color(0xFFE8B94A), const Color(0xFFB08429)),
-  'green' => (const Color(0xFF6DBE6A), const Color(0xFF468A44)),
-  'purple' => (const Color(0xFFA68BD8), const Color(0xFF7660A6)),
-  'pink' => (const Color(0xFFE58BB0), const Color(0xFFB05E80)),
-  'sky' => (const Color(0xFF5EC4D6), const Color(0xFF3A8E9C)),
-  _ => (const Color(0xFFE8E4DC), const Color(0xFFA8A39A)),
-};
+/// A hat's two colours, out of whichever theme is on: the brim is the colour
+/// itself and the crown a step of it towards the background.
+///
+/// The eight names are the deck's own, not a scheme's, so each is mixed from
+/// the colours a scheme does bring: the two tool colours either side of the
+/// spectrum, the green that means well and the red that means badly, and the
+/// deck's ink. Under the stock theme teal, blue and ink come out exactly as
+/// they always were; the rest are that scheme's versions of the same idea.
+(Color, Color) hatColor(String name) {
+  Color mix(Color a, Color b, double t) => Color.lerp(a, b, t)!;
+  final main = switch (name) {
+    'teal' => DeckHud.toolCodex,
+    'blue' => DeckHud.toolGemini,
+    // Warm, but never the status orange: a hat is not an alert.
+    'yellow' => mix(DeckHud.ok, DeckHud.accent, 0.45),
+    'green' => DeckHud.ok,
+    'purple' => mix(DeckHud.toolGemini, DeckHud.bad, 0.45),
+    'pink' => DeckHud.bad,
+    'sky' => mix(DeckHud.toolCodex, DeckHud.toolGemini, 0.5),
+    _ => DeckHud.ink,
+  };
+  return (main, mix(main, DeckHud.bg, 0.35));
+}

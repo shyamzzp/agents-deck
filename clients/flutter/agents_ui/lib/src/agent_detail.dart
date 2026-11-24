@@ -1083,10 +1083,12 @@ class _AgentDetailState extends State<AgentDetail> {
                         ? a.queuedNext
                         : (a.lastPrompt.isEmpty ? '—' : a.lastPrompt),
                     key: const Key('agent-last-prompt'),
-                    maxLines: 4,
+                    // Five lines at 13: it is the longest thing on the card,
+                    // and smaller text shows more of it in less room.
+                    maxLines: 5,
                     overflow: TextOverflow.ellipsis,
                     style: DeckHud.rm(
-                      15,
+                      13,
                       a.queuedNext.isNotEmpty ? DeckHud.accent : DeckHud.ink,
                     ).merge(const TextStyle(height: 1.45)),
                   ),
