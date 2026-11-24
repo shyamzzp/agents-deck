@@ -107,11 +107,22 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('tapping an ask types it into the session', (tester) async {
+  testWidgets('holding an ask opens what can be done with it', (tester) async {
     final source = await card(tester);
     await scrollToAsks(tester);
+    // A tap does nothing: it used to send the prompt the instant it landed.
     await tester.tap(find.byKey(const Key('ask-0')));
     await tester.pump();
+    expect(source.calls.where((c) => c.$1 == 'prompt'), isEmpty);
+
+    await tester.longPress(find.byKey(const Key('ask-0')));
+    await tester.pump();
+    expect(find.byKey(const Key('task-dialog')), findsOneWidget);
+
+    // Sending focuses the terminal first, then types it in.
+    await tester.tap(find.byKey(const Key('task-send')));
+    await tester.pump();
+    expect(source.calls.where((c) => c.$1 == 'focus'), hasLength(1));
 
     final sent = source.calls.where((c) => c.$1 == 'prompt').toList();
     expect(sent, hasLength(1));
@@ -126,6 +137,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('sent'), findsNothing);
     expect(find.text(agentAsks.first.label), findsOneWidget);
+  });
+
+  testWidgets('a held ask can be closed without sending', (tester) async {
+    final source = await card(tester);
+    await scrollToAsks(tester);
+    await tester.longPress(find.byKey(const Key('ask-0')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('task-cancel')));
+    await tester.pump();
+    expect(find.byKey(const Key('task-dialog')), findsNothing);
+    expect(source.calls.where((c) => c.$1 == 'prompt'), isEmpty);
+    await tester.pumpAndSettle();
   });
 
   testWidgets('a watched terminal session can be told', (tester) async {
