@@ -2493,30 +2493,45 @@ class _PromptRow extends StatelessWidget {
                   bottom: last ? BorderSide.none : rule,
                 ),
               ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 46),
-                  _PromptAction(
-                    key: const Key('prompt-send'),
-                    label: 'send again',
-                    onTap: onSend,
-                  ),
-                  const SizedBox(width: 8),
-                  _PromptAction(
-                    key: const Key('prompt-keep'),
-                    label: 'make a task',
-                    onTap: onKeep,
-                  ),
-                  const SizedBox(width: 8),
-                  _PromptAction(
-                    key: const Key('prompt-copy'),
-                    label: 'copy',
-                    onTap: () => unawaited(
-                      Clipboard.setData(ClipboardData(text: row.text)),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // The number's column keeps its width and its rule, so the
+                    // table reads straight down; the three actions share what
+                    // the text column has, a third each.
+                    Container(
+                      width: 40,
+                      decoration: BoxDecoration(border: Border(right: rule)),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
+                    for (final (i, (key, label, tap)) in [
+                      ('prompt-send', 'send again', onSend),
+                      ('prompt-keep', 'make a task', onKeep),
+                      (
+                        'prompt-copy',
+                        'copy',
+                        () => unawaited(
+                          Clipboard.setData(ClipboardData(text: row.text)),
+                        ),
+                      ),
+                    ].indexed)
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            i == 0 ? 8 : 4,
+                            6,
+                            i == 2 ? 8 : 4,
+                            6,
+                          ),
+                          child: _PromptAction(
+                            key: Key(key),
+                            label: label,
+                            onTap: tap,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
         ],
@@ -2535,13 +2550,17 @@ class _PromptAction extends StatelessWidget {
   Widget build(BuildContext context) => Pressable(
     onTap: onTap,
     builder: (context, pressed) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       decoration: BoxDecoration(
         color: pressed ? DeckHud.ink : const Color(0x00000000),
         border: Border.all(color: DeckHud.dim, width: 0.5),
       ),
       child: Text(
         label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
         style: DeckHud.mono(
           size: 12,
           color: pressed ? DeckHud.bg : DeckHud.ink,
