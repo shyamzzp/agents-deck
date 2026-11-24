@@ -35,6 +35,7 @@ class AgentDetail extends StatefulWidget {
     required this.onClose,
     this.onVisible,
     this.showBack = false,
+    this.onSpeakTask,
   });
 
   final AgentsSource source;
@@ -48,6 +49,12 @@ class AgentDetail extends StatefulWidget {
   /// A back button left of the mascot, for hosts without an edge swipe
   /// (the menu bar app). The desk panel closes cards with its swipe.
   final bool showBack;
+
+  /// Asks the host to listen, and hands back what was said (null: nothing
+  /// was said, or it was cancelled). Holding an empty cell of the quick list
+  /// calls it and keeps what comes back as a task in that cell. Null on a
+  /// host with no microphone, and then an empty cell does nothing.
+  final Future<String?> Function(Agent agent)? onSpeakTask;
 
   @override
   State<AgentDetail> createState() => _AgentDetailState();
@@ -462,8 +469,9 @@ class _AgentDetailState extends State<AgentDetail> {
   /// not arrived (the dialog is only opened from a tile that exists).
   AgentAsk _taskOf(int i) {
     final a = _shown?.$2;
-    final asks = a == null ? agentAsks : _asksFor(a);
-    return i < asks.length ? asks[i] : agentAsks.first;
+    if (a == null) return i < agentAsks.length ? agentAsks[i] : agentAsks.first;
+    final cells = _cells(a, _askColumns(context));
+    return (i < cells.length ? cells[i] : null) ?? agentAsks.first;
   }
 
   /// Focus the terminal, then type the task in and press Enter, which is what
@@ -486,19 +494,16 @@ class _AgentDetailState extends State<AgentDetail> {
   }
 
   Future<void> _ask(Agent a, int i) async {
-    final asks = _asksFor(a);
-    if (i >= asks.length) return;
+    final cells = _cells(a, _askColumns(context));
+    final ask = i < cells.length ? cells[i] : null;
+    if (ask == null) return;
     setState(() {
       _busy = true;
       _note = null;
     });
     // "now": typed into the session and entered, rather than queued behind
     // whatever it is doing.
-    final r = await widget.source.prompt(
-      widget.agentId,
-      asks[i].text,
-      mode: 'now',
-    );
+    final r = await widget.source.prompt(widget.agentId, ask.text, mode: 'now');
     if (!mounted) return;
     Haptics.fire(r.isOk ? HapticWhen.sent : HapticWhen.problem);
     setState(() {
@@ -530,6 +535,30 @@ class _AgentDetailState extends State<AgentDetail> {
     setState(
       () => _note = r.isOk ? null : (r.message ?? 'could not remove it'),
     );
+  }
+
+  /// Speaks a new task into the cell that was held: the host listens, the
+  /// service names what was said in its own short way, and the task lands in
+  /// that cell.
+  Future<void> _speakTask(int cell) async {
+    final listen = widget.onSpeakTask;
+    if (listen == null) return;
+    final a = _shown?.$2;
+    if (a == null) return;
+    final said = await listen(a);
+    if (!mounted || said == null || said.trim().isEmpty) return;
+    setState(() => _busy = true);
+    final r = await widget.source.addTask(
+      widget.agentId,
+      said.trim(),
+      slot: cell,
+    );
+    if (!mounted) return;
+    Haptics.fire(r.isOk ? HapticWhen.sent : HapticWhen.problem);
+    setState(() {
+      _busy = false;
+      _note = r.isOk ? null : (r.message ?? 'could not keep it');
+    });
   }
 
   /// Keeps a prompt from the history as one of the agent's own tasks, which
@@ -584,19 +613,57 @@ class _AgentDetailState extends State<AgentDetail> {
   /// card's scroller. A page with fewer cells than the list has simply takes
   /// more rows: a task that cannot be reached is worse than a board a row
   /// taller than the deck's.
-  /// Everything the quick list offers for [a]: the eight every agent has, and
-  /// then the ones kept for this agent (newest last, as they were made).
-  List<AgentAsk> _asksFor(Agent a) => [
-    ...agentAsks,
-    for (final t in a.tasks)
-      AgentAsk(
+  /// What sits in each cell of the quick list: the eight every agent has
+  /// first, then the ones kept for this agent in the cell each was made in.
+  /// A cell nothing claims is empty, and an empty cell can be spoken into.
+  List<AgentAsk?> _cellsFor(Agent a, int cells) {
+    final out = List<AgentAsk?>.filled(cells, null);
+    for (final (i, ask) in agentAsks.indexed) {
+      if (i < cells) out[i] = ask;
+    }
+    for (final t in a.tasks) {
+      final ask = AgentAsk(
         t.name.isEmpty ? 'task' : t.name,
         t.text,
         // A task made from a prompt is a prompt: the critter is thinking.
         CritterPose.think,
         id: t.id,
-      ),
-  ];
+        slot: t.slot,
+      );
+      // The cell it was made in, or the first free one after the built-in
+      // tasks when that cell is taken or off the end of this board.
+      var at = t.slot;
+      if (at < agentAsks.length || at >= cells || out[at] != null) {
+        at = -1;
+        for (var i = agentAsks.length; i < cells; i++) {
+          if (out[i] == null) {
+            at = i;
+            break;
+          }
+        }
+      }
+      if (at >= 0) out[at] = ask;
+    }
+    return out;
+  }
+
+  /// How many cells the board draws: whole rows, enough for the eight
+  /// built-in tasks, every task of the agent's own, and one spare row to
+  /// speak a new one into.
+  int _boardCells(Agent a, int columns) {
+    var most = agentAsks.length;
+    for (final t in a.tasks) {
+      final after = t.slot + 1;
+      if (after > most) most = after;
+    }
+    most += a.tasks.length; // room for the ones that fell in after their cell
+    final rows = (most + columns - 1) ~/ columns + 1;
+    return rows * columns;
+  }
+
+  /// What is in each cell of the board as it is drawn now.
+  List<AgentAsk?> _cells(Agent a, int columns) =>
+      _cellsFor(a, _boardCells(a, columns));
 
   /// How many tasks go across: four on a phone, and on a tablet ten held
   /// sideways or seven upright, which is how each of them is actually held.
@@ -618,9 +685,9 @@ class _AgentDetailState extends State<AgentDetail> {
         style: DeckHud.mono(size: tight ? 13 : 15, color: DeckHud.dim),
       );
     }
-    final asks = _asksFor(a);
     final columns = _askColumns(context);
-    final rows = (asks.length + columns - 1) ~/ columns;
+    final cells = _cells(a, columns);
+    final rows = cells.length ~/ columns;
     // Rows of cells, not a GridView: a grid of its own brings a Scrollable
     // with it, and a Scrollable that cannot scroll still takes the drag that
     // starts on it, so the card behind it stayed put under a thumb.
@@ -643,16 +710,23 @@ class _AgentDetailState extends State<AgentDetail> {
                     ),
                     child: AspectRatio(
                       aspectRatio: 1,
-                      child: switch (r * columns + c) {
-                        final i when i < asks.length => _AskTile(
-                          key: Key('ask-$i'),
-                          ask: asks[i],
-                          sent: _askSent == i,
+                      child: switch (cells[r * columns + c]) {
+                        final AgentAsk ask => _AskTile(
+                          key: Key('ask-${r * columns + c}'),
+                          ask: ask,
+                          sent: _askSent == r * columns + c,
                           onHold: _busy
                               ? null
-                              : () => setState(() => _taskAt = i),
+                              : () => setState(() => _taskAt = r * columns + c),
                         ),
-                        _ => const AgentsEmptyTile(),
+                        // An empty cell is where a new task is spoken into,
+                        // for a host that has a microphone to offer.
+                        _ => _EmptyAskCell(
+                          key: Key('ask-empty-${r * columns + c}'),
+                          onHold: widget.onSpeakTask == null || _busy
+                              ? null
+                              : () => unawaited(_speakTask(r * columns + c)),
+                        ),
                       },
                     ),
                   ),
@@ -2262,6 +2336,43 @@ class _TaskDialog extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// An empty cell of the quick list. Held, it asks the host to listen and a
+/// new task is made of whatever was said; where the host has no microphone it
+/// is the deck's plain empty cell and does nothing.
+class _EmptyAskCell extends StatelessWidget {
+  const _EmptyAskCell({super.key, required this.onHold});
+
+  final VoidCallback? onHold;
+
+  @override
+  Widget build(BuildContext context) {
+    if (onHold == null) return const AgentsEmptyTile();
+    return Pressable(
+      onTap: null,
+      onLongPress: onHold,
+      builder: (context, pressed) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: pressed ? DeckHud.panel : agentsEmptyFill,
+          border: Border.all(
+            color: pressed ? DeckHud.accent : agentsEmptyOutline,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            // Held, this cell listens: say the task and it lands here.
+            'hold\nto speak',
+            textAlign: TextAlign.center,
+            style: DeckHud.mono(
+              size: 11,
+              color: pressed ? DeckHud.accent : DeckHud.dim,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

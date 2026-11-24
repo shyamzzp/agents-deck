@@ -350,8 +350,13 @@ class FakeAgentsSource implements AgentsSource {
     String agentId,
     String text, {
     String name = '',
+    int slot = 0,
   }) async {
-    calls.add(('addTask', agentId, {'text': text, 'name': name}));
+    calls.add((
+      'addTask',
+      agentId,
+      {'text': text, 'name': name, 'slot': '$slot'},
+    ));
     return AgentsResult.ok;
   }
 

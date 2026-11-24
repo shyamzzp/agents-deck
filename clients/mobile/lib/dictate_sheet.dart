@@ -18,11 +18,26 @@ class DictateSheet extends StatefulWidget {
     required this.agent,
     required this.source,
     required this.onClose,
+    this.onSaid,
+    this.heading,
+    this.sendLabel = 'send',
   });
 
   final Agent agent;
   final AgentsSource source;
   final VoidCallback onClose;
+
+  /// Where what was said goes instead of the agent's terminal: holding an
+  /// empty cell of the quick list speaks a new task, and the card keeps it.
+  /// Null sends it to the terminal, which is what the "Needs you" screen
+  /// wants.
+  final void Function(String said)? onSaid;
+
+  /// The line under the agent's name; null is "speak your answer".
+  final String? heading;
+
+  /// What the main button says once there is something to send.
+  final String sendLabel;
 
   @override
   State<DictateSheet> createState() => _DictateSheetState();
@@ -101,6 +116,9 @@ class _DictateSheetState extends State<DictateSheet> {
     }
   }
 
+  /// Hands what was said to whoever asked for it, or sends it to the
+  /// terminal when nobody did.
+  ///
   /// Focus the terminal, then put the text in it and press Enter: the same
   /// as pasting it there yourself.
   ///
@@ -113,6 +131,11 @@ class _DictateSheetState extends State<DictateSheet> {
     if (text.isEmpty) return;
     setState(() => _stage = _Stage.sending);
     await Dictation.stop();
+    if (widget.onSaid case final said?) {
+      said(text);
+      if (mounted) widget.onClose();
+      return;
+    }
     await widget.source.focus(widget.agent.id);
     var sent = await widget.source.prompt(widget.agent.id, text, mode: 'now');
     for (final mode in ['type', 'queue']) {
@@ -172,9 +195,10 @@ class _DictateSheetState extends State<DictateSheet> {
               ),
               const SizedBox(height: 6),
               Text(
-                a.waiting?.title.isNotEmpty == true
-                    ? a.waiting!.title
-                    : 'speak your answer',
+                widget.heading ??
+                    (a.waiting?.title.isNotEmpty == true
+                        ? a.waiting!.title
+                        : 'speak your answer'),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: DeckHud.mono(size: 13, color: DeckHud.dim),
@@ -227,7 +251,7 @@ class _DictateSheetState extends State<DictateSheet> {
                   Expanded(
                     child: AgentButton(
                       key: const Key('dictate-send'),
-                      label: listening ? 'done' : 'send',
+                      label: listening ? 'done' : widget.sendLabel,
                       onTap: busy
                           ? null
                           : listening

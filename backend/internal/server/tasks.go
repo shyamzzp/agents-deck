@@ -38,6 +38,7 @@ func (s *Server) addTask(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Name string `json:"name"`
 		Text string `json:"text"`
+		Slot int    `json:"slot"` // the cell of the board it was made in
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in); err != nil {
 		writeErr(w, http.StatusBadRequest, "body must be {\"text\", \"name\"}")
@@ -47,7 +48,7 @@ func (s *Server) addTask(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, tasks.ErrEmpty.Error())
 		return
 	}
-	t, err := s.Tasks.Add(id, in.Name, in.Text)
+	t, err := s.Tasks.Add(id, in.Name, in.Text, in.Slot)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return

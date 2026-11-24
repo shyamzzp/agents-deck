@@ -160,8 +160,12 @@ type Context struct {
 // Task is one of an agent's own tasks: a prompt kept under a short name, which
 // the card draws as a tile beside the deck's built-in ones (internal/tasks).
 type Task struct {
-	ID    string    `json:"id"`
-	Name  string    `json:"name"`
-	Text  string    `json:"text"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Text string `json:"text"`
+	// Slot is the cell of the card's quick list it was made in, counted from
+	// the first cell of the board; 0 leaves it to fall in after the ones
+	// before it. The built-in tasks hold the first cells.
+	Slot  int       `json:"slot,omitempty"`
 	Added time.Time `json:"added"`
 }
