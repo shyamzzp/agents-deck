@@ -33,6 +33,9 @@ class LivePicker extends StatefulWidget {
 
 class _LivePickerState extends State<LivePicker> {
   late Future<List<LiveSession>> _sessions = widget.source.liveSessions();
+
+  /// How far it has been dragged sideways, for the swipe that closes it.
+  double _swipe = 0;
   String? _adding;
   String? _note;
 
@@ -56,79 +59,104 @@ class _LivePickerState extends State<LivePicker> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      key: const Key('live-picker'),
-      decoration: BoxDecoration(
-        color: DeckHud.bg,
-        borderRadius: BorderRadius.zero,
-      ),
-      padding: const EdgeInsets.fromLTRB(36, 34, 36, 30),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CritterSprite(
-            pose: CritterPose.wait,
-            width: 54,
-            body: DeckHud.ink,
-            cut: DeckHud.bg,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'add a session',
-            style: DeckHud.rm(30, DeckHud.ink, weight: 700, spacing: -0.3),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'claude sessions running in your own terminals. added ones are '
-            'watched: status, context and cost; answer them in their terminal.',
-            style: DeckHud.mono(
-              size: 15,
-              color: DeckHud.dim,
-            ).copyWith(height: 1.4),
-          ),
-          const SizedBox(height: 22),
-          Expanded(
-            child: FutureBuilder<List<LiveSession>>(
-              future: _sessions,
-              builder: (context, snap) {
-                if (!snap.hasData) {
-                  return Text(
-                    'looking…',
-                    style: DeckHud.mono(size: 16, color: DeckHud.dim),
-                  );
-                }
-                final list = snap.data!;
-                if (list.isEmpty) {
-                  return Text(
-                    'no other claude sessions running in your terminals',
-                    key: const Key('live-empty'),
-                    style: DeckHud.mono(size: 16, color: DeckHud.dim),
-                  );
-                }
-                return ListView.separated(
-                  padding: EdgeInsets.zero,
-                  itemCount: list.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, i) => _row(list[i]),
-                );
-              },
+    return GestureDetector(
+      // Dragged to the right, it closes, as an agent's card does: a sheet
+      // over the deck should go the same way as everything else over it.
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragUpdate: (d) => _swipe += d.delta.dx,
+      onHorizontalDragEnd: (d) {
+        final away =
+            _swipe > 80 || (d.primaryVelocity ?? 0) > 420 && _swipe > 24;
+        _swipe = 0;
+        if (away) widget.onClose();
+      },
+      onHorizontalDragCancel: () => _swipe = 0,
+      child: Container(
+        key: const Key('live-picker'),
+        decoration: BoxDecoration(
+          color: DeckHud.bg,
+          borderRadius: BorderRadius.zero,
+        ),
+        padding: const EdgeInsets.fromLTRB(36, 34, 36, 30),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CritterSprite(
+              pose: CritterPose.wait,
+              width: 54,
+              body: DeckHud.ink,
+              cut: DeckHud.bg,
             ),
-          ),
-          if (_note != null) ...[
             const SizedBox(height: 10),
-            Text(_note!, style: DeckHud.mono(size: 15, color: DeckHud.accent)),
-          ],
-          if (widget.showBack) ...[
-            const SizedBox(height: 18),
-            CardBackButton(
-              onTap: widget.onClose,
-              ink: DeckHud.ink,
-              outline: DeckHud.dim,
-              pressedFill: DeckHud.ink,
-              pressedInk: DeckHud.bg,
+            Text(
+              'add a session',
+              style: DeckHud.rm(30, DeckHud.ink, weight: 700, spacing: -0.3),
             ),
+            const SizedBox(height: 10),
+            Text(
+              'claude sessions running in your own terminals. added ones are '
+              'watched: status, context and cost; answer them in their terminal.',
+              style: DeckHud.mono(
+                size: 15,
+                color: DeckHud.dim,
+              ).copyWith(height: 1.4),
+            ),
+            const SizedBox(height: 22),
+            Expanded(
+              child: FutureBuilder<List<LiveSession>>(
+                future: _sessions,
+                builder: (context, snap) {
+                  if (snap.hasError) {
+                    // A device paired to look only, or one the deck refused:
+                    // saying "none running" would be a lie.
+                    return Text(
+                      'could not read the sessions: ${snap.error}',
+                      key: const Key('live-error'),
+                      style: DeckHud.mono(size: 15, color: DeckHud.accent),
+                    );
+                  }
+                  if (!snap.hasData) {
+                    return Text(
+                      'looking…',
+                      style: DeckHud.mono(size: 16, color: DeckHud.dim),
+                    );
+                  }
+                  final list = snap.data!;
+                  if (list.isEmpty) {
+                    return Text(
+                      'no other claude sessions running in your terminals',
+                      key: const Key('live-empty'),
+                      style: DeckHud.mono(size: 16, color: DeckHud.dim),
+                    );
+                  }
+                  return ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: list.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, i) => _row(list[i]),
+                  );
+                },
+              ),
+            ),
+            if (_note != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _note!,
+                style: DeckHud.mono(size: 15, color: DeckHud.accent),
+              ),
+            ],
+            if (widget.showBack) ...[
+              const SizedBox(height: 18),
+              CardBackButton(
+                onTap: widget.onClose,
+                ink: DeckHud.ink,
+                outline: DeckHud.dim,
+                pressedFill: DeckHud.ink,
+                pressedInk: DeckHud.bg,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

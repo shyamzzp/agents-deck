@@ -287,9 +287,11 @@ func TestMCPTools(t *testing.T) {
 	if _, isErr = toolText(t, out); isErr {
 		t.Errorf("list_sessions: %v", out)
 	}
+	// Listing the sessions someone started by hand, and putting one on the
+	// deck, is act: it starts nothing, and an act token can already prompt.
 	_, out = rpc(h, "/mcp", tok["doer"], call("list_sessions", nil))
-	if _, isErr = toolText(t, out); !isErr {
-		t.Errorf("act token listed sessions: %v", out)
+	if _, isErr = toolText(t, out); isErr {
+		t.Errorf("act token could not list sessions: %v", out)
 	}
 
 	// Audited under the token's name.

@@ -120,11 +120,11 @@ func TestNeedScope(t *testing.T) {
 		method, path string
 		want         string
 	}{
-		{"GET", "/v1/state", "view"}, {"GET", "/v1/events", "view"}, {"GET", "/v1/hats", "view"}, {"GET", "/v1/live", "admin"},
+		{"GET", "/v1/state", "view"}, {"GET", "/v1/events", "view"}, {"GET", "/v1/hats", "view"}, {"GET", "/v1/live", "act"},
 		{"POST", "/v1/agents/x/answer", "act"}, {"POST", "/v1/agents/x/focus", "act"}, {"POST", "/v1/agents/x/move", "act"}, {"POST", "/v1/agents/x/attention", "act"},
 		{"POST", "/v1/order", "act"}, {"POST", "/v1/hats", "act"}, {"POST", "/v1/agents/x/hat", "act"},
 		{"POST", "/v1/agents/x/dismiss", "admin"}, {"POST", "/v1/agents/x/resume", "admin"}, {"POST", "/v1/restore", "admin"},
-		{"POST", "/v1/live/s/add", "admin"}, {"POST", "/v1/agents/x/handoff", "admin"}, {"GET", "/v1/accounts", "view"},
+		{"POST", "/v1/live/s/add", "act"}, {"POST", "/v1/agents/x/handoff", "admin"}, {"GET", "/v1/accounts", "view"},
 	} {
 		if got := NeedScope(c.method, c.path); string(got) != c.want {
 			t.Errorf("%s %s: %s, want %s", c.method, c.path, got, c.want)

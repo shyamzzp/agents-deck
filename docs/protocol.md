@@ -231,8 +231,8 @@ belong to an active device in `devices.json`; a revoked device fails the handsha
 | scope | may |
 |---|---|
 | `view` | `GET /v1/state`, `/v1/events`, `/v1/hats`, `/v1/accounts`, `/v1/agents/{id}/queue` |
-| `act` | also answer, send and queue prompts (and cancel queued ones), focus, interrupt, move, order, hats |
-| `admin` | also dismiss, resume, hand over to another account, restore, `GET /v1/live`, add a live session |
+| `act` | also answer, send and queue prompts (and cancel queued ones), focus, interrupt, move, order, hats, and the sessions started by hand: `GET /v1/live` and putting one on the deck (it starts nothing) |
+| `admin` | also dismiss, resume, hand over to another account, restore, and starting agents |
 
 A request beyond the device's scope gets `403` with the command that would raise it.
 
