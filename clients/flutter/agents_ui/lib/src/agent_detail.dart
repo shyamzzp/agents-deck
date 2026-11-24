@@ -9,7 +9,6 @@ import 'agents_model.dart';
 import 'agents_style.dart';
 import 'critter.dart';
 import 'agents_app.dart';
-import 'pixel_icon.dart';
 
 /// How long the "sent" invert holds before the card closes itself.
 const _sentHold = Duration(milliseconds: 600);
@@ -59,6 +58,12 @@ class AgentDetail extends StatefulWidget {
 }
 
 class _AgentDetailState extends State<AgentDetail> {
+  /// The card's one scroller: everything between the mascot and the buttons.
+  final _scroll = ScrollController();
+
+  /// The tasks, for the double tap to bring into view.
+  final _asksKey = GlobalKey();
+
   /// Prompt the per-prompt UI state (selection, notes) belongs to.
   String? _promptId;
   String? _selected;
@@ -405,7 +410,6 @@ class _AgentDetailState extends State<AgentDetail> {
                         : const EdgeInsets.fromLTRB(36, 34, 36, 30),
                     child: child,
                   ),
-                  if (_asks) Positioned.fill(child: _askSheet(tight)),
                 ],
               ),
             );
@@ -418,133 +422,22 @@ class _AgentDetailState extends State<AgentDetail> {
   /// How far the card has been dragged sideways, for the swipe back.
   double _swipe = 0;
 
-  /// Opens the quick list. Reached by a double tap on the title or on any
-  /// empty part of the card.
-  void _openAsks() => setState(() {
-    _asks = true;
-    _askSent = -1;
-    _note = null;
-  });
-
-  /// The quick list: swipe through the asks, tap one to send it.
-  ///
-  /// It is a page per ask rather than a list, so a thumb can reach every one
-  /// of them on a phone without stretching for a row near the top.
-  Widget _askSheet(bool tight) {
-    return ColoredBox(
-      color: DeckHud.bg,
-      child: Column(
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              tight ? 18 : 36,
-              tight ? 14 : 24,
-              12,
-              0,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'ask it to\u2026',
-                    style: DeckHud.rm(
-                      tight ? 22 : 28,
-                      DeckHud.ink,
-                      weight: 700,
-                    ),
-                  ),
-                ),
-                GestureDetector(
-                  key: const Key('asks-close'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => setState(() => _asks = false),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(
-                      '\u00d7',
-                      style: DeckHud.rm(26, DeckHud.dim, weight: 700),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // The deck can only type into a session it started itself. A watched
-          // one, running in someone else's terminal, refuses with 422 and
-          // explains why -- so say it here rather than on every tap.
-          if (_shown?.$2 case final a? when !a.canBeTold)
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  tight ? 18 : 36,
-                  8,
-                  tight ? 18 : 36,
-                  8,
-                ),
-                child: Column(
-                  key: const Key('asks-refused'),
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'this one cannot be told',
-                      style: DeckHud.rm(
-                        tight ? 18 : 22,
-                        DeckHud.accent,
-                        weight: 700,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'It runs inside another app, which the deck cannot type '
-                      'into. Give it tasks where it lives.\n\nA session in a '
-                      'terminal is fine, including one you started yourself: '
-                      'the deck types into iTerm through iTerm.',
-                      style: DeckHud.mono(
-                        size: tight ? 13 : 15,
-                        color: DeckHud.dim,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  tight ? 18 : 36,
-                  tight ? 10 : 16,
-                  tight ? 18 : 36,
-                  tight ? 10 : 16,
-                ),
-                // The board the agent was picked from, with tasks in its
-                // cells: the same shape, the same tile, the same empty cells
-                // past the end of the list.
-                child: _askBoard(tight),
-              ),
-            ),
-          if (_note case final n?)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
-              child: Text(
-                n,
-                style: DeckHud.mono(size: 14, color: DeckHud.accent),
-              ),
-            ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(18, 0, 18, tight ? 12 : 20),
-            child: Text(
-              'Tapping one puts it on the agent\u2019s queue, so asking while '
-              'it works does not cut the turn short.',
-              style: DeckHud.mono(size: 12, color: DeckHud.dim),
-            ),
-          ),
-        ],
+  /// Brings the tasks into view. Reached by a double tap on the title or on
+  /// any empty part of the card: they live on the card now, so nothing opens
+  /// over it.
+  void _openAsks() {
+    final box = _asksKey.currentContext;
+    if (box == null) return;
+    unawaited(
+      Scrollable.ensureVisible(
+        box,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOut,
+        alignment: 0.1,
       ),
     );
   }
 
-  /// Sends one ask, and says so on its card.
   Future<void> _ask(int i) async {
     setState(() {
       _busy = true;
@@ -564,17 +457,15 @@ class _AgentDetailState extends State<AgentDetail> {
       _note = r.isOk ? null : (r.message ?? 'could not send');
     });
     if (r.isOk) {
+      // The tile says "sent" for a moment, then goes back to its name.
       Timer(_sentHold, () {
-        if (mounted) setState(() => _asks = false);
+        if (mounted) setState(() => _askSent = -1);
       });
     }
   }
 
-  /// The quick list, opened by a double tap on the card.
-  bool _asks = false;
+  /// Which task said "sent" last; -1 for none.
   int _askSent = -1;
-
-  // ---- hat picker ------------------------------------------------------------
 
   Future<void> _setHat(
     Agent a, {
@@ -592,25 +483,38 @@ class _AgentDetailState extends State<AgentDetail> {
     setState(() => _note = r.isOk ? null : (r.message ?? 'failed'));
   }
 
-  /// Every hat shape in the current colour, the colours, and "auto". A hat
-  /// belongs to the working folder: every agent there wears it.
-  /// The quick list as a board: the shape of the page the agent was picked
-  /// from, its cells holding tasks, and the deck's empty cells past the end.
+  /// The tasks as the deck's own board: as many columns as the page the
+  /// agent was picked from, its cells the same shape, and the deck's empty
+  /// cells past the end of the list.
   ///
-  /// A page smaller than the list (2 x 3 holds six, the list is eight) grows
-  /// by as many rows as it takes, since a task that cannot be reached is
-  /// worse than a board a row taller than the deck's.
-  Widget _askBoard(bool tight) {
+  /// It measures itself rather than filling a screen, since it sits in the
+  /// card's scroller. A page with fewer cells than the list has simply takes
+  /// more rows: a task that cannot be reached is worse than a board a row
+  /// taller than the deck's.
+  Widget _askBoard(bool tight, Agent a) {
+    // The deck can only type into a session it can reach. One inside another
+    // app refuses with 422 and says why, so the card says it here rather than
+    // on every tap.
+    if (!a.canBeTold) {
+      return Text(
+        'This one cannot be told: it runs inside another app, which the deck '
+        'cannot type into. Give it tasks where it lives.',
+        key: const Key('asks-refused'),
+        style: DeckHud.mono(size: tight ? 13 : 15, color: DeckHud.dim),
+      );
+    }
     final shape = widget.taskShape ?? const DeckShape(3, 3);
     final columns = shape.columns;
-    final needed = (agentAsks.length + columns - 1) ~/ columns;
-    final rows = shape.rowsFor(needed);
-    return DeckGrid(
+    final rows = shape.rowsFor((agentAsks.length + columns - 1) ~/ columns);
+    return GridView.count(
       key: const Key('asks-grid'),
-      square: false,
-      columns: columns,
-      rows: rows,
-      cells: [
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
+      crossAxisCount: columns,
+      mainAxisSpacing: DeckGrid.gap,
+      crossAxisSpacing: DeckGrid.gap,
+      children: [
         for (final (i, ask) in agentAsks.indexed)
           _AskTile(
             key: Key('ask-$i'),
@@ -624,6 +528,7 @@ class _AgentDetailState extends State<AgentDetail> {
     );
   }
 
+  /// The hat picker: every colour and shape a folder's critter can wear.
   Widget _hatPicker(Agent a) {
     final hat = a.hat ?? autoHatFor(a.cwd);
     return _card(
@@ -957,6 +862,7 @@ class _AgentDetailState extends State<AgentDetail> {
   // ---- overview (not blocked) ----------------------------------------------
 
   Widget _overview(AgentsState state, Agent a) {
+    final tight = DeckCompact.of(context);
     final (pillFill, pillInk) = switch (a.status) {
       AgentStatus.running => (DeckHud.ink, DeckHud.bg),
       AgentStatus.error => (DeckHud.accent, DeckHud.bg),
@@ -1007,176 +913,197 @@ class _AgentDetailState extends State<AgentDetail> {
             cut: DeckHud.bg,
           ),
           const SizedBox(height: 14),
-          // Doing now, and how many subagents work for it on the right.
-          Row(
-            children: [
-              Expanded(child: _label(nowLabel, DeckHud.dim)),
-              if (a.subagents.isNotEmpty)
-                Text(
-                  subagentCount(a.subagents.length),
-                  key: const Key('agent-subagent-count'),
-                  style: DeckHud.mono(size: 14, color: DeckHud.dim),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          nowValue,
-          if (_nowAside(state, a) case final aside?) ...[
-            const SizedBox(height: 6),
-            aside,
-          ],
-          // The working subagents, one to a row, like the boards draw them.
-          if (a.subagents.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            SubagentRows(
-              subagents: a.subagents,
-              body: body,
-              cut: DeckHud.bg,
-              // The other account's row below takes the room of two.
-              maxRows: others.isEmpty ? 4 : 2,
-            ),
-          ],
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text('context', style: DeckHud.rm(22, DeckHud.ink, weight: 700)),
-              const SizedBox(width: 12),
-              Text(
-                a.contextWindow > 0
-                    ? '${compactCount(a.contextUsed)} / ${compactCount(a.contextWindow)}'
-                    : '--',
-                style: DeckHud.mono(size: 14, color: DeckHud.dim),
-              ),
-              const Spacer(),
-              Text(
-                a.contextWindow > 0 ? '${a.contextPercent}%' : '--',
-                style: DeckHud.rm(22, DeckHud.ink, weight: 700),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          TickBar(value: a.contextFraction, color: DeckHud.ink),
-          const SizedBox(height: 16),
-          // Four figures as a table: one hairline round the lot and one
-          // between each pair, so a column is a cell rather than a gap. Half
-          // a point and a third of the dim ink: a rule has to be found rather
-          // than seen, or it reads as heavier than the figures it holds.
-          DecoratedBox(
-            key: const Key('agent-figures'),
-            decoration: BoxDecoration(
-              border: Border.all(color: _rule, width: 0.5),
-            ),
-            child: IntrinsicHeight(
-              child: Row(
+          // Everything between the mascot and the buttons scrolls as one:
+          // what it is doing, its numbers, the last prompt and the tasks.
+          // The title above and the two actions below stay where they are,
+          // since those are what a glance and a thumb want.
+          Expanded(
+            child: SingleChildScrollView(
+              key: const Key('agent-scroll'),
+              controller: _scroll,
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final (i, (label, value)) in [
-                    ('tokens out', compactCount(a.tokensOutput)),
-                    ('cache read', compactCount(a.cacheRead)),
-                    (
-                      'cost · est',
-                      a.codexThread ? '—' : '\$${a.costUsd.toStringAsFixed(2)}',
+                  // Doing now, and how many subagents work for it on the right.
+                  Row(
+                    children: [
+                      Expanded(child: _label(nowLabel, DeckHud.dim)),
+                      if (a.subagents.isNotEmpty)
+                        Text(
+                          subagentCount(a.subagents.length),
+                          key: const Key('agent-subagent-count'),
+                          style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  nowValue,
+                  if (_nowAside(state, a) case final aside?) ...[
+                    const SizedBox(height: 6),
+                    aside,
+                  ],
+                  // The working subagents, one to a row, like the boards draw them.
+                  if (a.subagents.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    SubagentRows(
+                      subagents: a.subagents,
+                      body: body,
+                      cut: DeckHud.bg,
+                      // The other account's row below takes the room of two.
+                      maxRows: others.isEmpty ? 4 : 2,
                     ),
-                    ('turns', '${a.turns}'),
-                  ].indexed)
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
-                        decoration: BoxDecoration(
-                          border: i == 0
-                              ? null
-                              : Border(
-                                  left: BorderSide(color: _rule, width: 0.5),
-                                ),
-                        ),
-                        child: Column(
-                          // Centred in the cell, not pushed to its left edge:
-                          // "turns" holds the shortest figure of the four, so
-                          // left-aligned it looked as though its cell had been
-                          // given all its room on the right.
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          // The label at the top of the cell and the figure on
-                          // its floor: a cell whose label wraps to two lines
-                          // would otherwise lift its figure above the rest.
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _label(label, DeckHud.dim),
-                            const SizedBox(height: 6),
-                            // 18, not 22: four of these across a phone was
-                            // the widest thing on the card, and "3.1m" does
-                            // not need to be read from across the desk.
-                            Text(
-                              value,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: DeckHud.rm(18, DeckHud.ink, weight: 600),
+                  ],
+                  const SizedBox(height: 16),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        'context',
+                        style: DeckHud.rm(22, DeckHud.ink, weight: 700),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        a.contextWindow > 0
+                            ? '${compactCount(a.contextUsed)} / ${compactCount(a.contextWindow)}'
+                            : '--',
+                        style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                      ),
+                      const Spacer(),
+                      Text(
+                        a.contextWindow > 0 ? '${a.contextPercent}%' : '--',
+                        style: DeckHud.rm(22, DeckHud.ink, weight: 700),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TickBar(value: a.contextFraction, color: DeckHud.ink),
+                  const SizedBox(height: 16),
+                  // Four figures as a table: one hairline round the lot and one
+                  // between each pair, so a column is a cell rather than a gap. Half
+                  // a point and a third of the dim ink: a rule has to be found rather
+                  // than seen, or it reads as heavier than the figures it holds.
+                  DecoratedBox(
+                    key: const Key('agent-figures'),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: _rule, width: 0.5),
+                    ),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final (i, (label, value)) in [
+                            ('tokens out', compactCount(a.tokensOutput)),
+                            ('cache read', compactCount(a.cacheRead)),
+                            (
+                              'cost · est',
+                              a.codexThread
+                                  ? '—'
+                                  : '\$${a.costUsd.toStringAsFixed(2)}',
                             ),
-                          ],
-                        ),
+                            ('turns', '${a.turns}'),
+                          ].indexed)
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
+                                decoration: BoxDecoration(
+                                  border: i == 0
+                                      ? null
+                                      : Border(
+                                          left: BorderSide(
+                                            color: _rule,
+                                            width: 0.5,
+                                          ),
+                                        ),
+                                ),
+                                child: Column(
+                                  // Centred in the cell, not pushed to its left edge:
+                                  // "turns" holds the shortest figure of the four, so
+                                  // left-aligned it looked as though its cell had been
+                                  // given all its room on the right.
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  // The label at the top of the cell and the figure on
+                                  // its floor: a cell whose label wraps to two lines
+                                  // would otherwise lift its figure above the rest.
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    _label(label, DeckHud.dim),
+                                    const SizedBox(height: 6),
+                                    // 18, not 22: four of these across a phone was
+                                    // the widest thing on the card, and "3.1m" does
+                                    // not need to be read from across the desk.
+                                    Text(
+                                      value,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: DeckHud.rm(
+                                        18,
+                                        DeckHud.ink,
+                                        weight: 600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (state.lastActiveText(a) case final active
+                      when active.isNotEmpty)
+                    Row(
+                      children: [
+                        _label(
+                          a.queuedNext.isEmpty ? 'last prompt' : 'queued next',
+                          DeckHud.dim,
+                        ),
+                        const Spacer(),
+                        Text(
+                          active,
+                          key: const Key('agent-last-active'),
+                          style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                        ),
+                      ],
+                    )
+                  else
+                    _label(
+                      a.queuedNext.isEmpty ? 'last prompt' : 'queued next',
+                      DeckHud.dim,
+                    ),
+                  const SizedBox(height: 8),
+                  // A prompt the deck has queued is shown instead of the last one: it
+                  // is what goes in next, and it is the thing someone looking at the
+                  // card wants to see arrive. Four lines of it, now that the card
+                  // scrolls: there is no leftover height left to measure.
+                  Text(
+                    a.queuedNext.isNotEmpty
+                        ? a.queuedNext
+                        : (a.lastPrompt.isEmpty ? '—' : a.lastPrompt),
+                    key: const Key('agent-last-prompt'),
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: DeckHud.rm(
+                      15,
+                      a.queuedNext.isNotEmpty ? DeckHud.accent : DeckHud.ink,
+                    ).merge(const TextStyle(height: 1.45)),
+                  ),
+                  // The tasks, in the cells of the page this agent was picked from.
+                  const SizedBox(height: 18),
+                  _label('ask it to\u2026', DeckHud.dim),
+                  const SizedBox(height: 8),
+                  Padding(
+                    key: _asksKey,
+                    padding: EdgeInsets.zero,
+                    child: _askBoard(tight, a),
+                  ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          if (state.lastActiveText(a) case final active when active.isNotEmpty)
-            Row(
-              children: [
-                _label(
-                  a.queuedNext.isEmpty ? 'last prompt' : 'queued next',
-                  DeckHud.dim,
-                ),
-                const Spacer(),
-                Text(
-                  active,
-                  key: const Key('agent-last-active'),
-                  style: DeckHud.mono(size: 14, color: DeckHud.dim),
-                ),
-              ],
-            )
-          else
-            _label(
-              a.queuedNext.isEmpty ? 'last prompt' : 'queued next',
-              DeckHud.dim,
-            ),
-          const SizedBox(height: 8),
-          // As many lines of it as fit, and never none: what the agent was
-          // last asked is half of why the card is open. On a phone that
-          // leaves one line, clipped rather than dropped. 15, not 17: it is
-          // the longest text on the card.
-          Expanded(
-            child: ClipRect(
-              child: LayoutBuilder(
-                builder: (context, box) {
-                  const style = TextStyle(height: 1.45);
-                  // Keep clear of the footer under it.
-                  final lines = ((box.maxHeight - 10) / (15 * 1.45))
-                      .floor()
-                      .clamp(1, 4);
-                  // A prompt the deck has queued is shown instead of the
-                  // last one: it is what goes in next, and it is the thing
-                  // someone looking at the card wants to see arrive.
-                  final queued = a.queuedNext.isNotEmpty;
-                  final text = queued
-                      ? a.queuedNext
-                      : (a.lastPrompt.isEmpty ? '—' : a.lastPrompt);
-                  return Text(
-                    text,
-                    key: const Key('agent-last-prompt'),
-                    maxLines: lines,
-                    overflow: TextOverflow.ellipsis,
-                    style: DeckHud.rm(
-                      15,
-                      queued ? DeckHud.accent : DeckHud.ink,
-                    ).merge(style),
-                  );
-                },
-              ),
-            ),
-          ),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -2105,14 +2032,17 @@ class _AskTile extends StatelessWidget {
               dimension: 170,
               child: Column(
                 children: [
-                  const SizedBox(height: 34),
-                  PixelIcon(
-                    key: Key('ask-icon-${ask.icon}'),
-                    name: ask.icon,
-                    color: ink,
-                    size: 74,
+                  const SizedBox(height: 30),
+                  CritterSprite(
+                    pose: ask.pose,
+                    species: CritterSpecies.claude,
+                    centerBody: true,
+                    showBubble: false,
+                    width: 92,
+                    body: ink,
+                    cut: fill,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   SizedBox(
                     width: 150,
                     child: Text(
