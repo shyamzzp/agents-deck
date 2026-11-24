@@ -411,6 +411,18 @@ class _AgentDetailState extends State<AgentDetail> {
                         : const EdgeInsets.fromLTRB(36, 34, 36, 30),
                     child: child,
                   ),
+                  if (_taskAt case final i?)
+                    Positioned.fill(
+                      child: _TaskDialog(
+                        key: const Key('task-dialog'),
+                        ask: _taskOf(i),
+                        tight: tight,
+                        busy: _busy,
+                        onClose: () => setState(() => _taskAt = null),
+                        onSend: () => unawaited(_sendTask(i)),
+                        onRemove: () => unawaited(_removeTaskAt(i)),
+                      ),
+                    ),
                   if (_history)
                     Positioned.fill(
                       child: _PromptDrawer(
@@ -451,6 +463,33 @@ class _AgentDetailState extends State<AgentDetail> {
     );
   }
 
+  /// The task the dialog is open on, or a placeholder while the state has
+  /// not arrived (the dialog is only opened from a tile that exists).
+  AgentAsk _taskOf(int i) {
+    final a = _shown?.$2;
+    final asks = a == null ? agentAsks : _asksFor(a);
+    return i < asks.length ? asks[i] : agentAsks.first;
+  }
+
+  /// Focus the terminal, then type the task in and press Enter, which is what
+  /// the dialog's one action does.
+  Future<void> _sendTask(int i) async {
+    final a = _shown?.$2;
+    if (a == null) return;
+    setState(() => _taskAt = null);
+    await widget.source.focus(a.id);
+    await _ask(a, i);
+  }
+
+  /// Takes one of the agent's own tasks off the board, from the dialog.
+  Future<void> _removeTaskAt(int i) async {
+    final a = _shown?.$2;
+    final id = _taskOf(i).id;
+    if (a == null || id == null) return;
+    setState(() => _taskAt = null);
+    await _dropTask(a, id);
+  }
+
   Future<void> _ask(Agent a, int i) async {
     final asks = _asksFor(a);
     if (i >= asks.length) return;
@@ -484,6 +523,9 @@ class _AgentDetailState extends State<AgentDetail> {
 
   /// The prompts drawer, opened from the turn count.
   bool _history = false;
+
+  /// Which task is held open in the dialog; null for none.
+  int? _taskAt;
 
   /// Takes one of the agent's own tasks off its grid (held, not tapped).
   Future<void> _dropTask(Agent a, String taskId) async {
@@ -588,12 +630,10 @@ class _AgentDetailState extends State<AgentDetail> {
             key: Key('ask-$i'),
             ask: ask,
             sent: _askSent == i,
-            onTap: _busy ? null : () => _ask(a, i),
-            // A task of the agent's own can be taken away again; the eight
-            // every agent has cannot.
-            onHold: ask.id == null
-                ? null
-                : () => unawaited(_dropTask(a, ask.id!)),
+            // Held, not tapped: a tap used to send the prompt the moment it
+            // landed, which is a lot to do by accident on a board of tiles.
+            // Holding one opens what can be done with it.
+            onHold: _busy ? null : () => setState(() => _taskAt = i),
           ),
         for (var i = asks.length; i < columns * rows; i++)
           const AgentsEmptyTile(),
@@ -2082,6 +2122,121 @@ class CardBackButton extends StatelessWidget {
   }
 }
 
+/// What can be done with one task, opened by holding its tile: send it to the
+/// terminal, or (for a task of this agent's own) take it off the board.
+///
+/// A tile used to send the moment it was tapped, which is a lot to do by
+/// accident on a board of them; holding one asks first.
+class _TaskDialog extends StatelessWidget {
+  const _TaskDialog({
+    super.key,
+    required this.ask,
+    required this.tight,
+    required this.busy,
+    required this.onClose,
+    required this.onSend,
+    required this.onRemove,
+  });
+
+  final AgentAsk ask;
+  final bool tight;
+  final bool busy;
+  final VoidCallback onClose;
+  final VoidCallback onSend;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            key: const Key('task-dialog-scrim'),
+            behavior: HitTestBehavior.opaque,
+            onTap: onClose,
+            child: ColoredBox(color: DeckHud.bg.withValues(alpha: 0.76)),
+          ),
+        ),
+        Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: tight ? 18 : 60),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {},
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 460),
+                padding: EdgeInsets.all(tight ? 16 : 22),
+                decoration: BoxDecoration(
+                  color: DeckHud.panel,
+                  border: Border.all(color: _rule, width: 0.5),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      ask.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: DeckHud.rm(
+                        tight ? 20 : 24,
+                        DeckHud.ink,
+                        weight: 700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      ask.text,
+                      maxLines: 6,
+                      overflow: TextOverflow.ellipsis,
+                      style: DeckHud.mono(size: 13, color: DeckHud.dim),
+                    ),
+                    const SizedBox(height: 16),
+                    AgentButton(
+                      key: const Key('task-send'),
+                      label: 'send to terminal',
+                      onTap: busy ? null : onSend,
+                      fill: DeckHud.ink,
+                      ink: DeckHud.bg,
+                      outline: DeckHud.ink,
+                      pressedFill: DeckHud.accent,
+                      pressedInk: DeckHud.bg,
+                    ),
+                    if (ask.id != null) ...[
+                      const SizedBox(height: 10),
+                      AgentButton(
+                        key: const Key('task-remove'),
+                        label: 'remove this task',
+                        onTap: busy ? null : onRemove,
+                        fill: const Color(0x00000000),
+                        ink: DeckHud.ink,
+                        outline: DeckHud.dim,
+                        pressedFill: DeckHud.ink,
+                        pressedInk: DeckHud.bg,
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    AgentButton(
+                      key: const Key('task-cancel'),
+                      label: 'cancel',
+                      onTap: onClose,
+                      fill: const Color(0x00000000),
+                      ink: DeckHud.dim,
+                      outline: DeckHud.dim,
+                      pressedFill: DeckHud.ink,
+                      pressedInk: DeckHud.bg,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// A table's hairlines: the dim ink at a third, so the rules hold the cells
 /// apart without drawing the eye themselves. The figures on the card and the
 /// prompts in the drawer are ruled with the same line.
@@ -2406,22 +2561,20 @@ class _AskTile extends StatelessWidget {
     super.key,
     required this.ask,
     required this.sent,
-    required this.onTap,
-    this.onHold,
+    required this.onHold,
   });
 
   final AgentAsk ask;
   final bool sent;
-  final VoidCallback? onTap;
 
-  /// Held rather than tapped: takes a task of the agent's own away. Null for
-  /// the eight every agent has, which cannot be removed.
+  /// Held rather than tapped: opens what can be done with the task. A tap
+  /// does nothing, because a tap used to send it the instant it landed.
   final VoidCallback? onHold;
 
   @override
   Widget build(BuildContext context) {
     return Pressable(
-      onTap: onTap,
+      onTap: null,
       onLongPress: onHold,
       builder: (context, pressed) {
         final on = pressed || sent;
