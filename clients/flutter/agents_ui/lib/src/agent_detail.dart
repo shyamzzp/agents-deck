@@ -8,6 +8,7 @@ import 'agents_client.dart';
 import 'agents_model.dart';
 import 'agents_style.dart';
 import 'critter.dart';
+import 'agents_app.dart';
 import 'pixel_icon.dart';
 
 /// How long the "sent" invert holds before the card closes itself.
@@ -33,6 +34,7 @@ class AgentDetail extends StatefulWidget {
     required this.onClose,
     this.onVisible,
     this.showBack = false,
+    this.taskShape,
   });
 
   final AgentsSource source;
@@ -46,6 +48,11 @@ class AgentDetail extends StatefulWidget {
   /// A back button left of the mascot, for hosts without an edge swipe
   /// (the menu bar app). The desk panel closes cards with its swipe.
   final bool showBack;
+
+  /// The shape of the page this agent was opened from, so the quick list is
+  /// drawn as that same board: the tasks sit in its cells, the same size as
+  /// the agents they were opened over. Null draws the list as a plain grid.
+  final DeckShape? taskShape;
 
   @override
   State<AgentDetail> createState() => _AgentDetailState();
@@ -503,67 +510,17 @@ class _AgentDetailState extends State<AgentDetail> {
             )
           else
             Expanded(
-              child: GridView.builder(
-                key: const Key('asks-grid'),
+              child: Padding(
                 padding: EdgeInsets.fromLTRB(
                   tight ? 18 : 36,
                   tight ? 10 : 16,
                   tight ? 18 : 36,
                   tight ? 10 : 16,
                 ),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: tight ? 3 : 4,
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                  childAspectRatio: 1,
-                ),
-                itemCount: agentAsks.length,
-                itemBuilder: (context, i) {
-                  final ask = agentAsks[i];
-                  final sent = _askSent == i;
-                  return GestureDetector(
-                    key: Key('ask-$i'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _busy ? null : () => _ask(i),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: sent ? DeckHud.ink : DeckHud.panel,
-                        border: Border.all(
-                          color: sent ? DeckHud.ink : DeckHud.dim,
-                          width: 2,
-                        ),
-                      ),
-                      // What it is, in one picture and one hyphenated name.
-                      // The sentence it sends is not shown: it is the same
-                      // every time, and the cell is a button, not a page.
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          PixelIcon(
-                            key: Key('ask-icon-${ask.icon}'),
-                            name: ask.icon,
-                            // The theme's own ink, or the background when the
-                            // cell is filled on a tap.
-                            color: sent ? DeckHud.bg : DeckHud.ink,
-                            size: tight ? 34 : 44,
-                          ),
-                          SizedBox(height: tight ? 8 : 10),
-                          Text(
-                            sent ? 'sent' : ask.label,
-                            maxLines: 2,
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
-                            style: DeckHud.mono(
-                              size: tight ? 13 : 15,
-                              color: sent ? DeckHud.bg : DeckHud.ink,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+                // The board the agent was picked from, with tasks in its
+                // cells: the same shape, the same tile, the same empty cells
+                // past the end of the list.
+                child: _askBoard(tight),
               ),
             ),
           if (_note case final n?)
@@ -637,6 +594,36 @@ class _AgentDetailState extends State<AgentDetail> {
 
   /// Every hat shape in the current colour, the colours, and "auto". A hat
   /// belongs to the working folder: every agent there wears it.
+  /// The quick list as a board: the shape of the page the agent was picked
+  /// from, its cells holding tasks, and the deck's empty cells past the end.
+  ///
+  /// A page smaller than the list (2 x 3 holds six, the list is eight) grows
+  /// by as many rows as it takes, since a task that cannot be reached is
+  /// worse than a board a row taller than the deck's.
+  Widget _askBoard(bool tight) {
+    final shape = widget.taskShape ?? const DeckShape(3, 3);
+    final columns = shape.columns;
+    final needed = (agentAsks.length + columns - 1) ~/ columns;
+    final rows = shape.rowsFor(needed);
+    return DeckGrid(
+      key: const Key('asks-grid'),
+      square: false,
+      columns: columns,
+      rows: rows,
+      cells: [
+        for (final (i, ask) in agentAsks.indexed)
+          _AskTile(
+            key: Key('ask-$i'),
+            ask: ask,
+            sent: _askSent == i,
+            onTap: _busy ? null : () => _ask(i),
+          ),
+        for (var i = agentAsks.length; i < columns * rows; i++)
+          const AgentsEmptyTile(),
+      ],
+    );
+  }
+
   Widget _hatPicker(Agent a) {
     final hat = a.hat ?? autoHatFor(a.cwd);
     return _card(
@@ -2079,6 +2066,69 @@ class CardBackButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// One task on the quick list, drawn as the deck draws an agent: the picture
+/// where the critter goes, the name under it, and the ink invert on a press.
+///
+/// Laid out on the deck's own 170 point cell and scaled to whatever the real
+/// one is, so a 3 x 3 page and an 8 x 8 page both keep the composition.
+class _AskTile extends StatelessWidget {
+  const _AskTile({
+    super.key,
+    required this.ask,
+    required this.sent,
+    required this.onTap,
+  });
+
+  final AgentAsk ask;
+  final bool sent;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      onTap: onTap,
+      builder: (context, pressed) {
+        final on = pressed || sent;
+        final fill = on ? DeckHud.ink : DeckHud.panel;
+        final ink = on ? DeckHud.bg : DeckHud.ink;
+        return Container(
+          decoration: BoxDecoration(
+            color: fill,
+            border: Border.all(color: on ? DeckHud.ink : DeckHud.dim),
+          ),
+          child: FittedBox(
+            child: SizedBox.square(
+              dimension: 170,
+              child: Column(
+                children: [
+                  const SizedBox(height: 34),
+                  PixelIcon(
+                    key: Key('ask-icon-${ask.icon}'),
+                    name: ask.icon,
+                    color: ink,
+                    size: 74,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: 150,
+                    child: Text(
+                      sent ? 'sent' : ask.label,
+                      maxLines: 2,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: DeckHud.mono(size: 16, color: ink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
