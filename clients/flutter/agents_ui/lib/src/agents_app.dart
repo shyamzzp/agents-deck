@@ -13,6 +13,7 @@ import 'agents_style.dart';
 import 'attention.dart';
 import 'attention_screen.dart';
 import 'critter.dart';
+import 'haptics.dart';
 import 'live_picker.dart';
 
 /// Agents app: a Stream-Deck-style board of the Mac's coding agents
@@ -119,6 +120,10 @@ class AgentsApp extends StatefulWidget {
 }
 
 class _AgentsAppState extends State<AgentsApp> {
+  /// How many agents needed you when the deck was last drawn, so a new one
+  /// buzzes once rather than on every frame.
+  int _wasNeeded = 0;
+
   late final _gridClock = CritterClock(animate: widget.animate);
   late final _cardClock = CritterClock(animate: widget.animate)
     ..running = false;
@@ -432,7 +437,7 @@ class _AgentsAppState extends State<AgentsApp> {
     if (box is RenderBox && box.hasSize) _heldSize = box.size;
     _holdTimer = Timer(_holdDelay, () {
       if (!mounted) return;
-      HapticFeedback.mediumImpact();
+      Haptics.fire(HapticWhen.hold);
       setState(() {
         _heldId = id;
         _heldSlot = slot;
@@ -522,6 +527,11 @@ class _AgentsAppState extends State<AgentsApp> {
         if (a.needsYou) _pageOf(a.slot),
     };
     final needsYou = NeedsYou.of(state);
+    // One buzz when the deck starts needing you, not one per rebuild.
+    if (needsYou.count > _wasNeeded) {
+      Haptics.fire(HapticWhen.needsYou);
+    }
+    _wasNeeded = needsYou.count;
     return Focus(
       autofocus: true,
       onKeyEvent: (_, e) {
@@ -550,7 +560,10 @@ class _AgentsAppState extends State<AgentsApp> {
                         ? const NeverScrollableScrollPhysics()
                         : null,
                     itemCount: pages + 1 + _lead,
-                    onPageChanged: (v) => setState(() => _view = v),
+                    onPageChanged: (v) {
+                      Haptics.fire(HapticWhen.page);
+                      setState(() => _view = v);
+                    },
                     itemBuilder: (context, v) => v < _lead
                         ? widget.leadingPage!
                         : v == _lead
