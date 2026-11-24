@@ -132,7 +132,7 @@ class _LivePickerState extends State<LivePicker> {
                   return ListView.separated(
                     padding: EdgeInsets.zero,
                     itemCount: list.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    separatorBuilder: (_, _) => const SizedBox(height: 6),
                     itemBuilder: (context, i) => _row(list[i]),
                   );
                 },
@@ -168,7 +168,7 @@ class _LivePickerState extends State<LivePicker> {
       key: Key('live-${s.sessionId}'),
       onTap: s.onBoard || _adding != null ? null : () => _add(s),
       builder: (context, pressed) => Container(
-        padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
+        padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
         decoration: BoxDecoration(
           color: pressed ? DeckHud.ink : DeckHud.panel,
           borderRadius: BorderRadius.zero,
@@ -184,18 +184,18 @@ class _LivePickerState extends State<LivePicker> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: DeckHud.rm(
-                      20,
+                      15,
                       pressed ? DeckHud.bg : DeckHud.ink,
                       weight: 600,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     s.background ? '${s.folder} · background' : s.folder,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: DeckHud.mono(
-                      size: 14,
+                      size: 12,
                       color: pressed ? DeckHud.bg : DeckHud.dim,
                     ),
                   ),
@@ -206,7 +206,7 @@ class _LivePickerState extends State<LivePicker> {
             Text(
               label,
               style: DeckHud.mono(
-                size: 16,
+                size: 13,
                 color: s.onBoard
                     ? DeckHud.dim
                     : (pressed ? DeckHud.bg : DeckHud.accent),

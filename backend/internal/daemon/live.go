@@ -37,7 +37,11 @@ type LiveCandidate struct {
 	Cwd       string    `json:"cwd"`
 	Folder    string    `json:"folder"`
 	Started   time.Time `json:"started"`
-	OnBoard   bool      `json:"onBoard"`
+	// LastActive is when the session last said anything (its transcript's
+	// time). A session resumed today began weeks ago, so this is what the
+	// picker orders by: what is being worked on comes first.
+	LastActive time.Time `json:"lastActive,omitempty"`
+	OnBoard    bool      `json:"onBoard"`
 	// Background: a session running without a terminal (claude --bg, or one
 	// the Claude desktop app runs); focus opens it with `claude attach`.
 	Background bool `json:"background,omitempty"`
@@ -177,8 +181,13 @@ func (d *Daemon) syncLive() {
 		if l.Name != "" && (info.AITitle == "" && info.Custom == "") {
 			title = l.Name
 		}
+		var lastActive time.Time
+		if st, err := os.Stat(l.Transcript); err == nil {
+			lastActive = st.ModTime()
+		}
 		cands = append(cands, LiveCandidate{SessionID: l.SessionID, Title: title, Cwd: l.Cwd,
-			Folder: filepath.Base(l.Cwd), Started: l.Started, OnBoard: added[l.SessionID], Background: l.Background})
+			Folder: filepath.Base(l.Cwd), Started: l.Started, LastActive: lastActive,
+			OnBoard: added[l.SessionID], Background: l.Background})
 		if added[l.SessionID] {
 			want[liveAgentID(l.SessionID)] = l
 		}
@@ -278,7 +287,22 @@ func (d *Daemon) LiveJSON() any {
 	d.live.mu.Lock()
 	defer d.live.mu.Unlock()
 	out := append([]LiveCandidate(nil), d.live.candidates...)
-	sort.Slice(out, func(i, j int) bool { return out[i].Started.After(out[j].Started) })
+	// Newest first by what it last did, not by when it began: a session
+	// resumed this morning may have been started a fortnight ago, and it was
+	// sinking to the bottom of the list while being worked in.
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i].LastActive, out[j].LastActive
+		if a.IsZero() {
+			a = out[i].Started
+		}
+		if b.IsZero() {
+			b = out[j].Started
+		}
+		if !a.Equal(b) {
+			return a.After(b)
+		}
+		return out[i].Started.After(out[j].Started)
+	})
 	return out
 }
 
