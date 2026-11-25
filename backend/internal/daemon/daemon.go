@@ -115,6 +115,9 @@ func (d *Daemon) Run() {
 			d.mineTasks()
 		}
 		d.tick(n)
+		// What became of the tasks the deck sent: a working one is done once
+		// its agent has stopped working (mine.go).
+		d.followTasks()
 	}
 }
 

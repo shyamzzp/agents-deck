@@ -37,19 +37,19 @@ func TestOverridesInConfig(t *testing.T) {
 	if h := b.For(dir); h == nil || !h.Auto {
 		t.Fatalf("automatic first: %+v", h)
 	}
-	if err := b.Set(dir, "cowboy", "teal", false); err != nil {
+	if err := b.Set(dir, "cowboy", "teal", "", false); err != nil {
 		t.Fatal(err)
 	}
 	if h := b.For(dir); h.Shape != "cowboy" || h.Color != "teal" || h.Auto {
 		t.Fatalf("override: %+v", h)
 	}
-	if err := b.Set(dir, "beret", "", false); err != nil { // keep the automatic colour
+	if err := b.Set(dir, "beret", "", "", false); err != nil { // keep the automatic colour
 		t.Fatal(err)
 	}
 	if h := b.For(dir); h.Shape != "beret" || h.Color != Auto(dir).Color {
 		t.Fatalf("shape only: %+v", h)
 	}
-	if err := b.Set(dir, None, "", false); err != nil {
+	if err := b.Set(dir, None, "", "", false); err != nil {
 		t.Fatal(err)
 	}
 	if h := b.For(dir); h != nil {
@@ -61,7 +61,7 @@ func TestOverridesInConfig(t *testing.T) {
 	if c["term"] != "tmux" || c["hats"] == nil {
 		t.Fatalf("other keys kept: %s", raw)
 	}
-	if err := b.Set(dir, "", "", true); err != nil {
+	if err := b.Set(dir, "", "", "", true); err != nil {
 		t.Fatal(err)
 	}
 	if h := b.For(dir); !h.Auto {
@@ -72,7 +72,7 @@ func TestOverridesInConfig(t *testing.T) {
 	if json.Unmarshal(raw, &c); c["hats"] != nil {
 		t.Fatalf("no empty hats key: %s", raw)
 	}
-	if b.Set(dir, "sombrero", "", false) == nil || b.Set(dir, "cap", "orange", false) == nil {
+	if b.Set(dir, "sombrero", "", "", false) == nil || b.Set(dir, "cap", "orange", "", false) == nil {
 		t.Fatal("unknown shapes and colours are refused")
 	}
 }

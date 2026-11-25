@@ -15,6 +15,7 @@ package daemon
 import (
 	"time"
 
+	"github.com/brushknight/agents-deck/backend/internal/model"
 	"github.com/brushknight/agents-deck/backend/internal/store"
 	"github.com/brushknight/agents-deck/backend/internal/tasks"
 )
@@ -23,6 +24,31 @@ import (
 // rest of the deck. Under three the band reads as broken rather than as a
 // band, and a session on its first day has nothing of its own yet.
 const mineLeast = 3
+
+// followTasks keeps each sent task's state in step with its agent: a task is
+// working while its agent works on the turn it started, and done once that
+// turn ends. An interrupt marks it cut short where it happens (the service's
+// interrupt route), because only there is it known to be an interrupt rather
+// than a turn that finished.
+//
+// A task has no sleeping or exited state: when its turn is over it is simply
+// a line on the board again, with what became of it written on it.
+func (d *Daemon) followTasks() {
+	if d.Tasks == nil {
+		return
+	}
+	changed := false
+	d.Store.Each(func(e *store.Entry) bool {
+		working := e.A.Status == model.Running || e.A.Status == model.Starting
+		if d.Tasks.Settle(e.A.ID, working) {
+			changed = true
+		}
+		return false
+	})
+	if changed {
+		d.Store.Touch()
+	}
+}
 
 // mineTasks judges every session that has something new to judge.
 func (d *Daemon) mineTasks() {
@@ -70,6 +96,9 @@ type TaskStore interface {
 	Checked(agent string) int
 	Mine(agent string, prompts []string) int
 	TopUp(agent string, least int) int
+	// Settle moves a task that was working to done once its agent has
+	// stopped working on it (see followTasks).
+	Settle(agent string, working bool) bool
 }
 
 var _ TaskStore = (*tasks.Store)(nil)

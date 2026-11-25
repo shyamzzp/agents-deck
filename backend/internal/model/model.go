@@ -148,6 +148,11 @@ type Hat struct {
 	Shape string `json:"shape"` // hard hat, cap, beanie, helmet, wizard, beret, chef, crown, headphones, propeller, top hat, cowboy, bandana
 	Color string `json:"color"` // teal, blue, yellow, green, purple, pink, sky, ink
 	Auto  bool   `json:"auto"`  // picked by the hash, not by hand
+	// Critter is the creature drawn for this folder: "" is the deck's own
+	// critter, and one of egg, cracked, baby, kid, grown, strong, mighty or
+	// legend draws that creature instead. Picked by hand beside the hat, and
+	// nothing grows into it: it is a look, not a pet.
+	Critter string `json:"critter,omitempty"`
 }
 
 // Pet is an agent's pet (Settings > General > Agent pets): it eats the
@@ -258,6 +263,18 @@ type Task struct {
 	// Pinned keeps a task through every rotation, mined or not.
 	Pinned bool `json:"pinned,omitempty"`
 
+	// State is what became of the last time this task was sent to its
+	// agent's terminal: TaskRunning while the agent works on it,
+	// TaskStopped when it was interrupted, TaskDone when its turn ended, ""
+	// when it has not been sent since the service started. A task is not an
+	// agent: it never sleeps or exits, it is simply there until it is asked
+	// for again.
+	State string `json:"state,omitempty"`
+
+	// Ran is when it was last sent, so a card can count the time a running
+	// task has been working.
+	Ran time.Time `json:"ran,omitempty"`
+
 	// Shared is a task the deck offered this agent because the rest of the
 	// deck keeps asking for it, rather than one mined from this session's own
 	// prompts. One of these is never evidence for another: what the deck
@@ -271,6 +288,14 @@ type Task struct {
 const (
 	TaskCustom = "custom"
 	TaskMined  = "mined"
+)
+
+// What a task is doing, as the API spells it. A task has no sleeping or
+// exited state: it is a line waiting to be asked again.
+const (
+	TaskRunning = "running"     // its agent is working on it now
+	TaskStopped = "interrupted" // its turn was cut short
+	TaskDone    = "done"        // its turn ended on its own
 )
 
 // Band is 0 for a task someone made and 1 for one the deck mined, which is

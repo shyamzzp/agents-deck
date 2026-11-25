@@ -236,6 +236,11 @@ func (s *Server) api() *http.ServeMux {
 			Interrupt bool   `json:"interrupt"`
 			Mode      string `json:"mode"`     // now | interrupt | queue | type ("": now, or interrupt with "interrupt": true)
 			Position  string `json:"position"` // queue only: back (default) | front
+			// TaskID says this text is one of the agent's own tasks, so the
+			// deck can follow what became of it: it is working from here
+			// until its turn ends or is cut short, and the card draws it the
+			// way it draws a working agent.
+			TaskID string `json:"taskId"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 3*MaxPromptBytes)).Decode(&body); err != nil {
 			writeErr(w, http.StatusBadRequest, `body must be {"text": "...", "mode": "now"|"interrupt"|"queue"|"type"}`)
@@ -282,10 +287,21 @@ func (s *Server) api() *http.ServeMux {
 			unlock := s.queue.lock(id)
 			err := t.Type(id, text)
 			unlock()
+			if err == nil && body.TaskID != "" && s.Tasks != nil {
+				s.Tasks.Sent(id, body.TaskID)
+				s.Store.Touch()
+			}
 			s.act(w, err)
 			return
 		}
-		s.act(w, s.prompt(p, r.PathValue("id"), text, mode == "interrupt"))
+		id := r.PathValue("id")
+		err = s.prompt(p, id, text, mode == "interrupt")
+		if err == nil && body.TaskID != "" && s.Tasks != nil {
+			// It went in: that task is what the agent is working on now.
+			s.Tasks.Sent(id, body.TaskID)
+			s.Store.Touch()
+		}
+		s.act(w, err)
 	})
 	mux.HandleFunc("GET /v1/agents/{id}/queue", s.getQueue)
 	mux.HandleFunc("GET /v1/agents/{id}/prompts", s.getPrompts)
@@ -299,7 +315,14 @@ func (s *Server) api() *http.ServeMux {
 		s.act(w, s.Ctl.Focus(r.PathValue("id")))
 	})
 	mux.HandleFunc("POST /v1/agents/{id}/interrupt", func(w http.ResponseWriter, r *http.Request) {
-		s.act(w, s.Ctl.Interrupt(r.PathValue("id")))
+		id := r.PathValue("id")
+		err := s.Ctl.Interrupt(id)
+		// Esc on a working task: the tile says it was cut short rather than
+		// finished, as an agent's own status does.
+		if err == nil && s.Tasks != nil && s.Tasks.Interrupted(id) {
+			s.Store.Touch()
+		}
+		s.act(w, err)
 	})
 	mux.HandleFunc("POST /v1/agents/{id}/dismiss", func(w http.ResponseWriter, r *http.Request) {
 		s.act(w, s.Ctl.Dismiss(r.PathValue("id")))
@@ -529,6 +552,10 @@ type hatBody struct {
 	Shape  string `json:"shape"`
 	Color  string `json:"color"`
 	Auto   bool   `json:"auto"`
+	// Critter is the creature this folder wears in place of the deck's own:
+	// one of hats.Critters, or "" for the critter. Absent leaves whatever the
+	// folder already wears.
+	Critter *string `json:"critter"`
 }
 
 // setHat stores a folder's hat and tells every client.
@@ -541,7 +568,13 @@ func (s *Server) setHat(w http.ResponseWriter, folder string, b hatBody) {
 		writeErr(w, http.StatusBadRequest, `give a "shape" (or "auto": true)`)
 		return
 	}
-	if err := s.Hats.Set(folder, b.Shape, b.Color, b.Auto); err != nil {
+	critter := ""
+	if b.Critter != nil {
+		critter = *b.Critter
+	} else if h := s.Hats.For(folder); h != nil {
+		critter = h.Critter // picking a hat leaves the creature alone
+	}
+	if err := s.Hats.Set(folder, b.Shape, b.Color, critter, b.Auto); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}

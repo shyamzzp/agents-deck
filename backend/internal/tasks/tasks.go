@@ -76,6 +76,18 @@ type Store struct {
 	// away is never mined again for that agent, and it says what a request
 	// that is not worth keeping looks like on this deck.
 	thrown map[string][]string
+
+	// run is the task each agent last sent to its terminal, and what became
+	// of it. Only one can be working at a time: an agent runs one turn. Held
+	// in memory, so nothing is left "running" after a restart.
+	run map[string]ran
+}
+
+// ran is one agent's last sent task.
+type ran struct {
+	id    string
+	state string
+	at    time.Time
 }
 
 // ThrownMax is how many thrown-away tasks are remembered per agent.
@@ -104,6 +116,9 @@ func (s *Store) load() {
 	s.loaded = true
 	s.byID, s.checked = map[string][]Task{}, map[string]int{}
 	s.thrown = map[string][]string{}
+	if s.run == nil {
+		s.run = map[string]ran{}
+	}
 	b, err := os.ReadFile(s.Path)
 	if err != nil {
 		return
@@ -169,12 +184,29 @@ func ordered(list []Task) []Task {
 	return out
 }
 
-// List is an agent's own tasks, in the order the board draws them.
+// List is an agent's own tasks, in the order the board draws them, each with
+// what became of the last time it was sent.
 func (s *Store) List(agent string) []Task {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.load()
-	return append([]Task(nil), s.byID[agent]...)
+	return s.withState(agent, s.byID[agent])
+}
+
+// withState copies a list and stamps the state of the one last sent.
+func (s *Store) withState(agent string, list []Task) []Task {
+	out := append([]Task(nil), list...)
+	r, ok := s.run[agent]
+	if !ok {
+		return out
+	}
+	for i := range out {
+		if out[i].ID == r.id {
+			out[i].State, out[i].Ran = r.state, r.at
+			break
+		}
+	}
+	return out
 }
 
 // All is every agent's tasks, for the state the clients read.
@@ -184,9 +216,62 @@ func (s *Store) All() map[string][]Task {
 	s.load()
 	out := make(map[string][]Task, len(s.byID))
 	for id, list := range s.byID {
-		out[id] = append([]Task(nil), list...)
+		out[id] = s.withState(id, list)
 	}
 	return out
+}
+
+// Sent records that a task has just gone to its agent's terminal: it is
+// working from now until the turn it started ends ([Store.Settle]) or is cut
+// short ([Store.Interrupted]). A task sent while another was working takes
+// its place, because an agent runs one turn at a time.
+func (s *Store) Sent(agent, taskID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	for _, t := range s.byID[agent] {
+		if t.ID == taskID {
+			s.run[agent] = ran{id: taskID, state: model.TaskRunning, at: time.Now().UTC()}
+			return
+		}
+	}
+}
+
+// Settle moves a working task to done once its agent has stopped working. It
+// reports whether anything changed, so the caller can tell the boards.
+func (s *Store) Settle(agent string, working bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.run[agent]
+	if !ok || working || r.state != model.TaskRunning {
+		return false
+	}
+	r.state = model.TaskDone
+	s.run[agent] = r
+	return true
+}
+
+// Interrupted marks an agent's working task as cut short: the deck pressed
+// Esc, or something else ended the turn early. It reports whether a working
+// task was there to mark.
+func (s *Store) Interrupted(agent string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.run[agent]
+	if !ok || r.state != model.TaskRunning {
+		return false
+	}
+	r.state = model.TaskStopped
+	s.run[agent] = r
+	return true
+}
+
+// Running is the task an agent is working on now, if it is working on one.
+func (s *Store) Running(agent string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.run[agent]
+	return r.id, ok && r.state == model.TaskRunning
 }
 
 // Checked is how many of an agent's prompts the miner has read.
@@ -392,6 +477,9 @@ func (s *Store) removeLocked(agent, taskID string) bool {
 				delete(s.byID, agent)
 			}
 			s.throwLocked(agent, t.Text)
+			if r, ok := s.run[agent]; ok && r.id == taskID {
+				delete(s.run, agent)
+			}
 			return true
 		}
 	}
@@ -455,6 +543,7 @@ func (s *Store) Forget(agent string) {
 	delete(s.byID, agent)
 	delete(s.checked, agent)
 	delete(s.thrown, agent)
+	delete(s.run, agent)
 	s.save()
 }
 

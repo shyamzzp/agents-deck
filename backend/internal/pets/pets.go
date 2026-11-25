@@ -81,12 +81,16 @@ const (
 	MaxStep       = 3.0
 )
 
-// AlwaysOn: Agent pets can't be turned off for now. The setting is still
-// read and written ("pets": {"on": false} stays in config.json), but the
-// effective value is on; false brings the switch back.
-const AlwaysOn = true
+// AlwaysOn would pin Agent pets on whatever the setting says. This deck
+// leaves the switch alone: the creatures are offered as a look a folder can
+// wear (hats.Critters, picked beside the hat) rather than as something that
+// hatches and grows on every card, and a pet that grows is switched on by
+// hand with "pets": {"on": true}.
+const AlwaysOn = false
 
-// Defaults is Agent pets on (it is opt-out), with the default levels.
+// Defaults is Agent pets on (it is opt-out), with the default levels. A deck
+// that would rather keep its mascots and its folder hats says so in its own
+// config.json ("pets": {"on": false}), which [AlwaysOn] no longer overrides.
 func Defaults() Config { return Config{On: true, FirstLevel: FirstLevel, Step: Growth} }
 
 // ConfigOf reads config.json's "pets" (true, false, an object or nothing:

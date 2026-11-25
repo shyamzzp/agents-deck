@@ -10,6 +10,7 @@ import 'agents_client.dart';
 import 'agents_model.dart';
 import 'agents_style.dart';
 import 'critter.dart';
+import 'critter_look.dart';
 import 'haptics.dart';
 import 'agents_app.dart';
 import 'pet_card.dart';
@@ -576,6 +577,9 @@ class _AgentDetailState extends State<AgentDetail> {
         widget.agentId,
         ask.text,
         mode: 'now',
+        // One of the agent's own: the deck follows what becomes of it, and
+        // the tile is drawn working until its turn ends.
+        taskId: ask.id,
       );
       if (!mounted) return;
       Haptics.fire(r.isOk ? HapticWhen.sent : HapticWhen.problem);
@@ -674,12 +678,14 @@ class _AgentDetailState extends State<AgentDetail> {
     Agent a, {
     String? shape,
     String? color,
+    String? critter,
     bool auto = false,
   }) async {
     final r = await widget.source.setHat(
       a.id,
       shape: shape,
       color: color,
+      critter: critter,
       auto: auto,
     );
     if (!mounted) return;
@@ -716,6 +722,8 @@ class _AgentDetailState extends State<AgentDetail> {
         rank: t.rank,
         mined: t.mined,
         pinned: t.pinned,
+        state: t.state,
+        ran: t.ran,
       );
       at++;
     }
@@ -1126,17 +1134,17 @@ class _AgentDetailState extends State<AgentDetail> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              CritterSprite(
-                pose: CritterPose.idle,
-                species: critterSpeciesFor(a.tool),
+              critterLookSprite(
+                hat.critter,
                 hat: a.hat,
+                tool: a.tool,
                 width: 54,
                 body: DeckHud.ink,
                 cut: DeckHud.bg,
               ),
               const SizedBox(width: 16),
               Text(
-                'hat',
+                'look',
                 style: DeckHud.rm(30, DeckHud.ink, weight: 700, spacing: -0.3),
               ),
             ],
@@ -1151,6 +1159,49 @@ class _AgentDetailState extends State<AgentDetail> {
               size: 15,
               color: DeckHud.dim,
             ).copyWith(height: 1.4),
+          ),
+          const SizedBox(height: 18),
+          // Who wears the hat: the deck's own critter, or one of the
+          // creatures. Picked for the folder, like the hat, and it stays as
+          // picked: nothing here hatches or grows.
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final look in ['', ...critterLooks])
+                Pressable(
+                  key: Key('look-${look.isEmpty ? 'critter' : look}'),
+                  onTap: () => _setHat(
+                    a,
+                    shape: hat.shape,
+                    color: hat.color,
+                    critter: look,
+                  ),
+                  builder: (context, pressed) => Container(
+                    width: 84,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: pressed ? DeckHud.ink : DeckHud.panel,
+                      borderRadius: BorderRadius.zero,
+                      border: Border.all(
+                        color: look == hat.critter
+                            ? DeckHud.ink
+                            : DeckHud.panel,
+                        width: 2,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: critterLookSprite(
+                      look,
+                      hat: a.hat,
+                      tool: a.tool,
+                      width: 64,
+                      body: pressed ? DeckHud.bg : DeckHud.dim,
+                      cut: pressed ? DeckHud.ink : DeckHud.panel,
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 18),
           Wrap(
@@ -1175,12 +1226,10 @@ class _AgentDetailState extends State<AgentDetail> {
                       ),
                     ),
                     alignment: Alignment.center,
-                    child: CritterSprite(
-                      pose: CritterPose.wait,
-                      species: critterSpeciesFor(a.tool),
+                    child: critterLookSprite(
+                      hat.critter,
                       hat: AgentHat(shape: shape, color: hat.color),
-                      showBubble: false,
-                      centerBody: true,
+                      tool: a.tool,
                       width: 64,
                       body: pressed ? DeckHud.bg : DeckHud.dim,
                       cut: pressed ? DeckHud.ink : DeckHud.panel,
@@ -1319,7 +1368,8 @@ class _AgentDetailState extends State<AgentDetail> {
                       _hats = true;
                       _note = null;
                     }),
-              child: CritterSprite(
+              child: agentMascot(
+                a,
                 pose: critterPoseOf(a, inStatus: state.inStatus(a)),
                 celebrateUntil: DateTime.now().add(
                   critterCelebration - state.inStatus(a),
@@ -1327,8 +1377,6 @@ class _AgentDetailState extends State<AgentDetail> {
                 afterCelebrate: a.unseen
                     ? CritterPose.hungry
                     : CritterPose.idle,
-                species: critterSpeciesFor(a.tool),
-                hat: a.hat,
                 width: 54,
                 body: body,
                 cut: cut,
@@ -3185,11 +3233,20 @@ class _AskTile extends StatelessWidget {
       onLongPress: null,
       builder: (context, pressed) {
         final on = pressed || sent || lifted;
-        final fill = on ? DeckHud.ink : DeckHud.panel;
+        // A task the agent is working on is drawn the way a working agent is:
+        // the accent behind it, so the board says at a glance which line is
+        // in the terminal now. One that was cut short keeps a mark until it
+        // is asked for again. A task never sleeps: when its turn is over the
+        // tile is simply itself again.
+        final fill = ask.running
+            ? DeckHud.accent
+            : on
+            ? DeckHud.ink
+            : DeckHud.panel;
         // One colour for every task, the agent colour of whichever theme is
         // on: what tells them apart is the hat, as it does on the deck. No
         // frame around it either, since the deck's own tiles have none.
-        final ink = on ? DeckHud.bg : DeckHud.ink;
+        final ink = ask.running || on ? DeckHud.bg : DeckHud.ink;
         return DecoratedBox(
           decoration: BoxDecoration(color: fill),
           child: FittedBox(
@@ -3218,10 +3275,14 @@ class _AskTile extends StatelessWidget {
                     child: SizedBox(
                       width: 158,
                       child: Text(
-                        // A pinned task says so: it is the one the rotation
+                        // What it is doing comes before what it is called: a
+                        // working task shows how long it has been at it, and
+                        // a pinned one says so, being the one the rotation
                         // will not touch.
                         sent
                             ? 'sent'
+                            : ask.interrupted
+                            ? '${ask.label} \u00b7 stopped'
                             : ask.pinned
                             ? '${ask.label} \u00b7 pinned'
                             : ask.label,
@@ -3232,6 +3293,17 @@ class _AskTile extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (ask.running)
+                    // The clock of a working task, counting from the moment
+                    // it went in, as the card's own does for its agent.
+                    Ticking(
+                      every: const Duration(milliseconds: 100),
+                      builder: (context) => Text(
+                        _taskClock(ask.ran),
+                        maxLines: 1,
+                        style: DeckHud.mono(size: 15, color: ink),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -3240,6 +3312,19 @@ class _AskTile extends StatelessWidget {
       },
     );
   }
+}
+
+/// How long a working task has been working, in the deck's own way: seconds
+/// to a tenth under a minute, then minutes and seconds.
+String _taskClock(DateTime? since) {
+  if (since == null) return '';
+  final d = DateTime.now().toUtc().difference(since.toUtc());
+  if (d.isNegative) return '0.0s';
+  if (d.inMinutes < 1) {
+    return '${(d.inMilliseconds / 1000).toStringAsFixed(1)}s';
+  }
+  final m = d.inMinutes, sec = d.inSeconds % 60;
+  return '${m}m ${sec.toString().padLeft(2, '0')}s';
 }
 
 /// A square-capped "<", the deck's pixel style.

@@ -13,6 +13,7 @@ import 'agents_style.dart';
 import 'attention.dart';
 import 'attention_screen.dart';
 import 'critter.dart';
+import 'critter_look.dart';
 import 'haptics.dart';
 import 'live_picker.dart';
 import 'pet_art.dart';
@@ -964,7 +965,8 @@ class _AgentTileState extends State<AgentTile> {
                               const SizedBox(height: 6),
                             ] else ...[
                               const SizedBox(height: 30),
-                              CritterSprite(
+                              agentMascot(
+                                a,
                                 pose: critterPoseOf(
                                   a,
                                   inStatus: widget.state.inStatus(a),
@@ -975,12 +977,10 @@ class _AgentTileState extends State<AgentTile> {
                                 afterCelebrate: a.unseen
                                     ? CritterPose.hungry
                                     : CritterPose.idle,
-                                species: critterSpeciesFor(a.tool),
-                                hat: a.hat,
                                 centerBody: true,
                                 width: 92,
                                 body: c(look.body),
-                                bubble: look.bubble == null
+                                bubbleColor: look.bubble == null
                                     ? null
                                     : c(look.bubble!),
                                 cut: fill,

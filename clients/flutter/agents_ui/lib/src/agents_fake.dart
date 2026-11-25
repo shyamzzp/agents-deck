@@ -547,12 +547,17 @@ class FakeAgentsSource implements AgentsSource {
     String agentId, {
     String? shape,
     String? color,
+    String? critter,
     bool auto = false,
   }) async {
     calls.add((
       'hat',
       agentId,
-      auto ? {'auto': true} : {'shape': shape, 'color': color},
+      auto
+          ? {'auto': true}
+          // The creature only where one was picked, as the request has it:
+          // picking a hat says nothing about it.
+          : {'shape': shape, 'color': color, 'critter': ?critter},
     ));
     final a = _agent(agentId);
     if (a == null) return AgentsResult.ok;
@@ -568,6 +573,9 @@ class FakeAgentsSource implements AgentsSource {
               'shape': shape,
               'color': color ?? cur['color'] ?? 'teal',
               'auto': false,
+              // Picking a hat leaves the folder's creature alone, as the
+              // service does.
+              'critter': critter ?? cur['critter'] ?? '',
             };
     }
     _emit();
@@ -622,8 +630,26 @@ class FakeAgentsSource implements AgentsSource {
     String agentId,
     String text, {
     String mode = 'queue',
+    String? taskId,
   }) async {
-    calls.add(('prompt', agentId, {'text': text, 'mode': mode}));
+    calls.add((
+      'prompt',
+      agentId,
+      {'text': text, 'mode': mode, 'taskId': ?taskId},
+    ));
+    // A task sent from the card is working from now on, as the service has
+    // it: the tile draws that, and the fake's agents never finish by
+    // themselves unless the demo is animating.
+    if (taskId != null) {
+      final a = _agent(agentId);
+      for (final t in ((a?['tasks'] as List?) ?? const []).cast<Map>()) {
+        if (t['id'] == taskId) {
+          t['state'] = 'running';
+          t['ran'] = DateTime.now().toUtc().toIso8601String();
+        }
+      }
+      _emit();
+    }
     return AgentsResult.ok;
   }
 

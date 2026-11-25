@@ -152,7 +152,12 @@ class AgentSubagent {
 /// The pixel hat an agent wears, picked by its working folder (or by hand).
 
 class AgentHat {
-  const AgentHat({required this.shape, required this.color, this.auto = true});
+  const AgentHat({
+    required this.shape,
+    required this.color,
+    this.auto = true,
+    this.critter = '',
+  });
 
   /// One of [hatShapes].
   final String shape;
@@ -163,11 +168,21 @@ class AgentHat {
   /// Picked by the daemon's hash of the folder, not by hand.
   final bool auto;
 
+  /// The creature drawn for this folder in place of the deck's own critter:
+  /// one of [critterLooks], or "" for the critter. Picked by hand beside the
+  /// hat, and nothing grows into it: it is a look, not a pet.
+  final String critter;
+
   static AgentHat? fromJson(Object? j) {
     if (j is! Map<String, dynamic>) return null;
     final shape = _str(j['shape']), color = _str(j['color']);
     if (shape.isEmpty) return null;
-    return AgentHat(shape: shape, color: color, auto: j['auto'] == true);
+    return AgentHat(
+      shape: shape,
+      color: color,
+      auto: j['auto'] == true,
+      critter: _str(j['critter']),
+    );
   }
 
   @override
@@ -175,11 +190,26 @@ class AgentHat {
       other is AgentHat &&
       other.shape == shape &&
       other.color == color &&
-      other.auto == auto;
+      other.auto == auto &&
+      other.critter == critter;
 
   @override
-  int get hashCode => Object.hash(shape, color, auto);
+  int get hashCode => Object.hash(shape, color, auto, critter);
 }
+
+/// The creatures a folder can wear instead of the deck's critter: the shapes
+/// Agent pets draws, offered as a choice rather than as something that
+/// hatches. "" is the critter itself.
+const critterLooks = [
+  'egg',
+  'cracked',
+  'baby',
+  'kid',
+  'grown',
+  'strong',
+  'mighty',
+  'legend',
+];
 
 /// Every hat shape, in the daemon's order.
 const hatShapes = [
@@ -1162,6 +1192,8 @@ class AgentTask {
     this.rank = 0,
     this.source = 'custom',
     this.pinned = false,
+    this.state = '',
+    this.ran,
   });
 
   final String id;
@@ -1181,6 +1213,21 @@ class AgentTask {
   /// Kept through every rotation.
   final bool pinned;
 
+  /// What became of the last time it was sent: `running` while its agent
+  /// works on it, `interrupted` when its turn was cut short, `done` when the
+  /// turn ended, "" when it has not been sent. A task never sleeps or exits:
+  /// it is a line on the board, waiting to be asked again.
+  final String state;
+
+  /// When it was last sent, for counting how long it has been working.
+  final DateTime? ran;
+
+  /// Its agent is working on it now.
+  bool get running => state == 'running';
+
+  /// Its turn was cut short.
+  bool get interrupted => state == 'interrupted';
+
   /// Mined tasks rotate; the ones you made never do.
   bool get mined => source == 'mined';
 
@@ -1198,6 +1245,8 @@ class AgentTask {
       rank: _int(m['rank']),
       source: _str(m['source']).isEmpty ? 'custom' : _str(m['source']),
       pinned: m['pinned'] == true,
+      state: _str(m['state']),
+      ran: _time(m['ran']),
     );
   }
 }
@@ -1217,6 +1266,8 @@ class AgentAsk {
     this.rank = 0,
     this.mined = false,
     this.pinned = false,
+    this.state = '',
+    this.ran,
   });
 
   /// Set for a task kept for one agent (its handle, for taking it away);
@@ -1229,6 +1280,20 @@ class AgentAsk {
 
   /// Its place within its band, for a drag to move it to another.
   final int rank;
+
+  /// What became of the last time this task was sent ([AgentTask.state]), and
+  /// when it went. The built-in eight carry neither.
+  final String state;
+  final DateTime? ran;
+
+  /// Its agent is working on it now.
+  bool get running => state == 'running';
+
+  /// Its turn was cut short.
+  bool get interrupted => state == 'interrupted';
+
+  /// Its turn ended on its own.
+  bool get done => state == 'done';
 
   /// Found by the deck in the session's prompts, rather than made by hand.
   final bool mined;
