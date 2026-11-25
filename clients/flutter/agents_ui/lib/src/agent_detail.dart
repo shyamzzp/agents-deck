@@ -12,6 +12,15 @@ import 'agents_style.dart';
 import 'critter.dart';
 import 'haptics.dart';
 import 'agents_app.dart';
+import 'pet_card.dart';
+import 'pet_art.dart';
+import 'pet_hatch.dart';
+import 'usage_limits.dart';
+
+part 'agent_detail_pets.dart';
+
+/// Matches the morph card's landed corner radius (the morph lerps to 26).
+const _cardRadius = 26.0;
 
 /// How long the "sent" invert holds before the card closes itself.
 const _sentHold = Duration(milliseconds: 600);
@@ -38,6 +47,7 @@ class AgentDetail extends StatefulWidget {
     this.showBack = false,
     this.onSpeakTask,
     this.ringWidth = ContextRingPainter.defaultStroke,
+    this.menuBar = false,
   });
 
   final AgentsSource source;
@@ -62,6 +72,10 @@ class AgentDetail extends StatefulWidget {
   /// the context gauge round every tile, which is set in Settings. The frame
   /// on the cell a carried task is over is drawn in it.
   final double ringWidth;
+
+  /// In the menu bar app: no clock, and no text under 16 design pixels (the
+  /// card is shown at 0.61).
+  final bool menuBar;
 
   @override
   State<AgentDetail> createState() => _AgentDetailState();
@@ -89,6 +103,14 @@ class _AgentDetailState extends State<AgentDetail> {
 
   /// The hat picker is open (tap the mascot).
   bool _hats = false;
+
+  /// The pet's own page is open (tap the pet, Agent pets on).
+  bool _petPage = false;
+
+  bool get _menuBar => widget.menuBar;
+
+  /// setState for the pets page (an extension can't call it).
+  void _set(VoidCallback f) => setState(f);
 
   /// "stop" on a live agent needs a second tap; this arms it for a few seconds.
   bool _confirmStop = false;
@@ -299,7 +321,7 @@ class _AgentDetailState extends State<AgentDetail> {
         : 'stop';
   }
 
-  Widget _removeButton(Agent a, (Color, Color)? flash) {
+  Widget _removeButton(Agent a, (Color, Color)? flash, {bool square = false}) {
     final exited = a.status == AgentStatus.exited;
     final armed = _confirmStop && !exited;
     return AgentButton(
@@ -311,9 +333,18 @@ class _AgentDetailState extends State<AgentDetail> {
       padX: 6,
       fill: flash?.$1 ?? (armed ? DeckHud.accent : const Color(0x00000000)),
       ink: flash?.$2 ?? (armed ? DeckHud.bg : DeckHud.ink),
-      outline: flash?.$1 ?? (armed ? DeckHud.accent : DeckHud.dim),
+      outline:
+          flash?.$1 ??
+          (armed
+              ? DeckHud.accent
+              : square
+              ? _pRule
+              : DeckHud.dim),
       pressedFill: DeckHud.accent,
       pressedInk: DeckHud.bg,
+      square: square,
+      height: square ? 64 : 68,
+      fontSize: square ? 18 : 19,
     );
   }
 
@@ -358,7 +389,7 @@ class _AgentDetailState extends State<AgentDetail> {
         final state = frozen?.$1 ?? snap.state;
         final a = frozen?.$2 ?? state?.byId(widget.agentId);
         if (state == null || a == null) return _gone();
-        if (_hats) return _hatPicker(a);
+        if (_hats && a.pet == null) return _hatPicker(a);
         final p = frozen != null
             ? frozen.$3
             : (a.status == AgentStatus.waiting ? a.waiting : null);
@@ -366,6 +397,8 @@ class _AgentDetailState extends State<AgentDetail> {
           _syncPrompt(p);
           _shown = (state, a, p);
         }
+        // Agent pets on: the pet is the only mascot (agent_detail_pets.dart).
+        if (a.pet != null) return _petsBuild(state, a, p);
         return switch (p?.kind) {
           PromptKind.permission => _permission(state, a, p!),
           PromptKind.question => _question(state, a, p!),
@@ -1381,7 +1414,12 @@ class _AgentDetailState extends State<AgentDetail> {
       Text(text, style: DeckHud.mono(size: 14, color: color));
 
   /// Text link variant of "focus terminal" (prompt cards' footers).
-  Widget _focusLink(Agent a, {required Color ink, required Color surface}) {
+  Widget _focusLink(
+    Agent a, {
+    required Color ink,
+    required Color surface,
+    bool square = false,
+  }) {
     final flash = _flashColors('focus', onAccent: surface == DeckHud.accent);
     return Pressable(
       key: const Key('agent-focus'),
@@ -1396,12 +1434,17 @@ class _AgentDetailState extends State<AgentDetail> {
               : BoxDecoration(color: fill, borderRadius: BorderRadius.zero),
           child: Text(
             _flashKey == 'focus' && _flash == _Flash.sent
-                ? 'focused'
-                : 'focus terminal',
-            style: DeckHud.mono(size: 15, color: color).copyWith(
-              decoration: TextDecoration.underline,
-              decorationColor: color,
-            ),
+                ? (square ? 'FOCUSED' : 'focused')
+                : (square ? 'FOCUS TERMINAL' : 'focus terminal'),
+            style:
+                (square
+                        ? DeckHud.rm(16, color, weight: 700, spacing: 1.92)
+                        : DeckHud.mono(size: 15, color: color))
+                    .copyWith(
+                      decoration: TextDecoration.underline,
+                      decorationColor: color,
+                      decorationThickness: square ? 2 : null,
+                    ),
           ),
         );
       },
@@ -1419,6 +1462,7 @@ class _AgentDetailState extends State<AgentDetail> {
     };
     final body = AgentLook.of(a).body;
     final (nowLabel, nowValue) = _doingNow(a);
+    final lastLabel = a.showsAnswer ? 'last answer' : 'last prompt';
     final footer = [
       a.modelLabel,
       tildePath(a.cwd),
@@ -1628,14 +1672,14 @@ class _AgentDetailState extends State<AgentDetail> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    if (state.lastActiveText(a) case final active
-                        when active.isNotEmpty)
+                    if ((a.showsAnswer
+                            ? state.answeredText(a)
+                            : state.lastActiveText(a))
+                        case final active when active.isNotEmpty)
                       Row(
                         children: [
                           _label(
-                            a.queuedNext.isEmpty
-                                ? 'last prompt'
-                                : 'queued next',
+                            a.queuedNext.isEmpty ? lastLabel : 'queued next',
                             DeckHud.dim,
                           ),
                           const Spacer(),
@@ -1648,7 +1692,7 @@ class _AgentDetailState extends State<AgentDetail> {
                       )
                     else
                       _label(
-                        a.queuedNext.isEmpty ? 'last prompt' : 'queued next',
+                        a.queuedNext.isEmpty ? lastLabel : 'queued next',
                         DeckHud.dim,
                       ),
                     const SizedBox(height: 8),
@@ -1659,8 +1703,14 @@ class _AgentDetailState extends State<AgentDetail> {
                     Text(
                       a.queuedNext.isNotEmpty
                           ? a.queuedNext
+                          : a.showsAnswer
+                          ? a.lastAnswer
                           : (a.lastPrompt.isEmpty ? '—' : a.lastPrompt),
-                      key: const Key('agent-last-prompt'),
+                      key: Key(
+                        a.queuedNext.isEmpty && a.showsAnswer
+                            ? 'agent-last-answer'
+                            : 'agent-last-prompt',
+                      ),
                       // Five lines at 13: it is the longest thing on the card,
                       // and smaller text shows more of it in less room.
                       maxLines: 5,
@@ -1817,7 +1867,7 @@ class _AgentDetailState extends State<AgentDetail> {
     );
   }
 
-  Widget _handoffButton(Agent a, AgentAccount to) {
+  Widget _handoffButton(Agent a, AgentAccount to, {bool square = false}) {
     final key = 'handoff:${to.name}';
     final flash = _flashColors(key, onAccent: false);
     final armed = _confirmHandoff == to.name;
@@ -1836,6 +1886,7 @@ class _AgentDetailState extends State<AgentDetail> {
       pressedInk: DeckHud.bg,
       height: 52,
       fontSize: 16,
+      square: square,
     );
   }
 
@@ -2022,7 +2073,12 @@ class _AgentDetailState extends State<AgentDetail> {
     );
   }
 
-  Widget _permissionButton(Agent a, AgentPrompt p, AgentOption o) {
+  Widget _permissionButton(
+    Agent a,
+    AgentPrompt p,
+    AgentOption o, {
+    bool square = false,
+  }) {
     final flash = _flashColors(o.key, onAccent: true);
     final sent = _flashKey == o.key && _flash == _Flash.sent;
     final fill =
@@ -2038,8 +2094,9 @@ class _AgentDetailState extends State<AgentDetail> {
       pressedFill: o.primary ? DeckHud.ink : DeckHud.bg,
       pressedInk: o.primary ? DeckHud.bg : DeckHud.accent,
       height: 64,
-      fontSize: o.primary ? 20 : 18,
+      fontSize: square ? 20 : (o.primary ? 20 : 18),
       alignLeft: true,
+      square: square,
     );
     // Once one answer is out, the others step back.
     return Opacity(opacity: _closing && !sent ? 0.4 : 1, child: button);
@@ -2186,7 +2243,7 @@ class _AgentDetailState extends State<AgentDetail> {
     );
   }
 
-  Widget _questionRow(AgentOption o) {
+  Widget _questionRow(AgentOption o, {bool square = false}) {
     final on = o.key == _selected;
     final (title, sub) = o.titleAndSub;
     return Pressable(
@@ -2224,7 +2281,9 @@ class _AgentDetailState extends State<AgentDetail> {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: DeckHud.mono(size: 18, color: fg),
+                      style: square
+                          ? DeckHud.rm(18, fg, weight: 700)
+                          : DeckHud.mono(size: 18, color: fg),
                     ),
                     if (sub.isNotEmpty) ...[
                       const SizedBox(height: 4),
@@ -2232,10 +2291,15 @@ class _AgentDetailState extends State<AgentDetail> {
                         sub,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: DeckHud.mono(
-                          size: 13.5,
-                          color: ink ? agentsRowSubOnInk : DeckHud.dim,
-                        ),
+                        style: square
+                            ? DeckHud.rm(
+                                16,
+                                ink ? agentsRowSubOnInk : DeckHud.dim,
+                              )
+                            : DeckHud.mono(
+                                size: 13.5,
+                                color: ink ? agentsRowSubOnInk : DeckHud.dim,
+                              ),
                       ),
                     ],
                   ],
@@ -2257,7 +2321,7 @@ class _AgentDetailState extends State<AgentDetail> {
   }
 
   /// Outlined "focus the terminal" button for the dark prompt cards.
-  Widget _terminalButton(Agent a, String label) {
+  Widget _terminalButton(Agent a, String label, {bool square = false}) {
     final flash = _flashColors('focus', onAccent: false);
     return AgentButton(
       key: const Key('agent-focus'),
@@ -2265,9 +2329,12 @@ class _AgentDetailState extends State<AgentDetail> {
       onTap: _busy ? null : () => _focus(a),
       fill: flash?.$1 ?? const Color(0x00000000),
       ink: flash?.$2 ?? DeckHud.ink,
-      outline: flash?.$1 ?? DeckHud.dim,
+      outline: flash?.$1 ?? (square ? _pRule : DeckHud.dim),
       pressedFill: DeckHud.ink,
       pressedInk: DeckHud.bg,
+      square: square,
+      height: square ? 64 : 68,
+      fontSize: square ? 18 : 19,
     );
   }
 
@@ -2540,6 +2607,8 @@ class CardBackButton extends StatelessWidget {
     required this.outline,
     required this.pressedFill,
     required this.pressedInk,
+    this.square = false,
+    this.size,
   });
 
   final VoidCallback onTap;
@@ -2547,6 +2616,13 @@ class CardBackButton extends StatelessWidget {
   final Color outline;
   final Color pressedFill;
   final Color pressedInk;
+
+  /// Square corners (the agent page with pets on).
+  final bool square;
+
+  /// How big the square is drawn; null takes the deck's own sizes (49 on a
+  /// phone, 68 elsewhere).
+  final double? size;
 
   @override
   Widget build(BuildContext context) {
@@ -2559,8 +2635,11 @@ class CardBackButton extends StatelessWidget {
         // 49 on a phone, which is what AgentButton's 68 becomes there: a
         // square that keeps its full size stands taller than the row it is in.
         builder: (context, pressed) => Container(
-          width: DeckCompact.of(context) ? 49 : 68,
-          height: DeckCompact.of(context) ? 49 : 68,
+          // The caller's size where it gave one, else 49 on a phone, which is
+          // what AgentButton's 68 becomes there: a square that keeps its full
+          // size stands taller than the row it is in.
+          width: size ?? (DeckCompact.of(context) ? 49 : 68),
+          height: size ?? (DeckCompact.of(context) ? 49 : 68),
           decoration: BoxDecoration(
             color: pressed ? pressedFill : null,
             borderRadius: BorderRadius.zero,

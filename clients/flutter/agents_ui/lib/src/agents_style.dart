@@ -170,9 +170,14 @@ class AgentButton extends StatelessWidget {
     this.fontSize = 19,
     this.padX,
     this.alignLeft = false,
+    this.square = false,
   });
 
   final String label;
+
+  /// The agent page with pets on: square corners and a bold label, in
+  /// capitals unless it is a left-aligned answer.
+  final bool square;
 
   /// Null: disabled (no press feedback).
   final VoidCallback? onTap;
@@ -209,6 +214,7 @@ class AgentButton extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: tight ? (padX ?? 8) : 22),
         decoration: BoxDecoration(
           color: pressed ? pressedFill : fill,
+          // Square, as every edge on this deck is.
           borderRadius: BorderRadius.zero,
           // A 2pt outline round a 49pt button is a frame; one point is an
           // edge, which is all it has to be.
@@ -225,10 +231,18 @@ class AgentButton extends StatelessWidget {
           fit: BoxFit.scaleDown,
           alignment: alignLeft ? Alignment.centerLeft : Alignment.center,
           child: Text(
-            label,
+            // A pet's page says it louder: the label in caps, bold.
+            square && !alignLeft ? label.toUpperCase() : label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: DeckHud.mono(size: fs, color: pressed ? pressedInk : ink),
+            style: square
+                ? DeckHud.rm(
+                    fs,
+                    pressed ? pressedInk : ink,
+                    weight: 700,
+                    spacing: alignLeft ? 0 : fs * 0.12,
+                  )
+                : DeckHud.mono(size: fs, color: pressed ? pressedInk : ink),
           ),
         ),
       ),
