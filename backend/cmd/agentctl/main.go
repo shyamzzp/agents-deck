@@ -1190,6 +1190,7 @@ func serve(args []string) error {
 	var st *store.Store
 	var ctl server.Controller
 	var lc server.LocalController
+	var dmn *daemon.Daemon // nil in a demo: nothing of its own to mine
 	var fleet *demo.Demo
 	if *demoMode {
 		st = store.New("", strings.TrimSuffix(host, ".local")+" (demo)", version)
@@ -1217,6 +1218,7 @@ func serve(args []string) error {
 		if err != nil {
 			return err
 		}
+		dmn = d
 		d.Adopt()
 		go d.Run()
 		go d.WatchCodex()
@@ -1253,6 +1255,9 @@ func serve(args []string) error {
 	st.QueuedText = srv.Queue.Texts
 	srv.Tasks = tasks.Open(tasks.Default(paths.Data()))
 	st.TaskList = srv.Tasks.All
+	if dmn != nil {
+		dmn.Tasks = srv.Tasks // what the miner writes the found tasks to
+	}
 	go srv.RunQueue(context.Background())
 	errc := make(chan error, 4)
 	// The default Wi-Fi network for boards plugged in over USB: its password in
