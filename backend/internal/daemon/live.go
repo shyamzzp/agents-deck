@@ -59,6 +59,12 @@ type liveWatch struct {
 	// transcript's size and time stay the same (sessionMeta).
 	meta map[string]liveMeta
 
+	// joined: sessions on the deck because they were working or waiting on
+	// you (`sessions working`), rather than because anyone added them. Not
+	// written down: on a restart a session that still wants you joins again
+	// by itself, and one that has gone quiet should not come back.
+	joined map[string]bool
+
 	claudeBin  string        // resolved once from the login shell
 	reported   []claude.Live // last `claude agents --json`
 	reportedAt time.Time
@@ -164,9 +170,13 @@ func (d *Daemon) syncLive() {
 		}
 	}
 
-	auto := CurrentSessions() == SessionsAuto
+	mode := CurrentSessions()
+	auto, working := mode == SessionsAuto, mode == SessionsWorking
 	d.live.mu.Lock()
 	added := d.liveAdded()
+	if d.live.joined == nil {
+		d.live.joined = map[string]bool{}
+	}
 	joined := false
 	cands := make([]LiveCandidate, 0, len(found))
 	want := map[string]claude.Live{}
@@ -175,6 +185,27 @@ func (d *Daemon) syncLive() {
 			added[l.SessionID] = true // `sessions auto`: it joins the deck by itself
 			joined = true
 			log.Printf("session %s joined the deck by itself (sessions auto)", l.SessionID)
+		}
+		// `sessions working`: a session the deck did not put on the board
+		// comes on while it works or waits on you, and goes off again once
+		// you have looked at it. One you took off the deck stays off.
+		onItsOwn := false
+		if working && !added[l.SessionID] && !d.live.offDeck[l.SessionID] {
+			onItsOwn = d.live.joined[l.SessionID]
+			if onItsOwn {
+				// Already on by itself: it stays while it still wants you,
+				// which is what the "Needs you" screen is made of.
+				if e, ok := d.Store.Get(liveAgentID(l.SessionID)); !ok || !store.WantsYou(e.A) {
+					onItsOwn = false
+				}
+			} else if d.wantsYouNow(l) {
+				onItsOwn = true
+				log.Printf("session %s joined the deck by itself (sessions working)", l.SessionID)
+			}
+			d.live.joined[l.SessionID] = onItsOwn
+			if !onItsOwn {
+				delete(d.live.joined, l.SessionID)
+			}
 		}
 		info := d.sessionMeta(l)
 		title := info.Title()
@@ -187,8 +218,8 @@ func (d *Daemon) syncLive() {
 		}
 		cands = append(cands, LiveCandidate{SessionID: l.SessionID, Title: title, Cwd: l.Cwd,
 			Folder: filepath.Base(l.Cwd), Started: l.Started, LastActive: lastActive,
-			OnBoard: added[l.SessionID], Background: l.Background})
-		if added[l.SessionID] {
+			OnBoard: added[l.SessionID] || onItsOwn, Background: l.Background})
+		if added[l.SessionID] || onItsOwn {
 			want[liveAgentID(l.SessionID)] = l
 		}
 	}
@@ -227,6 +258,34 @@ func (d *Daemon) syncLive() {
 			return claude.FollowSubagents(e) || changed
 		})
 	}
+}
+
+// liveQuiet is how long after its last word a session stops being something
+// that wants you. A background session blocked on a question three weeks ago
+// is not news, and reading the tail of every transcript on the machine every
+// three seconds is work nobody asked for.
+const liveQuiet = 10 * time.Minute
+
+// wantsYouNow says whether a session nobody added belongs on the deck: it is
+// working on a turn, or it is waiting for an answer, and it said so recently.
+//
+// Claude Code's own report is used where it has one ("status": busy, or a
+// background session's "state": blocked). Where it says nothing, the end of
+// the transcript does, which is the same thing [Daemon.liveStatus] reads for
+// the sessions already on the board.
+func (d *Daemon) wantsYouNow(l claude.Live) bool {
+	if l.Transcript == "" {
+		return false
+	}
+	st, err := os.Stat(l.Transcript)
+	if err != nil || time.Since(st.ModTime()) > liveQuiet {
+		return false
+	}
+	if l.Reported {
+		return l.Busy || l.Blocked
+	}
+	turn, _, _ := claude.TranscriptTurn(l.Transcript, liveQuiet, l.Cwd)
+	return turn
 }
 
 // liveStatus reads a watched session's state off the end of its transcript:

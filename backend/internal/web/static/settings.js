@@ -1782,8 +1782,8 @@ function drawAgents() {
   const live = (S.live?.sessions || []).filter((s) => !s.onBoard);
   const rows = [];
   if (S.settings?.sessions) { // an older service has no such setting
-    rows.push(row('Put them on the deck', 'From a terminal or the Claude app. Automatically: each one joins by itself. One you take off stays off.', [
-      seg('Put sessions on the deck', [{ value: 'auto', text: 'Automatically' }, { value: 'pick', text: 'I choose' }], S.settings.sessions, (v) => patchSettings({ sessions: v })),
+    rows.push(row('Put them on the deck', 'From a terminal or the Claude app. While working: one joins by itself while it works or waits on you, and leaves once you have looked at it. Automatically: each one joins and stays. One you take off stays off.', [
+      seg('Put sessions on the deck', [{ value: 'working', text: 'While working' }, { value: 'auto', text: 'Automatically' }, { value: 'pick', text: 'I choose' }], S.settings.sessions, (v) => patchSettings({ sessions: v })),
     ], { cls: 'tint' }));
   }
   if (S.errors.live) rows.push(row(`Couldn't list them: ${S.errors.live.message}`, null, [], { cls: 'thin' }));

@@ -26,13 +26,17 @@ var Settings = map[string]struct {
 	"restore":  {[]string{RestoreAsk, RestoreAuto}, "agents lost with the tmux server (crash, reboot): ask = keep them for `agentctl restore`, auto = bring them back right away"},
 	"header":   {[]string{HeaderOn, HeaderOff}, "on = a band at the top of each agent terminal with its critter, name, status, context and cost; off = none"},
 	"mouse":    {[]string{MouseTmux, MouseNative}, "tmux = wheel scrolls tmux history, drag selects and copies, click opens links; native = your terminal handles the mouse (its own scrollback)"},
-	"sessions": {[]string{SessionsPick, SessionsAuto}, "Claude sessions started outside the deck (a terminal, the Claude app): pick = you add the ones you want, auto = each one joins the deck by itself (one you take off stays off)"},
+	"sessions": {[]string{SessionsPick, SessionsWorking, SessionsAuto}, "Claude sessions started outside the deck (a terminal, the Claude app): pick = you add the ones you want, working = one joins by itself while it is working or waiting on you and leaves once you have looked at it, auto = every one joins and stays (one you take off stays off)"},
 }
 
 // What happens to Claude sessions started outside the deck (`agentctl set sessions …`).
 const (
 	SessionsPick = "pick" // they join when you add them (agentctl add, Settings, a free cell)
-	SessionsAuto = "auto" // each one joins by itself, unless you took it off the deck
+	// SessionsWorking: one joins by itself while it is working on a turn or
+	// waiting on you, and leaves once you have looked at it. The deck holds
+	// what wants you rather than every session on the machine.
+	SessionsWorking = "working"
+	SessionsAuto    = "auto" // each one joins by itself, unless you took it off the deck
 )
 
 // CurrentSessions reads the sessions mode from config.json (default pick).
@@ -43,8 +47,9 @@ func CurrentSessions() string {
 	if b, err := os.ReadFile(paths.Config()); err == nil {
 		_ = json.Unmarshal(b, &c)
 	}
-	if c.Sessions == SessionsAuto {
-		return SessionsAuto
+	switch c.Sessions {
+	case SessionsAuto, SessionsWorking:
+		return c.Sessions
 	}
 	return SessionsPick
 }

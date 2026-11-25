@@ -97,7 +97,10 @@ const (
 	RestoreAuto = "auto"
 
 	SessionsPick = "pick" // Claude sessions started elsewhere join when you add them
-	SessionsAuto = "auto" // each one joins the deck by itself
+	// SessionsWorking: one joins by itself while it works or waits on you,
+	// and leaves once you have looked at it.
+	SessionsWorking = "working"
+	SessionsAuto    = "auto" // each one joins the deck by itself and stays
 )
 
 // Settings is GET /admin/v1/settings: every setting as one document.
@@ -160,7 +163,7 @@ func (a *Admin) SettingsNow() Settings {
 	if s.Restore != RestoreAuto {
 		s.Restore = RestoreAsk
 	}
-	if s.Sessions = str(cfg, "sessions", SessionsPick); s.Sessions != SessionsAuto {
+	if s.Sessions = str(cfg, "sessions", SessionsPick); s.Sessions != SessionsAuto && s.Sessions != SessionsWorking {
 		s.Sessions = SessionsPick
 	}
 	s.Updates = str(cfg, "updates", UpdatesNotify)
@@ -222,8 +225,8 @@ func (a *Admin) patchSettings(w http.ResponseWriter, r *http.Request) {
 	case p.Restore != nil && !oneOf(*p.Restore, RestoreAsk, RestoreAuto):
 		writeErr(w, http.StatusBadRequest, `restore must be "ask" or "auto"`)
 		return
-	case p.Sessions != nil && !oneOf(*p.Sessions, SessionsPick, SessionsAuto):
-		writeErr(w, http.StatusBadRequest, `sessions must be "pick" or "auto"`)
+	case p.Sessions != nil && !oneOf(*p.Sessions, SessionsPick, SessionsWorking, SessionsAuto):
+		writeErr(w, http.StatusBadRequest, `sessions must be "pick", "working" or "auto"`)
 		return
 	case p.Updates != nil && !oneOf(*p.Updates, UpdatesNotify, UpdatesAuto, UpdatesOff):
 		writeErr(w, http.StatusBadRequest, `updates must be "notify", "auto" or "off"`)

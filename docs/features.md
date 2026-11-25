@@ -151,7 +151,16 @@ The list comes from Claude Code itself (`claude agents --json`), so it covers ev
 
 Added sessions are **watched**: status (working, idle, hungry when a turn finishes while watched), activity, context, cost and subagents come from the session's transcript, and **focus** jumps to its terminal tab. Claude Code reports when one is blocked on you, so the tile turns "needs you"; answer it in that session (the deck can't type into it). Focus on a background session opens it in a new iTerm tab with `claude attach`. **remove from deck** takes the session off the deck; the session itself keeps running. Added sessions come back whenever they run again.
 
-To have every one join by itself, set **Put them on the deck** to **automatically** in Settings, Agents (`agentctl set sessions auto`): each Claude session the list shows joins the deck within a few seconds, including the ones the Claude desktop app starts from another session. A session you take off the deck stays off, also after a restart of the service, until you add it again. `pick` (the default) waits for you to add them.
+To have the ones that want you join by themselves, set **Put them on the deck** to **while working**
+(`agentctl set sessions working`): a session joins within a few seconds of starting a turn or asking you
+something, and leaves again once you have looked at it, so the deck holds what wants you rather than
+every session on the machine. Whether it is working is Claude Code's own answer (`"status": "busy"`, or
+a background session's `"state": "blocked"`); where it says nothing, the end of the transcript answers,
+and a session that has said nothing for ten minutes is not news.
+
+**Automatically** (`agentctl set sessions auto`) is the other way round: every session the list shows
+joins the deck and stays. A session you take off the deck stays off in both modes, also after a restart
+of the service, until you add it again. `pick` (the default) waits for you to add them.
 
 ## MCP: one agent runs the others
 
