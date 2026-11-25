@@ -44,7 +44,15 @@ Tap a tile for its card (in the browser, the agent's own page, with a box to sen
   unpinned one goes when another arrives, so the band follows what the session is actually for. A
   session joining a deck where at least two others keep the same request is offered it too. A
   session that comes back is read on from where it was left, so tiles you arranged, pinned or threw
-  away are not made again behind you.
+  away are not made again behind you: a task you take off the board is never found again for that
+  session.
+- **What a request means.** On macOS the deck also asks the system's own sentence model (no download,
+  nothing to keep warm) whether two requests mean the same thing, through a small helper beside the
+  service (`clients/words`). That is what lets it see that "give me the 24th" and "give me the 28th"
+  are one task asked about two days, that "reload the pdf" and "update the pdf" are one tile, and
+  that "explain what you have done" is already one of the eight. A task you pin tells it what
+  standing work looks like on your deck, and one you throw away tells it what does not; without the
+  helper the deck judges on the words alone, which is a shorter, blunter list, not a broken one.
 - **Last active** says when the agent last sent or got a message ("last active 3h ago"), also after a
   crash or a restart. `agentctl ls` shows it as ACTIVE, and `agentctl ls --sort active` puts the most
   recently active first.

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/brushknight/agents-deck/backend/internal/words"
 )
 
 // wordsMin and wordsMax are how long a kept prompt may be. One word is a
@@ -197,6 +198,47 @@ var surface = map[string]bool{
 // same request asked twice, said differently.
 const repeatAlike = 0.7
 
+// The thresholds the sentence model is read at, set from the model itself
+// rather than from the usual 0.85 a large one would want. Measured over
+// 22,155 pairs of real prompts from this machine's sessions: the median pair
+// scores 0.35, nine in ten are under 0.52, ninety-nine in a hundred under
+// 0.68, and only one in a thousand reaches 0.81.
+//
+//   - 0.80 is where the pairs are the same request said again about another
+//     day or another file ("give me the 24th" and "give me the 28th", "update
+//     the pdf" and "reload the pdf"), which is what grouping is for.
+//   - 0.70 for the built-in eight, because the model's absolute scores are
+//     coarse: at 0.66 "tell me the size of the folder" reads as "summarise
+//     what you have changed", and absorbing that would lose a real task.
+const (
+	senseAlike   = 0.80 // the same request, said in other words
+	senseBuiltin = 0.70 // one of the built-in eight, said in other words
+)
+
+// Sense is what tells the judge whether two requests mean the same thing.
+// internal/words is the one the service uses; nil means judge on the words
+// alone, which is a worse list of tasks, not a broken one.
+type Sense interface {
+	Vectors(texts []string) ([][]float32, error)
+}
+
+// Judge decides which of a session's prompts are worth a tile.
+//
+// Words alone cannot see that "look at today's meetings" and "check the
+// meetings scheduled for today" are one task, or that "run the tests" is the
+// built-in one said shorter. With a [Sense] it can, and the deck's own
+// history says what sort of thing is worth keeping at all: a task someone
+// pinned is what standing work looks like on this deck, and one they threw
+// away is what a request that belongs to one afternoon looks like.
+type Judge struct {
+	Sense Sense
+
+	// Standing and OneOff are what someone has already said about tasks like
+	// this by pinning them and by throwing them away.
+	Standing []string
+	OneOff   []string
+}
+
 // Found is one request the miner kept, with what made it worth keeping: how
 // many times the session asked for it, and whether it reads as standing work.
 type Found struct {
@@ -206,9 +248,12 @@ type Found struct {
 	Last    int // the turn it was last asked on, counted from 0
 
 	// What ordering is judged on besides the two above: how many words carry
-	// meaning, and whether it only changes one thing in front of you.
-	content int
-	surface bool
+	// meaning, whether it only changes one thing in front of you, and how
+	// much more it reads like the deck's standing work than like the things
+	// people throw away.
+	content  int
+	surface  bool
+	standing float32
 }
 
 // Candidates judges a whole session's prompts together, because what makes a
@@ -232,35 +277,51 @@ type Found struct {
 //
 // The shortest wording of a group is the one kept: it is the one that reads
 // as a task rather than as that afternoon's sentence.
-func Candidates(prompts []string) []Found {
+func Candidates(prompts []string) []Found { return Judge{}.Candidates(prompts) }
+
+// Candidates judges a session's prompts, with whatever sense of the words the
+// judge was given.
+func (j Judge) Candidates(prompts []string) []Found {
 	type group struct {
 		words []string
+		vec   []float32
 		found Found
 	}
 	var groups []*group
-	for i, p := range prompts {
-		text, ok := Reusable(p)
-		if !ok {
+	kept := make([]string, 0, len(prompts))
+	for _, p := range prompts {
+		if text, ok := Reusable(p); ok {
+			kept = append(kept, text)
+		} else {
+			kept = append(kept, "")
+		}
+	}
+	meaning := j.meaning(kept)
+	for i, text := range kept {
+		if text == "" {
 			continue
 		}
 		ws := fields(text)
+		vec := meaning[text]
 		var at *group
 		for _, g := range groups {
-			if overlap(ws, g.words) >= repeatAlike {
+			if overlap(ws, g.words) >= repeatAlike ||
+				words.Cosine(vec, g.vec) >= senseAlike {
 				at = g
 				break
 			}
 		}
 		if at == nil {
-			groups = append(groups, &group{words: ws, found: Found{Text: text, Repeats: 1, Last: i}})
+			groups = append(groups, &group{words: ws, vec: vec, found: Found{Text: text, Repeats: 1, Last: i}})
 			continue
 		}
 		at.found.Repeats++
 		at.found.Last = i
 		if len(ws) < len(at.words) { // the shortest wording reads best as a task
-			at.words, at.found.Text = ws, text
+			at.words, at.found.Text, at.vec = ws, text, vec
 		}
 	}
+	marks := j.marks()
 	out := make([]Found, 0, len(groups))
 	for _, g := range groups {
 		f := g.found
@@ -273,6 +334,21 @@ func Candidates(prompts []string) []Found {
 			}
 		}
 		f.surface = surface[g.words[0]]
+		if len(g.vec) > 0 {
+			// One of the eight said in other words is not worth a cell: the
+			// word rule only catches it when the words are the same ones.
+			if near(g.vec, marks.builtin) >= senseBuiltin {
+				continue
+			}
+			// How much this reads like the work this deck keeps, against how
+			// much it reads like the things it throws away. The difference,
+			// not either score: every score from this model sits inside a
+			// narrow band, and the difference is what moves.
+			f.standing = near(g.vec, marks.standing) - near(g.vec, marks.oneOff)
+			if f.standing >= standingClear {
+				f.Chore = true // standing work, whatever words it used
+			}
+		}
 		out = append(out, f)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -288,6 +364,9 @@ func Candidates(prompts []string) []Found {
 		}
 		if a.content != b.content {
 			return a.content > b.content
+		}
+		if a.standing != b.standing {
+			return a.standing > b.standing
 		}
 		// Of two alike, the one asked for most recently: it is the one the
 		// session is working on now.
@@ -434,11 +513,14 @@ func (s *Store) Mine(agent string, prompts []string) int {
 		from = 0 // the transcript was replaced: read it again
 	}
 	kept := 0
+	standing, oneOff := s.labels()
+	judge := Judge{Sense: s.Sense, Standing: standing, OneOff: oneOff}
+	thrown := s.Thrown(agent)
 	// Judged over the whole session, kept only from where the last pass
 	// stopped: a request asked three times before someone threw its tile away
 	// is not made again behind them, but the third asking still counts as
 	// evidence for the next request like it.
-	for _, f := range Candidates(prompts) {
+	for _, f := range judge.Candidates(prompts) {
 		if kept >= MinedMax {
 			// One pass never fills more than the band holds: the rest would
 			// only push each other out again before anyone saw them.
@@ -450,6 +532,9 @@ func (s *Store) Mine(agent string, prompts []string) int {
 		if s.alike(agent, f.Text) {
 			continue
 		}
+		if thrownAway(f.Text, thrown) {
+			continue // someone took this one off the board already
+		}
 		// The strongest first, and the slot carries that order into the rank,
 		// so the band reads strongest first as well.
 		if _, err := s.Add(agent, "", f.Text, model.TaskMined, kept); err == nil {
@@ -458,6 +543,18 @@ func (s *Store) Mine(agent string, prompts []string) int {
 	}
 	s.SetChecked(agent, len(prompts))
 	return kept
+}
+
+// thrownAway says whether this request, or one asking the same thing, was
+// taken off the board before.
+func thrownAway(text string, thrown []string) bool {
+	ws := fields(text)
+	for _, gone := range thrown {
+		if overlap(ws, fields(gone)) >= 0.8 {
+			return true
+		}
+	}
+	return false
 }
 
 // alike says whether the agent already keeps a task that asks for this.
@@ -554,6 +651,109 @@ func (s *Store) TopUp(agent string, least int) int {
 		}
 	}
 	return added
+}
+
+// standingClear is how much more a request has to read like the deck's
+// standing work than like the things people throw away before it counts as
+// standing whatever words it used. The scores from this model sit in a narrow
+// band, so a tenth of a point between them is a real difference.
+const standingClear = 0.1
+
+// seeds are what standing work looks like before anyone has pinned anything.
+// A new deck has no labels of its own; these are the shape of the thing, not
+// a list to match against.
+var seeds = struct{ standing, oneOff []string }{
+	standing: []string{
+		"check the meetings scheduled for today",
+		"run the tests and tell me what failed",
+		"summarise what happened today",
+		"update the plan with where we got to",
+		"check what is waiting for me",
+		"take the latest from the main branch",
+		"write up the week in the timesheet",
+	},
+	oneOff: []string{
+		"remove the rounded borders from the buttons",
+		"move this button to the left a bit",
+		"open the folder",
+		"give me a table",
+		"change the title to something shorter",
+		"delete the file we made earlier",
+	},
+}
+
+// marked is every sentence the judge compares a request against, as vectors.
+type marked struct{ builtin, standing, oneOff [][]float32 }
+
+// marks embeds what the judge compares against: the eight built-in tasks, and
+// what this deck has said about tasks like these by pinning them and throwing
+// them away. Without a sense of the words it is empty and nothing uses it.
+func (j Judge) marks() marked {
+	if j.Sense == nil {
+		return marked{}
+	}
+	all := make([]string, 0, len(builtin)+len(seeds.standing)+len(seeds.oneOff)+len(j.Standing)+len(j.OneOff))
+	all = append(all, builtin...)
+	all = append(all, seeds.standing...)
+	all = append(all, j.Standing...)
+	all = append(all, seeds.oneOff...)
+	all = append(all, j.OneOff...)
+	vecs, err := j.Sense.Vectors(all)
+	if err != nil || len(vecs) != len(all) {
+		return marked{}
+	}
+	at := 0
+	take := func(n int) [][]float32 {
+		out := vecs[at : at+n]
+		at += n
+		return out
+	}
+	return marked{
+		builtin:  take(len(builtin)),
+		standing: append(take(len(seeds.standing)), take(len(j.Standing))...),
+		oneOff:   append(take(len(seeds.oneOff)), take(len(j.OneOff))...),
+	}
+}
+
+// meaning is a vector for each request worth judging, by its text. A judge
+// with no sense of the words, or a helper that will not run, gives none, and
+// everything that reads it falls back to the words.
+func (j Judge) meaning(texts []string) map[string][]float32 {
+	if j.Sense == nil {
+		return nil
+	}
+	want := make([]string, 0, len(texts))
+	seen := map[string]bool{}
+	for _, t := range texts {
+		if t == "" || seen[t] {
+			continue
+		}
+		seen[t] = true
+		want = append(want, t)
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	vecs, err := j.Sense.Vectors(want)
+	if err != nil || len(vecs) != len(want) {
+		return nil
+	}
+	out := make(map[string][]float32, len(want))
+	for i, t := range want {
+		out[t] = vecs[i]
+	}
+	return out
+}
+
+// near is how alike a request is to the closest of a set of sentences.
+func near(v []float32, set [][]float32) float32 {
+	best := float32(0)
+	for _, other := range set {
+		if c := words.Cosine(v, other); c > best {
+			best = c
+		}
+	}
+	return best
 }
 
 // standing says whether a request reads as work that comes round again rather

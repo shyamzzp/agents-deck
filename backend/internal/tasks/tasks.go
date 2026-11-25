@@ -62,19 +62,31 @@ var ErrFull = errors.New("this agent keeps all the tasks it can; remove one firs
 type Store struct {
 	Path string
 
+	// Sense is what the miner judges meaning with, when the computer has it
+	// (internal/words). Nil judges on the words alone.
+	Sense Sense
+
 	mu     sync.Mutex
 	loaded bool
 	byID   map[string][]Task // agent id -> its tasks, custom band first, by rank
 	// checked is how many of an agent's prompts the miner has looked at, so a
 	// session that joins again carries on rather than starting over.
 	checked map[string]int
+	// thrown is what was taken off each agent's board. A task someone threw
+	// away is never mined again for that agent, and it says what a request
+	// that is not worth keeping looks like on this deck.
+	thrown map[string][]string
 }
+
+// ThrownMax is how many thrown-away tasks are remembered per agent.
+const ThrownMax = 40
 
 // diskFile is what is written. The first shape was a bare map of tasks; that
 // is still read, so an older deck's file is not thrown away.
 type diskFile struct {
-	Tasks   map[string][]Task `json:"tasks"`
-	Checked map[string]int    `json:"checked,omitempty"`
+	Tasks   map[string][]Task   `json:"tasks"`
+	Checked map[string]int      `json:"checked,omitempty"`
+	Thrown  map[string][]string `json:"thrown,omitempty"`
 }
 
 func Open(path string) *Store {
@@ -91,6 +103,7 @@ func (s *Store) load() {
 	}
 	s.loaded = true
 	s.byID, s.checked = map[string][]Task{}, map[string]int{}
+	s.thrown = map[string][]string{}
 	b, err := os.ReadFile(s.Path)
 	if err != nil {
 		return
@@ -100,6 +113,9 @@ func (s *Store) load() {
 		s.byID = f.Tasks
 		if f.Checked != nil {
 			s.checked = f.Checked
+		}
+		if f.Thrown != nil {
+			s.thrown = f.Thrown
 		}
 	} else {
 		// The older shape: agent id -> tasks, with nothing else in it.
@@ -114,7 +130,7 @@ func (s *Store) save() {
 	if s.Path == "" {
 		return
 	}
-	b, err := json.MarshalIndent(diskFile{Tasks: s.byID, Checked: s.checked}, "", "  ")
+	b, err := json.MarshalIndent(diskFile{Tasks: s.byID, Checked: s.checked, Thrown: s.thrown}, "", "  ")
 	if err != nil {
 		return
 	}
@@ -375,10 +391,55 @@ func (s *Store) removeLocked(agent, taskID string) bool {
 			if len(s.byID[agent]) == 0 {
 				delete(s.byID, agent)
 			}
+			s.throwLocked(agent, t.Text)
 			return true
 		}
 	}
 	return false
+}
+
+// throwLocked remembers that this text was taken off the board, so the miner
+// never puts it back and the judge knows what this deck does not want.
+func (s *Store) throwLocked(agent, text string) {
+	for _, had := range s.thrown[agent] {
+		if had == text {
+			return
+		}
+	}
+	list := append(s.thrown[agent], text)
+	if len(list) > ThrownMax {
+		list = list[len(list)-ThrownMax:]
+	}
+	s.thrown[agent] = list
+}
+
+// Thrown is what was taken off one agent's board, oldest first.
+func (s *Store) Thrown(agent string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	return append([]string(nil), s.thrown[agent]...)
+}
+
+// labels are what this deck has said about tasks like these: the texts people
+// pinned, and the texts they threw away, from every agent on it.
+func (s *Store) labels() (standing, oneOff []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	for _, list := range s.byID {
+		for _, t := range list {
+			if t.Pinned {
+				standing = append(standing, t.Text)
+			}
+		}
+	}
+	for _, list := range s.thrown {
+		oneOff = append(oneOff, list...)
+	}
+	sort.Strings(standing)
+	sort.Strings(oneOff)
+	return standing, oneOff
 }
 
 // Forget drops every task of an agent that is no longer on the deck.
@@ -386,11 +447,14 @@ func (s *Store) Forget(agent string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.load()
-	if _, ok := s.byID[agent]; !ok {
+	_, hasTasks := s.byID[agent]
+	_, hasThrown := s.thrown[agent]
+	if !hasTasks && !hasThrown {
 		return
 	}
 	delete(s.byID, agent)
 	delete(s.checked, agent)
+	delete(s.thrown, agent)
 	s.save()
 }
 

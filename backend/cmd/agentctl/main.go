@@ -46,6 +46,7 @@ import (
 	"github.com/brushknight/agents-deck/backend/internal/tasks"
 	"github.com/brushknight/agents-deck/backend/internal/tmux"
 	"github.com/brushknight/agents-deck/backend/internal/web"
+	"github.com/brushknight/agents-deck/backend/internal/words"
 )
 
 // version is stamped by release builds: -ldflags "-X main.version=<tag>".
@@ -1254,6 +1255,9 @@ func serve(args []string) error {
 	st.Queued = srv.Queue.Agents
 	st.QueuedText = srv.Queue.Texts
 	srv.Tasks = tasks.Open(tasks.Default(paths.Data()))
+	// What the miner judges meaning with, when this computer has the helper
+	// for it (clients/words). Without one it judges on the words alone.
+	srv.Tasks.Sense = &words.Sense{}
 	st.TaskList = srv.Tasks.All
 	if dmn != nil {
 		dmn.Tasks = srv.Tasks // what the miner writes the found tasks to
