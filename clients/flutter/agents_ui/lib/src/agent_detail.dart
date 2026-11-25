@@ -810,6 +810,10 @@ class _AgentDetailState extends State<AgentDetail> {
   bool _carriedIt = false;
   Offset _pointer = Offset.zero;
   Offset _wentDown = Offset.zero;
+
+  /// Where the card was scrolled to when the finger went down. The card
+  /// moving under the finger is what tells a scroll from a hold.
+  double _scrollAtDown = 0;
   Size _heldSize = const Size(90, 90);
 
   /// One cell of the quick list, and the whole of picking a task up.
@@ -864,30 +868,62 @@ class _AgentDetailState extends State<AgentDetail> {
     _armedCell = cell;
     _armedOwn = own;
     _armedLong = false;
+    _scrollAtDown = _scroll.hasClients ? _scroll.offset : 0;
     final box = _cellKeys[cell]?.currentContext?.findRenderObject();
     if (box is RenderBox && box.hasSize) _heldSize = box.size;
     _carryTimer = Timer(_carryDelay, () {
       if (!mounted || _armedCell != cell) return;
       _armedLong = true;
       if (!own) return;
-      Haptics.fire(HapticWhen.hold);
-      setState(() {
-        _heldCell = cell;
-        _overCell = cell;
-      });
+      _pickUp(cell);
     });
+  }
+
+  /// The task comes up in the finger.
+  void _pickUp(int cell) {
+    Haptics.fire(HapticWhen.hold);
+    setState(() {
+      _heldCell = cell;
+      _overCell = cell;
+    });
+  }
+
+  /// Nothing was picked up and nothing will be: the finger was scrolling.
+  void _disarm() {
+    _carryTimer?.cancel();
+    _carryTimer = null;
+    _armedCell = null;
+    _armedLong = false;
   }
 
   void _carryMoved(PointerMoveEvent e) {
     final travelled = (e.position - _wentDown).distance > kTouchSlop;
     if (_heldCell == null) {
-      // Still only held down: a finger that travels is scrolling the card,
-      // and what it scrolls past must not open anything.
-      if (travelled) {
-        _carryTimer?.cancel();
-        _carryTimer = null;
-        _armedCell = null;
-        _armedLong = false;
+      // Held down, nothing picked up yet. A finger that moves is not reason
+      // enough to give up on the hold: a thumb setting off to carry a tile
+      // starts moving at once, and giving up on it meant the carry never
+      // started unless someone held perfectly still for a fifth of a second.
+      final armed = _armedCell;
+      if (armed == null) return;
+      if (_scroll.hasClients && (_scroll.offset - _scrollAtDown).abs() > 4) {
+        // The card moved under the finger: that was a scroll, and what it
+        // scrolled past must not be picked up or opened.
+        _disarm();
+        return;
+      }
+      final d = e.position - _wentDown;
+      if (_armedOwn &&
+          d.dx.abs() > kTouchSlop &&
+          d.dx.abs() > d.dy.abs() * 1.5) {
+        // Sideways on a tile can only mean carrying it: the card scrolls up
+        // and down, so there is nothing else a sideways drag could be. It
+        // comes up at once, without waiting the hold out.
+        _armedLong = true;
+        _pickUp(armed);
+        setState(() {
+          _pointer = e.position;
+          _carriedIt = true;
+        });
       }
       return;
     }
