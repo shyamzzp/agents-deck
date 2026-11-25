@@ -868,14 +868,53 @@ class _ConfigPageState extends State<ConfigPage> {
   }
 
   /// What a moment is called in the settings, in the deck's own words.
-  String _hapticTitle(HapticWhen w) => switch (w) {
-    HapticWhen.tap => 'a tap answered',
-    HapticWhen.hold => 'something held',
-    HapticWhen.sent => 'a prompt went',
-    HapticWhen.problem => 'something refused',
-    HapticWhen.page => 'a page turned',
-    HapticWhen.needsYou => 'an agent needs you',
-  };
+  /// Where two settings go side by side. A tablet held upright is 810 points
+  /// across and one of these settings uses about 350 of it, so two fit with
+  /// room to spare and the page is half as tall; a phone held upright (390)
+  /// has room for one.
+  static const _twoColumnsFrom = 700.0;
+
+  /// One setting: its name, what it is, and the rows that set it.
+  Widget _section(String title, String about, List<Widget> rows) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(title, style: DeckHud.mono(size: 14, color: DeckHud.ink)),
+      const SizedBox(height: 6),
+      Text(about, style: DeckHud.mono(size: 12, color: DeckHud.dim)),
+      const SizedBox(height: 12),
+      ...rows,
+    ],
+  );
+
+  /// [blocks] laid out one or two to a line, with the gaps between them. They
+  /// are hung from the top rather than stretched: each carries its own
+  /// heading, and a section with three pages in it must not drag the height
+  /// of the one beside it.
+  List<Widget> _inColumns(BuildContext context, List<Widget> blocks) {
+    const gap = 22.0;
+    if (MediaQuery.sizeOf(context).width < _twoColumnsFrom) {
+      return [
+        for (final b in blocks) ...[const SizedBox(height: gap), b],
+      ];
+    }
+    final out = <Widget>[];
+    for (var i = 0; i < blocks.length; i += 2) {
+      out.add(const SizedBox(height: gap));
+      out.add(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: blocks[i]),
+            const SizedBox(width: 16),
+            Expanded(
+              child: i + 1 < blocks.length ? blocks[i + 1] : const SizedBox(),
+            ),
+          ],
+        ),
+      );
+    }
+    return out;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -894,82 +933,66 @@ class _ConfigPageState extends State<ConfigPage> {
               widget.deck == null ? 'not paired' : 'paired with ${widget.deck}',
               style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
-            const SizedBox(height: 22),
-            Text(
-              'every page',
-              style: DeckHud.mono(size: 14, color: DeckHud.ink),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'The grid each page of the deck is drawn in. A page holds as many '
-              'agents as it has cells, so making this smaller spreads the same '
-              'agents over more pages. They keep their places.',
-              style: DeckHud.mono(size: 12, color: DeckHud.dim),
-            ),
-            const SizedBox(height: 12),
-            _ShapeRow(
-              key: const Key('shape-row-default'),
-              title: 'all pages',
-              shape: layout.fallback,
-              accent: true,
-              onShape: widget.onFallback,
-            ),
-            const SizedBox(height: 22),
-            Text(
-              pages == 1 ? 'the deck: one page' : 'the deck: $pages pages',
-              style: DeckHud.mono(size: 14, color: DeckHud.ink),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Each page can be given a grid of its own; the rest stay as '
-              'above. The deck gains a page when the ones it has are full.',
-              style: DeckHud.mono(size: 12, color: DeckHud.dim),
-            ),
-            const SizedBox(height: 12),
-            for (var i = 0; i < pages; i++) ...[
-              if (i > 0) const SizedBox(height: 8),
-              _ShapeRow(
-                key: Key('shape-row-page-$i'),
-                title: 'page ${i + 1}',
-                note: layout.perPage.containsKey(i) ? 'its own' : 'as above',
-                shape: layout.shapeOf(i),
-                onShape: (sh) => widget.onPage(i, sh),
+            ..._inColumns(context, [
+              _section(
+                'every page',
+                'The grid each page of the deck is drawn in. A page holds as '
+                    'many agents as it has cells, so making this smaller '
+                    'spreads the same agents over more pages. They keep their '
+                    'places.',
+                [
+                  _ShapeRow(
+                    key: const Key('shape-row-default'),
+                    title: 'all pages',
+                    shape: layout.fallback,
+                    accent: true,
+                    onShape: widget.onFallback,
+                  ),
+                ],
               ),
-            ],
-            const SizedBox(height: 22),
-            Text(
-              'the \u201cneeds you\u201d page',
-              style: DeckHud.mono(size: 14, color: DeckHud.ink),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'The page before the deck, holding the agents waiting on you. '
-              'The deck does not number it, and it holds sixteen spots '
-              'whatever grid it is drawn in.',
-              style: DeckHud.mono(size: 12, color: DeckHud.dim),
-            ),
-            const SizedBox(height: 12),
-            _ShapeRow(
-              key: const Key('shape-row-attention'),
-              title: '\u201cneeds you\u201d page',
-              note: layout.attention == null ? 'as above' : 'its own',
-              shape: layout.attentionShape,
-              onShape: widget.onAttention,
-            ),
-            const SizedBox(height: 22),
-            Text(
-              'context gauge',
-              style: DeckHud.mono(size: 14, color: DeckHud.ink),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'The line around each card is its context meter: the orange '
-              'fills it as the agent\u2019s context fills up. This is how '
-              'thick that line is drawn.',
-              style: DeckHud.mono(size: 12, color: DeckHud.dim),
-            ),
-            const SizedBox(height: 12),
-            _RingRow(width: layout.ring, onWidth: widget.onRing),
+              _section(
+                pages == 1 ? 'the deck: one page' : 'the deck: $pages pages',
+                'Each page can be given a grid of its own; the rest stay as '
+                'above. The deck gains a page when the ones it has are '
+                'full.',
+                [
+                  for (var i = 0; i < pages; i++) ...[
+                    if (i > 0) const SizedBox(height: 8),
+                    _ShapeRow(
+                      key: Key('shape-row-page-$i'),
+                      title: 'page ${i + 1}',
+                      note: layout.perPage.containsKey(i)
+                          ? 'its own'
+                          : 'as above',
+                      shape: layout.shapeOf(i),
+                      onShape: (sh) => widget.onPage(i, sh),
+                    ),
+                  ],
+                ],
+              ),
+              _section(
+                'the \u201cneeds you\u201d page',
+                'The page before the deck, holding the agents waiting on you. '
+                    'The deck does not number it, and it holds sixteen spots '
+                    'whatever grid it is drawn in.',
+                [
+                  _ShapeRow(
+                    key: const Key('shape-row-attention'),
+                    title: '\u201cneeds you\u201d page',
+                    note: layout.attention == null ? 'as above' : 'its own',
+                    shape: layout.attentionShape,
+                    onShape: widget.onAttention,
+                  ),
+                ],
+              ),
+              _section(
+                'context gauge',
+                'The line around each card is its context meter: the orange '
+                    'fills it as the agent\u2019s context fills up. This is '
+                    'how thick that line is drawn.',
+                [_RingRow(width: layout.ring, onWidth: widget.onRing)],
+              ),
+            ]),
             const SizedBox(height: 22),
             Text('colours', style: DeckHud.mono(size: 14, color: DeckHud.ink)),
             const SizedBox(height: 6),
@@ -990,9 +1013,10 @@ class _ConfigPageState extends State<ConfigPage> {
               ),
               const SizedBox(height: 6),
               Text(
-                'What the deck feels like under a thumb. The moments that buzz '
-                'are set one by one, and each can be given a shape: one pulse, '
-                'two, three, or a pulse that settles.',
+                'What the deck feels like under a thumb: a soft pulse when a '
+                'tap answers, when something is held, when a prompt goes, when '
+                'something will not go, and when an agent starts needing you. '
+                'Kept on this device.',
                 style: DeckHud.mono(size: 12, color: DeckHud.dim),
               ),
               const SizedBox(height: 12),
@@ -1013,77 +1037,6 @@ class _ConfigPageState extends State<ConfigPage> {
                   },
                 ),
               ),
-              if (h.on) ...[
-                const SizedBox(height: 8),
-                _HapticRow(
-                  key: const Key('haptics-strength'),
-                  title: 'how hard',
-                  wide: true,
-                  child: _Choice<HapticStrength>(
-                    values: HapticStrength.values,
-                    value: h.strength,
-                    label: (v) => v.name,
-                    onPick: (v) {
-                      widget.onHaptics(h.copyWith(strength: v));
-                      Haptics.settings = h.copyWith(strength: v);
-                      Haptics.fire(HapticWhen.tap);
-                    },
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'which moments',
-                  style: DeckHud.mono(size: 13, color: DeckHud.ink),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Which of them answer with a buzz, and how each one goes. '
-                  'Switch one on and you feel it at once, so the shape can be '
-                  'picked by how it feels rather than by its name.',
-                  style: DeckHud.mono(size: 12, color: DeckHud.dim),
-                ),
-                const SizedBox(height: 8),
-                for (final w in HapticWhen.values) ...[
-                  _HapticRow(
-                    key: Key('haptics-kind-${w.name}'),
-                    title: _hapticTitle(w),
-                    note: h.kinds.contains(w) ? null : 'off',
-                    wide: h.kinds.contains(w),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (h.kinds.contains(w)) ...[
-                          Flexible(
-                            child: _Choice<HapticPattern>(
-                              values: HapticPattern.values,
-                              value: h.patternOf(w),
-                              label: (p) => p.name,
-                              onPick: (p) {
-                                widget.onHaptics(h.withPattern(w, p));
-                                Haptics.settings = h.withPattern(w, p);
-                                Haptics.fire(w);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                        ],
-                        _Switch(
-                          on: h.kinds.contains(w),
-                          onTap: () {
-                            final wanted = !h.kinds.contains(w);
-                            final next = h.withKind(w, wanted);
-                            widget.onHaptics(next);
-                            Haptics.settings = next;
-                            // Switched on, it says what it will feel like.
-                            if (wanted) Haptics.fire(w);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                ],
-              ],
             ],
             const SizedBox(height: 22),
             Text(
@@ -1214,61 +1167,34 @@ class _HapticRow extends StatelessWidget {
     required this.title,
     required this.child,
     this.note,
-    this.wide = false,
   });
 
   final String title;
   final String? note;
   final Widget child;
 
-  /// Whether the control needs a line of its own on a narrow screen. The four
-  /// shapes of a buzz and a switch beside them come to some 300 points, which
-  /// on a phone held upright left the title about sixty: "an agent needs you"
-  /// was drawn as "an age…". Those rows set this; a row with nothing but a
-  /// switch on it does not need to.
-  final bool wide;
-
   @override
-  Widget build(BuildContext context) {
-    // A phone held upright, measured rather than guessed at: the page is
-    // 390 points wide there, a tablet 834 or more, and a phone on its side
-    // has the room for one line.
-    final stacked = wide && MediaQuery.sizeOf(context).width < 480;
-    final name = Text(
-      title,
-      maxLines: stacked ? 2 : 1,
-      overflow: TextOverflow.ellipsis,
-      style: DeckHud.mono(size: 13, color: DeckHud.ink),
-    );
-    final said = note == null
-        ? null
-        : Text(note!, style: DeckHud.mono(size: 11, color: DeckHud.dim));
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      color: DeckHud.panel,
-      child: stacked
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: name),
-                    ?said,
-                  ],
-                ),
-                const SizedBox(height: 8),
-                child,
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(child: name),
-                if (said case final w?) ...[w, const SizedBox(width: 10)],
-                child,
-              ],
-            ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+    color: DeckHud.panel,
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: DeckHud.mono(size: 13, color: DeckHud.ink),
+          ),
+        ),
+        if (note case final n?) ...[
+          Text(n, style: DeckHud.mono(size: 11, color: DeckHud.dim)),
+          const SizedBox(width: 10),
+        ],
+        child,
+      ],
+    ),
+  );
 }
 
 /// A switch in the deck's own style: a square that fills when it is on.
@@ -1296,53 +1222,6 @@ class _Switch extends StatelessWidget {
         color: on ? DeckHud.accent : DeckHud.dim,
       ),
     ),
-  );
-}
-
-/// One of a handful of choices, side by side: the chosen one is filled.
-class _Choice<T> extends StatelessWidget {
-  const _Choice({
-    super.key,
-    required this.values,
-    required this.value,
-    required this.label,
-    required this.onPick,
-  });
-
-  final List<T> values;
-  final T value;
-  final String Function(T v) label;
-  final void Function(T v) onPick;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      for (final v in values) ...[
-        if (v != values.first) const SizedBox(width: 4),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => onPick(v),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-            decoration: BoxDecoration(
-              color: v == value ? DeckHud.ink : null,
-              border: Border.all(
-                color: v == value ? DeckHud.ink : DeckHud.dim,
-                width: 0.5,
-              ),
-            ),
-            child: Text(
-              label(v),
-              style: DeckHud.mono(
-                size: 11,
-                color: v == value ? DeckHud.bg : DeckHud.dim,
-              ),
-            ),
-          ),
-        ),
-      ],
-    ],
   );
 }
 

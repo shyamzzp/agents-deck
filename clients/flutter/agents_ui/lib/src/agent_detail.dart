@@ -37,6 +37,7 @@ class AgentDetail extends StatefulWidget {
     this.onVisible,
     this.showBack = false,
     this.onSpeakTask,
+    this.ringWidth = ContextRingPainter.defaultStroke,
   });
 
   final AgentsSource source;
@@ -56,6 +57,11 @@ class AgentDetail extends StatefulWidget {
   /// calls it and keeps what comes back as a task in that cell. Null on a
   /// host with no microphone, and then an empty cell does nothing.
   final Future<String?> Function(Agent agent)? onSpeakTask;
+
+  /// How thick the lines the deck draws round things are: the same width as
+  /// the context gauge round every tile, which is set in Settings. The frame
+  /// on the cell a carried task is over is drawn in it.
+  final double ringWidth;
 
   @override
   State<AgentDetail> createState() => _AgentDetailState();
@@ -849,7 +855,10 @@ class _AgentDetailState extends State<AgentDetail> {
             IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  border: Border.all(color: DeckHud.ink, width: 3),
+                  border: Border.all(
+                    color: DeckHud.ink,
+                    width: widget.ringWidth,
+                  ),
                 ),
               ),
             ),

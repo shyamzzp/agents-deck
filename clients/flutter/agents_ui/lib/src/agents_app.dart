@@ -301,6 +301,7 @@ class _AgentsAppState extends State<AgentsApp> {
           onVisible: _cardVisible,
           showBack: widget.backButton,
           onSpeakTask: widget.onSpeakTask,
+          ringWidth: widget.contextRingWidth,
         ),
       ),
     );
@@ -421,7 +422,13 @@ class _AgentsAppState extends State<AgentsApp> {
             IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  border: Border.all(color: DeckHud.ink, width: 3),
+                  // As thick as the gauge round every tile, which is set in
+                  // Settings: a frame of its own width read as a heavier
+                  // line than anything else on the deck.
+                  border: Border.all(
+                    color: DeckHud.ink,
+                    width: widget.contextRingWidth,
+                  ),
                 ),
               ),
             ),
