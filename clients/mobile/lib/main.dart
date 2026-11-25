@@ -325,10 +325,41 @@ class _DeckAppState extends State<DeckApp> {
   /// The agent being spoken to, while the dictation sheet is open.
   Agent? _dictating;
 
+  /// Whether this device has anything to buzz with. An iPad has no Taptic
+  /// Engine of any kind, so a page of haptics switches there is a page of
+  /// promises nothing keeps: the settings leave the section out, and nothing
+  /// asks the platform to buzz. Null until the device has answered.
+  bool? _canBuzz;
+
   @override
   void initState() {
     super.initState();
     unawaited(_check());
+    unawaited(_askBuzz());
+  }
+
+  /// Asks the device whether it can buzz (ios/Runner/Buzz.swift). A platform
+  /// that does not answer is taken as one that cannot: the switches are
+  /// hidden rather than shown over nothing.
+  Future<void> _askBuzz() async {
+    var can = false;
+    try {
+      can =
+          await const MethodChannel(
+            'deck/buzz',
+          ).invokeMethod<bool>('supported') ??
+          false;
+    } on PlatformException {
+      can = false;
+    } on MissingPluginException {
+      can = false;
+    }
+    if (!mounted) return;
+    setState(() => _canBuzz = can);
+    if (!can) {
+      // Nothing to feel: whatever the file says, this device stays quiet.
+      Haptics.settings = Haptics.settings.copyWith(on: false);
+    }
   }
 
   /// Reads the bundle before connecting, so an unpaired app shows the pairing
@@ -458,6 +489,7 @@ class _DeckAppState extends State<DeckApp> {
                     onRing: _setRing,
                     onTheme: _setTheme,
                     onHaptics: _setHaptics,
+                    canBuzz: _canBuzz ?? false,
                     deck: _deckName(),
                     source: s,
                   ),
@@ -714,6 +746,7 @@ class ConfigPage extends StatefulWidget {
     required this.onRing,
     required this.onTheme,
     required this.onHaptics,
+    required this.canBuzz,
     required this.source,
     this.deck,
   });
@@ -728,6 +761,11 @@ class ConfigPage extends StatefulWidget {
   /// Sets what the deck feels like: on or off, how hard, which moments, and
   /// the shape of each.
   final void Function(HapticSettings haptics) onHaptics;
+
+  /// Whether this device has a Taptic Engine. Without one the haptics are
+  /// left out of the page entirely: an iPad cannot buzz, and switches that
+  /// do nothing are worse than no switches.
+  final bool canBuzz;
 
   /// Watched for how many pages the deck currently has.
   final AgentsSource source;
@@ -944,77 +982,107 @@ class _ConfigPageState extends State<ConfigPage> {
             ),
             const SizedBox(height: 12),
             ..._themeSection(),
-            const SizedBox(height: 22),
-            Text('haptics', style: DeckHud.mono(size: 14, color: DeckHud.ink)),
-            const SizedBox(height: 6),
-            Text(
-              'What the deck feels like under a thumb. The moments that buzz '
-              'are set one by one, and each can be given a shape: one pulse, '
-              'two, three, or a pulse that settles.',
-              style: DeckHud.mono(size: 12, color: DeckHud.dim),
-            ),
-            const SizedBox(height: 12),
-            _HapticRow(
-              key: const Key('haptics-on'),
-              title: 'haptics',
-              note: h.on ? 'on' : 'off',
-              child: _Switch(
-                on: h.on,
-                onTap: () => widget.onHaptics(h.copyWith(on: !h.on)),
+            if (widget.canBuzz) ...[
+              const SizedBox(height: 22),
+              Text(
+                'haptics',
+                style: DeckHud.mono(size: 14, color: DeckHud.ink),
               ),
-            ),
-            if (h.on) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
+              Text(
+                'What the deck feels like under a thumb. The moments that buzz '
+                'are set one by one, and each can be given a shape: one pulse, '
+                'two, three, or a pulse that settles.',
+                style: DeckHud.mono(size: 12, color: DeckHud.dim),
+              ),
+              const SizedBox(height: 12),
               _HapticRow(
-                key: const Key('haptics-strength'),
-                title: 'how hard',
-                child: _Choice<HapticStrength>(
-                  values: HapticStrength.values,
-                  value: h.strength,
-                  label: (v) => v.name,
-                  onPick: (v) {
-                    widget.onHaptics(h.copyWith(strength: v));
+                key: const Key('haptics-on'),
+                title: 'haptics',
+                note: h.on ? 'on' : 'off',
+                child: _Switch(
+                  on: h.on,
+                  onTap: () {
+                    final next = h.copyWith(on: !h.on);
+                    widget.onHaptics(next);
+                    // Felt, not just read: switching them on answers with the
+                    // buzz it has just turned on. Switching them off is
+                    // silent, which is what off means.
+                    Haptics.settings = next;
                     Haptics.fire(HapticWhen.tap);
                   },
                 ),
               ),
-              const SizedBox(height: 14),
-              Text(
-                'which moments',
-                style: DeckHud.mono(size: 13, color: DeckHud.ink),
-              ),
-              const SizedBox(height: 8),
-              for (final w in HapticWhen.values) ...[
+              if (h.on) ...[
+                const SizedBox(height: 8),
                 _HapticRow(
-                  key: Key('haptics-kind-${w.name}'),
-                  title: _hapticTitle(w),
-                  note: h.kinds.contains(w) ? null : 'off',
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (h.kinds.contains(w)) ...[
-                        _Choice<HapticPattern>(
-                          values: HapticPattern.values,
-                          value: h.patternOf(w),
-                          label: (p) => p.name,
-                          onPick: (p) {
-                            widget.onHaptics(h.withPattern(w, p));
-                            Haptics.settings = h.withPattern(w, p);
-                            Haptics.fire(w);
-                          },
-                        ),
-                        const SizedBox(width: 10),
-                      ],
-                      _Switch(
-                        on: h.kinds.contains(w),
-                        onTap: () => widget.onHaptics(
-                          h.withKind(w, !h.kinds.contains(w)),
-                        ),
-                      ),
-                    ],
+                  key: const Key('haptics-strength'),
+                  title: 'how hard',
+                  wide: true,
+                  child: _Choice<HapticStrength>(
+                    values: HapticStrength.values,
+                    value: h.strength,
+                    label: (v) => v.name,
+                    onPick: (v) {
+                      widget.onHaptics(h.copyWith(strength: v));
+                      Haptics.settings = h.copyWith(strength: v);
+                      Haptics.fire(HapticWhen.tap);
+                    },
                   ),
                 ),
+                const SizedBox(height: 14),
+                Text(
+                  'which moments',
+                  style: DeckHud.mono(size: 13, color: DeckHud.ink),
+                ),
                 const SizedBox(height: 6),
+                Text(
+                  'Which of them answer with a buzz, and how each one goes. '
+                  'Switch one on and you feel it at once, so the shape can be '
+                  'picked by how it feels rather than by its name.',
+                  style: DeckHud.mono(size: 12, color: DeckHud.dim),
+                ),
+                const SizedBox(height: 8),
+                for (final w in HapticWhen.values) ...[
+                  _HapticRow(
+                    key: Key('haptics-kind-${w.name}'),
+                    title: _hapticTitle(w),
+                    note: h.kinds.contains(w) ? null : 'off',
+                    wide: h.kinds.contains(w),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (h.kinds.contains(w)) ...[
+                          Flexible(
+                            child: _Choice<HapticPattern>(
+                              values: HapticPattern.values,
+                              value: h.patternOf(w),
+                              label: (p) => p.name,
+                              onPick: (p) {
+                                widget.onHaptics(h.withPattern(w, p));
+                                Haptics.settings = h.withPattern(w, p);
+                                Haptics.fire(w);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                        ],
+                        _Switch(
+                          on: h.kinds.contains(w),
+                          onTap: () {
+                            final wanted = !h.kinds.contains(w);
+                            final next = h.withKind(w, wanted);
+                            widget.onHaptics(next);
+                            Haptics.settings = next;
+                            // Switched on, it says what it will feel like.
+                            if (wanted) Haptics.fire(w);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                ],
               ],
             ],
             const SizedBox(height: 22),
@@ -1146,34 +1214,61 @@ class _HapticRow extends StatelessWidget {
     required this.title,
     required this.child,
     this.note,
+    this.wide = false,
   });
 
   final String title;
   final String? note;
   final Widget child;
 
+  /// Whether the control needs a line of its own on a narrow screen. The four
+  /// shapes of a buzz and a switch beside them come to some 300 points, which
+  /// on a phone held upright left the title about sixty: "an agent needs you"
+  /// was drawn as "an age…". Those rows set this; a row with nothing but a
+  /// switch on it does not need to.
+  final bool wide;
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-    color: DeckHud.panel,
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: DeckHud.mono(size: 13, color: DeckHud.ink),
-          ),
-        ),
-        if (note case final n?) ...[
-          Text(n, style: DeckHud.mono(size: 11, color: DeckHud.dim)),
-          const SizedBox(width: 10),
-        ],
-        child,
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    // A phone held upright, measured rather than guessed at: the page is
+    // 390 points wide there, a tablet 834 or more, and a phone on its side
+    // has the room for one line.
+    final stacked = wide && MediaQuery.sizeOf(context).width < 480;
+    final name = Text(
+      title,
+      maxLines: stacked ? 2 : 1,
+      overflow: TextOverflow.ellipsis,
+      style: DeckHud.mono(size: 13, color: DeckHud.ink),
+    );
+    final said = note == null
+        ? null
+        : Text(note!, style: DeckHud.mono(size: 11, color: DeckHud.dim));
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      color: DeckHud.panel,
+      child: stacked
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: name),
+                    ?said,
+                  ],
+                ),
+                const SizedBox(height: 8),
+                child,
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(child: name),
+                if (said case final w?) ...[w, const SizedBox(width: 10)],
+                child,
+              ],
+            ),
+    );
+  }
 }
 
 /// A switch in the deck's own style: a square that fills when it is on.
