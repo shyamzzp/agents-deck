@@ -64,10 +64,17 @@ const _patternBeats = <HapticPattern, List<int>>{
 };
 
 /// The deck's haptics, as a person has set them.
+///
+/// There is one thing to set: whether the deck buzzes at all. The rest is
+/// fixed, because a page of switches for the shape and the strength of every
+/// kind of buzz was a page of decisions nobody wanted to make: every buzz is
+/// now a soft single pulse. The fields are still here, so a deck that wants
+/// to feel different can set them in code and an older settings file still
+/// loads, but nothing offers them.
 class HapticSettings {
   const HapticSettings({
     this.on = false,
-    this.strength = HapticStrength.medium,
+    this.strength = HapticStrength.soft,
     this.kinds = const {
       HapticWhen.tap,
       HapticWhen.hold,
@@ -99,14 +106,16 @@ class HapticSettings {
   HapticPattern patternOf(HapticWhen when) =>
       patterns[when] ?? defaultPatterns[when] ?? HapticPattern.single;
 
-  /// What each kind feels like until someone changes it.
+  /// What each kind feels like until someone changes it: one soft pulse, the
+  /// same for all of them. A buzz says something answered; which thing it was
+  /// is on the screen, and nobody was reading it out of a rhythm.
   static const defaultPatterns = <HapticWhen, HapticPattern>{
     HapticWhen.tap: HapticPattern.single,
     HapticWhen.hold: HapticPattern.single,
-    HapticWhen.sent: HapticPattern.double,
-    HapticWhen.problem: HapticPattern.triple,
+    HapticWhen.sent: HapticPattern.single,
+    HapticWhen.problem: HapticPattern.single,
     HapticWhen.page: HapticPattern.single,
-    HapticWhen.needsYou: HapticPattern.settle,
+    HapticWhen.needsYou: HapticPattern.single,
   };
 
   HapticSettings copyWith({
@@ -161,46 +170,14 @@ class HapticSettings {
     Object.hashAllUnordered(patterns.entries.map((e) => (e.key, e.value))),
   );
 
-  Map<String, Object?> toJson() => {
-    'on': on,
-    'strength': strength.name,
-    'kinds': [for (final k in kinds) k.name],
-    if (patterns.isNotEmpty)
-      'patterns': {for (final e in patterns.entries) e.key.name: e.value.name},
-  };
+  /// Only whether it buzzes is written down. A file from a deck that had the
+  /// strengths and the shapes in it still loads; what it said about them is
+  /// dropped, so nothing is being felt that the settings page does not show.
+  Map<String, Object?> toJson() => {'on': on};
 
   static HapticSettings fromJson(Object? j) {
     if (j is! Map) return const HapticSettings();
-    final kinds = <HapticWhen>{};
-    if (j['kinds'] case final List l) {
-      for (final name in l) {
-        for (final w in HapticWhen.values) {
-          if (w.name == name) kinds.add(w);
-        }
-      }
-    }
-    final patterns = <HapticWhen, HapticPattern>{};
-    if (j['patterns'] case final Map m) {
-      for (final e in m.entries) {
-        final when = HapticWhen.values
-            .where((w) => w.name == e.key)
-            .firstOrNull;
-        final pattern = HapticPattern.values
-            .where((p) => p.name == e.value)
-            .firstOrNull;
-        if (when != null && pattern != null) patterns[when] = pattern;
-      }
-    }
-    return HapticSettings(
-      on: j['on'] != false,
-      strength:
-          HapticStrength.values
-              .where((s) => s.name == j['strength'])
-              .firstOrNull ??
-          HapticStrength.medium,
-      kinds: j['kinds'] is List ? kinds : const HapticSettings().kinds,
-      patterns: patterns,
-    );
+    return HapticSettings(on: j['on'] != false);
   }
 }
 
