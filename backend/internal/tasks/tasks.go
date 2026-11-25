@@ -182,16 +182,29 @@ func (s *Store) Checked(agent string) int {
 }
 
 // SetChecked records how far the miner has read, so a session that joins
-// again is mined from there on rather than from its first prompt.
+// again is mined from there on rather than from its first prompt. Recording
+// nothing read still counts as having looked (see [Store.Known]).
 func (s *Store) SetChecked(agent string, turns int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.load()
-	if turns <= s.checked[agent] {
+	if had, ok := s.checked[agent]; ok && turns <= had {
 		return
 	}
 	s.checked[agent] = turns
 	s.save()
+}
+
+// Known says whether the miner has looked at this session at all. One it has
+// never looked at has just joined the deck, which is when a session with
+// nothing of its own worth keeping is given what the rest of the deck asks
+// for (see [Store.TopUp]).
+func (s *Store) Known(agent string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	_, ok := s.checked[agent]
+	return ok
 }
 
 // Add keeps text as one of agent's tasks. source is model.TaskCustom for one a
@@ -416,7 +429,7 @@ func ShortName(text string) string {
 	}
 	var words []string
 	for _, w := range strings.Fields(strings.ToLower(text)) {
-		w = strings.Trim(w, ".,:;!?\"'`()[]{}")
+		w = keepLetters(w)
 		if w == "" || skip[w] {
 			continue
 		}
@@ -429,7 +442,7 @@ func ShortName(text string) string {
 		// Nothing but small words: take the text as it came, still without
 		// the punctuation a name has no use for.
 		for _, w := range strings.Fields(strings.ToLower(text)) {
-			w = strings.Trim(w, ".,:;!?\"'`()[]{}")
+			w = keepLetters(w)
 			if w == "" {
 				continue
 			}
@@ -440,6 +453,19 @@ func ShortName(text string) string {
 		}
 	}
 	return clip(strings.Join(words, "-"), NameMax)
+}
+
+// keepLetters is one word of a name: letters and digits, nothing else. A
+// name is read and typed, so an apostrophe or a bracket in the middle of one
+// ("today's") only gets in the way.
+func keepLetters(w string) string {
+	var b strings.Builder
+	for _, r := range w {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func clip(s string, n int) string {

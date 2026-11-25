@@ -63,6 +63,12 @@ type Daemon struct {
 
 	lastAutoRestore time.Time
 	live            liveWatch
+	lastMine        time.Time
+
+	// Tasks is where the tasks mined from a session's prompts go. The serve
+	// command sets it once the store is open; a demo leaves it nil and
+	// nothing is mined.
+	Tasks TaskStore
 }
 
 func New(st *store.Store, cfg Config, agentctl string) (*Daemon, error) {
@@ -89,6 +95,10 @@ func (d *Daemon) Run() {
 		if k := accountsKey(); k != accKey { // accounts set up or changed: redraw the dots
 			accKey = k
 			d.Store.Touch()
+		}
+		if time.Since(d.lastMine) > mineEvery {
+			d.lastMine = time.Now()
+			d.mineTasks()
 		}
 		activity := tmux.SessionActivity()
 		live := make(map[string]bool, len(activity))

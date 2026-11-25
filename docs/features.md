@@ -28,6 +28,23 @@ Tap a tile for its card (in the browser, the agent's own page, with a box to sen
 - **Permission prompts** show the exact command with Claude's own options; **questions** show their choices; a question with several parts goes one question at a time (pick-any ones tick, then **next**), then **submit answers**. Your answer is typed into the agent's terminal, and a prompt that has already changed is refused.
 - **Your own answer.** In the browser, an agent's page also has **Type your own answer** under the choices: the deck presses Esc on the question and types your text in as the next prompt, so it reaches the agent as your reply. Agents in another app's terminal (a session started by hand) don't get it. On the other screens, free-text input sends you to the terminal.
 - **Queue the next task.** While an agent works, the prompt box on its page says **Queue**: the deck keeps your prompt and types it in the moment the turn ends (**Stop and send** stops the turn first instead). Queued prompts go in one per turn, in order; the tile shows how many wait (`+2` in its corner), and the agent's page lists them, each with **Cancel**. An agent waiting on a question keeps its queue until you answer and that turn ends: nothing is answered for you. The queue survives a restart of the service. Agents whose status the deck can't see (Codex or a shell started here) get the prompt at once.
+- **Ask it to…** is the quick list at the bottom of the card: a board of tiles, each one a prompt
+  typed straight into the session. Eight are the same on every card (verify the changes, run the
+  tests, commit, push, open a PR, what changed, fix the failures, carry on). Beyond those, each agent
+  keeps tasks of its own in two bands, the ones you made first and the ones the deck found after.
+  Hold a tile to send it, pin it or throw it away; hold and drag one to arrange it among the others
+  of its band; speak into an empty cell to make a new one.
+- **Tasks the deck found.** The deck reads the prompts of the session behind the card and keeps the
+  ones that read like something you would ask for again, so a session that has been asked to "check
+  the meetings scheduled for today" has that as a tile the next morning. It judges on the words,
+  here on the Mac: a request is kept when it asks for something to be done, is short, points at
+  nothing in particular ("fix this" belongs to the moment it was said), and is not one of the eight
+  said differently; what the session asked for more than once, and what names standing work (the
+  day, the meetings, the tests, the build), comes first. Ten are kept per agent and the oldest
+  unpinned one goes when another arrives, so the band follows what the session is actually for. A
+  session joining a deck where at least two others keep the same request is offered it too. A
+  session that comes back is read on from where it was left, so tiles you arranged, pinned or threw
+  away are not made again behind you.
 - **Last active** says when the agent last sent or got a message ("last active 3h ago"), also after a
   crash or a restart. `agentctl ls` shows it as ACTIVE, and `agentctl ls --sort active` puts the most
   recently active first.

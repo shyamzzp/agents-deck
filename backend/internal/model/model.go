@@ -183,6 +183,12 @@ type Task struct {
 	// Pinned keeps a task through every rotation, mined or not.
 	Pinned bool `json:"pinned,omitempty"`
 
+	// Shared is a task the deck offered this agent because the rest of the
+	// deck keeps asking for it, rather than one mined from this session's own
+	// prompts. One of these is never evidence for another: what the deck
+	// counts is what sessions asked for themselves.
+	Shared bool `json:"shared,omitempty"`
+
 	Added time.Time `json:"added"`
 }
 
