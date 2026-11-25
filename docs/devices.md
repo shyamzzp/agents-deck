@@ -34,7 +34,9 @@ them again.
 - **Plugged in, it just works.** Confirm the USB port once (Settings, Boards, or `agentctl link add`)
   and any board you plug into it is approved at once and can answer prompts, focus an agent's
   terminal and interrupt it (scope `act`). Stopping an agent takes scope `admin`, which you give by
-  hand (Settings, Boards, or `agentctl devices scope <board> admin`).
+  hand (Settings, Boards, or `agentctl devices scope <board> admin`). Taking a session the deck only
+  watches off the board is `act`, not `admin`: nothing is stopped, the session carries on in its own
+  terminal, and a device that could add it can take it off again.
 - **Wi-Fi when you unplug it** (every touch board except where noted). Set your network once
   (Settings, Network, or `agentctl link wifi --default --ssid "my network"`); every board you plug in
   gets it. Unplug it, power it from any USB charger, and it reaches the deck over Wi-Fi: TLS 1.3 with

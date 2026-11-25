@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"time"
 
@@ -39,6 +40,46 @@ func NeedScope(method, path string) devices.Scope {
 		return devices.Admin
 	}
 	return devices.Act
+}
+
+// needScopeFor is [NeedScope] with the agent in hand: what a request will
+// actually do depends on whose agent it is.
+//
+// Dismissing an agent the deck started stops it, which is admin. Dismissing
+// one the deck only watches -- a Claude session in someone's own terminal, or
+// an agent inside Orca, herdr or cmux -- stops nothing: the tile leaves the
+// deck and the session carries on. That is the same act as adding it was, and
+// a phone paired to act could add it, so it can take it off again.
+func (s *Server) needScopeFor(method, path string) devices.Scope {
+	need := NeedScope(method, path)
+	if need != devices.Admin || !strings.HasSuffix(path, "/dismiss") || s.Store == nil {
+		return need
+	}
+	id, ok := agentIDOf(path, "dismiss")
+	if !ok {
+		return need
+	}
+	if e, there := s.Store.Get(id); there && e.External {
+		return devices.Act
+	}
+	return need
+}
+
+// agentIDOf is the id in /v1/agents/{id}/{action}.
+func agentIDOf(path, action string) (string, bool) {
+	rest, ok := strings.CutPrefix(path, "/v1/agents/")
+	if !ok {
+		return "", false
+	}
+	id, tail, ok := strings.Cut(rest, "/")
+	if !ok || tail != action || id == "" {
+		return "", false
+	}
+	un, err := url.PathUnescape(id)
+	if err != nil {
+		return "", false
+	}
+	return un, true
 }
 
 type deviceKey struct{}
@@ -77,7 +118,7 @@ func (s *Server) DeviceHandler() http.Handler {
 			s.DeviceFirmware(w, r, d)
 			return
 		}
-		if need := NeedScope(r.Method, r.URL.Path); !d.Scope.Allows(need) {
+		if need := s.needScopeFor(r.Method, r.URL.Path); !d.Scope.Allows(need) {
 			writeErr(w, http.StatusForbidden, d.Name+" may "+string(d.Scope)+", this needs "+string(need)+": agentctl devices scope "+d.Name+" "+string(need))
 			return
 		}
@@ -164,7 +205,7 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 // listener (a Deck Link board): the same scope check, handlers and audit log.
 // It returns the status code and the response body.
 func (s *Server) Dispatch(d devices.Device, method, path string, body []byte) (int, []byte) {
-	if need := NeedScope(method, path); !d.Scope.Allows(need) {
+	if need := s.needScopeFor(method, path); !d.Scope.Allows(need) {
 		b, _ := json.Marshal(map[string]string{"error": d.Name + " may " + string(d.Scope) + ", this needs " + string(need)})
 		return http.StatusForbidden, b
 	}
