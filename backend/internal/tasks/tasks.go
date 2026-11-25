@@ -1,13 +1,23 @@
 // Tasks an agent has been given of its own, beside the deck's built-in ones.
 //
-// The quick list on an agent's card holds eight tasks every agent has. A
-// prompt from the session's history can be kept as a ninth: it lands in the
-// same grid, under a short name taken from the prompt itself, and tapping it
-// sends that prompt again. They live here rather than on a phone so the
-// tablet, the phone and the dashboard all show the same grid.
+// The quick list on an agent's card holds eight tasks every agent has. Beyond
+// those, an agent keeps two bands of its own:
 //
-// One small file, rewritten whole: a deck has a handful of these, not
-// thousands, and a rewrite is what makes a half-written file impossible.
+//   - custom: tasks a person made, by speaking one into an empty cell or by
+//     keeping a prompt from the session's history. These come first, because
+//     what you made is what you look for.
+//   - mined: tasks the deck found in the session's own prompts. These come
+//     after, and only the latest ten are kept: one nobody pinned and nobody
+//     uses should age out rather than pile up.
+//
+// A task's place is a rank within its band, not a cell of the board: a phone
+// draws four to a row and a tablet seven or ten, so a cell number would mean a
+// different place on every screen. Dragging moves a task inside its own band.
+//
+// They live here, in the service, rather than on a phone, so the tablet, the
+// phone and the dashboard all show one list. One small file, rewritten whole:
+// a deck has a handful of these, not thousands, and a rewrite is what makes a
+// half-written file impossible.
 
 package tasks
 
@@ -27,8 +37,11 @@ import (
 	"github.com/brushknight/agents-deck/backend/internal/model"
 )
 
-// Max is how many of its own tasks one agent may keep. Beyond that the oldest
-// is dropped: the grid is a handful of buttons, not a history.
+// MinedMax is how many mined tasks one agent keeps; the oldest unpinned one
+// goes when another arrives.
+const MinedMax = 10
+
+// Max is how many tasks of its own one agent may keep in total.
 const Max = 24
 
 // NameMax is how long a task's name may be, in runes.
@@ -40,12 +53,28 @@ const TextMax = 4000
 // Task is one of an agent's own tasks, as the state carries it.
 type Task = model.Task
 
+// ErrEmpty is a task with nothing to send.
+var ErrEmpty = errors.New("a task needs some text")
+
+// ErrFull is an agent already keeping as many tasks as it may.
+var ErrFull = errors.New("this agent keeps all the tasks it can; remove one first")
+
 type Store struct {
 	Path string
 
 	mu     sync.Mutex
 	loaded bool
-	byID   map[string][]Task // agent id -> its tasks, oldest first
+	byID   map[string][]Task // agent id -> its tasks, custom band first, by rank
+	// checked is how many of an agent's prompts the miner has looked at, so a
+	// session that joins again carries on rather than starting over.
+	checked map[string]int
+}
+
+// diskFile is what is written. The first shape was a bare map of tasks; that
+// is still read, so an older deck's file is not thrown away.
+type diskFile struct {
+	Tasks   map[string][]Task `json:"tasks"`
+	Checked map[string]int    `json:"checked,omitempty"`
 }
 
 func Open(path string) *Store {
@@ -61,19 +90,31 @@ func (s *Store) load() {
 		return
 	}
 	s.loaded = true
-	s.byID = map[string][]Task{}
+	s.byID, s.checked = map[string][]Task{}, map[string]int{}
 	b, err := os.ReadFile(s.Path)
 	if err != nil {
 		return
 	}
-	_ = json.Unmarshal(b, &s.byID)
+	var f diskFile
+	if json.Unmarshal(b, &f) == nil && f.Tasks != nil {
+		s.byID = f.Tasks
+		if f.Checked != nil {
+			s.checked = f.Checked
+		}
+	} else {
+		// The older shape: agent id -> tasks, with nothing else in it.
+		_ = json.Unmarshal(b, &s.byID)
+	}
+	for id, list := range s.byID {
+		s.byID[id] = ordered(list)
+	}
 }
 
 func (s *Store) save() {
 	if s.Path == "" {
 		return
 	}
-	b, err := json.MarshalIndent(s.byID, "", "  ")
+	b, err := json.MarshalIndent(diskFile{Tasks: s.byID, Checked: s.checked}, "", "  ")
 	if err != nil {
 		return
 	}
@@ -83,7 +124,36 @@ func (s *Store) save() {
 	}
 }
 
-// List is an agent's own tasks, oldest first (the order they are drawn in).
+// ordered sorts a list into the order it is drawn in and renumbers the ranks,
+// so a rank is always a task's position in its band.
+func ordered(list []Task) []Task {
+	out := append([]Task(nil), list...)
+	sort.SliceStable(out, func(i, j int) bool {
+		if a, b := out[i].Band(), out[j].Band(); a != b {
+			return a < b
+		}
+		if out[i].Rank != out[j].Rank {
+			return out[i].Rank < out[j].Rank
+		}
+		// Nothing else to go on: the one made first comes first. A file from
+		// an older deck has no ranks at all, only the cell it was made in.
+		if out[i].Slot != out[j].Slot {
+			return out[i].Slot < out[j].Slot
+		}
+		return out[i].Added.Before(out[j].Added)
+	})
+	band, rank := 0, 0
+	for i := range out {
+		if out[i].Band() != band {
+			band, rank = out[i].Band(), 0
+		}
+		out[i].Rank = rank
+		rank++
+	}
+	return out
+}
+
+// List is an agent's own tasks, in the order the board draws them.
 func (s *Store) List(agent string) []Task {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -103,10 +173,31 @@ func (s *Store) All() map[string][]Task {
 	return out
 }
 
-// Add keeps text as one of agent's tasks under name (or a name taken from the
-// text when it is empty) and returns it. A task whose text is already kept is
-// not kept twice.
-func (s *Store) Add(agent, name, text string, slot int) (Task, error) {
+// Checked is how many of an agent's prompts the miner has read.
+func (s *Store) Checked(agent string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	return s.checked[agent]
+}
+
+// SetChecked records how far the miner has read, so a session that joins
+// again is mined from there on rather than from its first prompt.
+func (s *Store) SetChecked(agent string, turns int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	if turns <= s.checked[agent] {
+		return
+	}
+	s.checked[agent] = turns
+	s.save()
+}
+
+// Add keeps text as one of agent's tasks. source is model.TaskCustom for one a
+// person made and model.TaskMined for one the miner found; an empty name is
+// taken from the text. A task whose text is already kept comes back as it is.
+func (s *Store) Add(agent, name, text, source string, slot int) (Task, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return Task{}, ErrEmpty
@@ -118,6 +209,12 @@ func (s *Store) Add(agent, name, text string, slot int) (Task, error) {
 		name = ShortName(text)
 	}
 	name = clip(strings.TrimSpace(name), NameMax)
+	if source != model.TaskMined {
+		source = model.TaskCustom
+	}
+	if slot < 0 {
+		slot = 0
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -127,20 +224,122 @@ func (s *Store) Add(agent, name, text string, slot int) (Task, error) {
 			return t, nil
 		}
 	}
-	if slot < 0 {
-		slot = 0
+	if len(s.byID[agent]) >= Max && s.droppable(agent) == "" {
+		return Task{}, ErrFull
 	}
-	t := Task{ID: id(), Name: name, Text: text, Slot: slot, Added: time.Now().UTC()}
-	list := append(s.byID[agent], t)
-	if len(list) > Max {
-		list = list[len(list)-Max:]
+	t := Task{
+		ID: id(), Name: name, Text: text, Slot: slot,
+		Source: source, Added: time.Now().UTC(),
+		Rank: 1 << 20, // last in its band until it is dragged somewhere else
 	}
-	// By the cell each was made in, so the board draws them where they were
-	// put; two in the same cell keep the order they were made in.
-	sort.SliceStable(list, func(i, j int) bool { return list[i].Slot < list[j].Slot })
-	s.byID[agent] = list
+	s.byID[agent] = ordered(append(s.byID[agent], t))
+	s.rotate(agent)
 	s.save()
+	for _, x := range s.byID[agent] {
+		if x.ID == t.ID {
+			return x, nil
+		}
+	}
 	return t, nil
+}
+
+// droppable names the task that rotation would drop next: the oldest mined one
+// that is not pinned, or "" when every task is custom or pinned.
+func (s *Store) droppable(agent string) string {
+	out, oldest := "", time.Time{}
+	for _, t := range s.byID[agent] {
+		if t.Pinned || t.Source != model.TaskMined {
+			continue
+		}
+		if out == "" || t.Added.Before(oldest) {
+			out, oldest = t.ID, t.Added
+		}
+	}
+	return out
+}
+
+// rotate keeps the mined band at MinedMax and the list at Max by dropping the
+// oldest unpinned mined task. One someone made, and a pinned one, are kept.
+func (s *Store) rotate(agent string) {
+	for {
+		list := s.byID[agent]
+		mined := 0
+		for _, t := range list {
+			if t.Source == model.TaskMined {
+				mined++
+			}
+		}
+		if mined <= MinedMax && len(list) <= Max {
+			return
+		}
+		drop := s.droppable(agent)
+		if drop == "" {
+			return // nothing left that may be dropped
+		}
+		s.removeLocked(agent, drop)
+	}
+}
+
+// Move puts a task at rank to within its own band: a custom task moves among
+// the custom ones, a mined task among the mined ones, and neither crosses
+// into the other's places. It reports whether the task was there.
+func (s *Store) Move(agent, taskID string, to int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	list := s.byID[agent]
+	at := -1
+	for i, t := range list {
+		if t.ID == taskID {
+			at = i
+			break
+		}
+	}
+	if at < 0 {
+		return false
+	}
+	moving := list[at]
+	band := moving.Band()
+	var same, others []Task
+	for i, t := range list {
+		switch {
+		case i == at:
+		case t.Band() == band:
+			same = append(same, t)
+		default:
+			others = append(others, t)
+		}
+	}
+	if to < 0 {
+		to = 0
+	}
+	if to > len(same) {
+		to = len(same)
+	}
+	same = append(same[:to:to], append([]Task{moving}, same[to:]...)...)
+	// The ranks they carried are what ordered() sorts on, so the new order has
+	// to be written onto them or the sort would put everything straight back.
+	for i := range same {
+		same[i].Rank = i
+	}
+	s.byID[agent] = ordered(append(same, others...))
+	s.save()
+	return true
+}
+
+// Pin keeps a task through every rotation, or lets it rotate again.
+func (s *Store) Pin(agent, taskID string, pinned bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	for i, t := range s.byID[agent] {
+		if t.ID == taskID {
+			s.byID[agent][i].Pinned = pinned
+			s.save()
+			return true
+		}
+	}
+	return false
 }
 
 // Remove takes one of an agent's tasks away. It reports whether it was there.
@@ -148,14 +347,21 @@ func (s *Store) Remove(agent, taskID string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.load()
+	if !s.removeLocked(agent, taskID) {
+		return false
+	}
+	s.save()
+	return true
+}
+
+func (s *Store) removeLocked(agent, taskID string) bool {
 	list := s.byID[agent]
 	for i, t := range list {
 		if t.ID == taskID {
-			s.byID[agent] = append(list[:i:i], list[i+1:]...)
+			s.byID[agent] = ordered(append(list[:i:i], list[i+1:]...))
 			if len(s.byID[agent]) == 0 {
 				delete(s.byID, agent)
 			}
-			s.save()
 			return true
 		}
 	}
@@ -171,7 +377,20 @@ func (s *Store) Forget(agent string) {
 		return
 	}
 	delete(s.byID, agent)
+	delete(s.checked, agent)
 	s.save()
+}
+
+// Texts is every task's text for one agent, for the miner to compare against.
+func (s *Store) Texts(agent string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	out := make([]string, 0, len(s.byID[agent]))
+	for _, t := range s.byID[agent] {
+		out = append(out, t.Text)
+	}
+	return out
 }
 
 // ShortName is a tile's name taken from the prompt itself: the first few words
@@ -233,9 +452,6 @@ func clip(s string, n int) string {
 
 // Default is the store's file beside the service's other state.
 func Default(dir string) string { return filepath.Join(dir, "agent-tasks.json") }
-
-// ErrEmpty is a task with nothing to send.
-var ErrEmpty = errors.New("a task needs some text")
 
 // id is a short, unguessable handle for one task.
 func id() string {

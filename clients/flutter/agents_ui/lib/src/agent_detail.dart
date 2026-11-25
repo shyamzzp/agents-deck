@@ -423,6 +423,7 @@ class _AgentDetailState extends State<AgentDetail> {
                         onClose: () => setState(() => _taskAt = null),
                         onSend: () => unawaited(_sendTask(i)),
                         onRemove: () => unawaited(_removeTaskAt(i)),
+                        onPin: () => unawaited(_pinTaskAt(i)),
                       ),
                     ),
                   if (_history)
@@ -482,6 +483,18 @@ class _AgentDetailState extends State<AgentDetail> {
     setState(() => _taskAt = null);
     await widget.source.focus(a.id);
     await _ask(a, i);
+  }
+
+  /// Pins the task the dialog is open on, or lets it rotate again.
+  Future<void> _pinTaskAt(int i) async {
+    final a = _shown?.$2;
+    final ask = _taskOf(i);
+    if (a == null || ask.id == null) return;
+    setState(() => _taskAt = null);
+    final r = await widget.source.pinTask(a.id, ask.id!, !ask.pinned);
+    if (!mounted) return;
+    Haptics.fire(r.isOk ? HapticWhen.tap : HapticWhen.problem);
+    setState(() => _note = r.isOk ? null : (r.message ?? 'could not pin it'));
   }
 
   /// Takes one of the agent's own tasks off the board, from the dialog.
@@ -628,35 +641,29 @@ class _AgentDetailState extends State<AgentDetail> {
   /// more rows: a task that cannot be reached is worse than a board a row
   /// taller than the deck's.
   /// What sits in each cell of the quick list: the eight every agent has
-  /// first, then the ones kept for this agent in the cell each was made in.
-  /// A cell nothing claims is empty, and an empty cell can be spoken into.
+  /// first, then the agent's own in the order the service keeps them — the
+  /// ones a person made, then the ones the deck mined. A cell nothing claims
+  /// is empty, and an empty cell can be spoken into.
   List<AgentAsk?> _cellsFor(Agent a, int cells) {
     final out = List<AgentAsk?>.filled(cells, null);
     for (final (i, ask) in agentAsks.indexed) {
       if (i < cells) out[i] = ask;
     }
+    var at = agentAsks.length;
     for (final t in a.tasks) {
-      final ask = AgentAsk(
+      if (at >= cells) break;
+      out[at] = AgentAsk(
         t.name.isEmpty ? 'task' : t.name,
         t.text,
         // A task made from a prompt is a prompt: the critter is thinking.
         CritterPose.think,
         id: t.id,
         slot: t.slot,
+        rank: t.rank,
+        mined: t.mined,
+        pinned: t.pinned,
       );
-      // The cell it was made in, or the first free one after the built-in
-      // tasks when that cell is taken or off the end of this board.
-      var at = t.slot;
-      if (at < agentAsks.length || at >= cells || out[at] != null) {
-        at = -1;
-        for (var i = agentAsks.length; i < cells; i++) {
-          if (out[i] == null) {
-            at = i;
-            break;
-          }
-        }
-      }
-      if (at >= 0) out[at] = ask;
+      at++;
     }
     return out;
   }
@@ -665,12 +672,8 @@ class _AgentDetailState extends State<AgentDetail> {
   /// built-in tasks, every task of the agent's own, and one spare row to
   /// speak a new one into.
   int _boardCells(Agent a, int columns) {
-    var most = agentAsks.length;
-    for (final t in a.tasks) {
-      final after = t.slot + 1;
-      if (after > most) most = after;
-    }
-    most += a.tasks.length; // room for the ones that fell in after their cell
+    final most = agentAsks.length + a.tasks.length;
+    // One spare row beyond what is filled, to speak a new task into.
     final rows = (most + columns - 1) ~/ columns + 1;
     return rows * columns;
   }
@@ -2256,6 +2259,7 @@ class _TaskDialog extends StatelessWidget {
     required this.onClose,
     required this.onSend,
     required this.onRemove,
+    required this.onPin,
   });
 
   final AgentAsk ask;
@@ -2264,6 +2268,9 @@ class _TaskDialog extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback onSend;
   final VoidCallback onRemove;
+
+  /// Pins it against the rotation, or lets it rotate again.
+  final VoidCallback onPin;
 
   @override
   Widget build(BuildContext context) {
@@ -2323,6 +2330,17 @@ class _TaskDialog extends StatelessWidget {
                       pressedInk: DeckHud.bg,
                     ),
                     if (ask.id != null) ...[
+                      const SizedBox(height: 10),
+                      AgentButton(
+                        key: const Key('task-pin'),
+                        label: ask.pinned ? 'let it rotate' : 'pin it here',
+                        onTap: busy ? null : onPin,
+                        fill: const Color(0x00000000),
+                        ink: ask.pinned ? DeckHud.accent : DeckHud.ink,
+                        outline: ask.pinned ? DeckHud.accent : DeckHud.dim,
+                        pressedFill: DeckHud.ink,
+                        pressedInk: DeckHud.bg,
+                      ),
                       const SizedBox(height: 10),
                       AgentButton(
                         key: const Key('task-remove'),
@@ -2788,7 +2806,13 @@ class _AskTile extends StatelessWidget {
                     child: SizedBox(
                       width: 158,
                       child: Text(
-                        sent ? 'sent' : ask.label,
+                        // A pinned task says so: it is the one the rotation
+                        // will not touch.
+                        sent
+                            ? 'sent'
+                            : ask.pinned
+                            ? '${ask.label} \u00b7 pinned'
+                            : ask.label,
                         maxLines: 2,
                         textAlign: TextAlign.center,
                         overflow: TextOverflow.ellipsis,

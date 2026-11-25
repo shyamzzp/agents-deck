@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/brushknight/agents-deck/backend/internal/model"
 	"github.com/brushknight/agents-deck/backend/internal/tasks"
 )
 
@@ -48,13 +49,60 @@ func (s *Server) addTask(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, tasks.ErrEmpty.Error())
 		return
 	}
-	t, err := s.Tasks.Add(id, in.Name, in.Text, in.Slot)
+	// A task made through the API is one a person made: the miner adds its own
+	// with model.TaskMined, inside the service.
+	t, err := s.Tasks.Add(id, in.Name, in.Text, model.TaskCustom, in.Slot)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	s.Store.Touch() // the clients redraw with the new tile on it
 	writeJSON(w, http.StatusCreated, t)
+}
+
+// moveTask puts a task at a rank within its own band: the tasks someone made
+// hold the front of the list and the mined ones follow, so a drag rearranges
+// one among its own kind rather than across the two.
+func (s *Server) moveTask(w http.ResponseWriter, r *http.Request) {
+	if s.Tasks == nil {
+		writeErr(w, http.StatusNotFound, "this deck keeps no tasks")
+		return
+	}
+	var in struct {
+		To int `json:"to"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
+		writeErr(w, http.StatusBadRequest, "body must be {\"to\"}")
+		return
+	}
+	if !s.Tasks.Move(r.PathValue("id"), r.PathValue("taskId"), in.To) {
+		writeErr(w, http.StatusNotFound, "no such task")
+		return
+	}
+	s.Store.Touch()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// pinTask keeps a task through every rotation, or lets it rotate again.
+func (s *Server) pinTask(w http.ResponseWriter, r *http.Request) {
+	if s.Tasks == nil {
+		writeErr(w, http.StatusNotFound, "this deck keeps no tasks")
+		return
+	}
+	var in struct {
+		Pinned *bool `json:"pinned"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
+		writeErr(w, http.StatusBadRequest, "body must be {\"pinned\"}")
+		return
+	}
+	pinned := in.Pinned == nil || *in.Pinned // no body at all means pin it
+	if !s.Tasks.Pin(r.PathValue("id"), r.PathValue("taskId"), pinned) {
+		writeErr(w, http.StatusNotFound, "no such task")
+		return
+	}
+	s.Store.Touch()
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) removeTask(w http.ResponseWriter, r *http.Request) {

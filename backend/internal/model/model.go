@@ -165,7 +165,38 @@ type Task struct {
 	Text string `json:"text"`
 	// Slot is the cell of the card's quick list it was made in, counted from
 	// the first cell of the board; 0 leaves it to fall in after the ones
-	// before it. The built-in tasks hold the first cells.
-	Slot  int       `json:"slot,omitempty"`
+	// before it. The built-in tasks hold the first cells. It seeds the rank
+	// of a task made by hand and is not used after that.
+	Slot int `json:"slot,omitempty"`
+
+	// Source is where the task came from: "custom" for one a person made,
+	// "mined" for one the deck found in the session's own prompts. The two
+	// are drawn as bands, custom first, so what you made is what you see.
+	Source string `json:"source,omitempty"`
+
+	// Rank orders the tasks within their band, from 0. It is a position in a
+	// list rather than a cell of the board: a phone draws four to a row and a
+	// tablet seven or ten, so a cell number would mean a different place on
+	// each.
+	Rank int `json:"rank"`
+
+	// Pinned keeps a task through every rotation, mined or not.
+	Pinned bool `json:"pinned,omitempty"`
+
 	Added time.Time `json:"added"`
+}
+
+// TaskCustom and TaskMined are the two bands of an agent's quick list.
+const (
+	TaskCustom = "custom"
+	TaskMined  = "mined"
+)
+
+// Band is 0 for a task someone made and 1 for one the deck mined, which is
+// the order they are drawn in.
+func (t Task) Band() int {
+	if t.Source == TaskMined {
+		return 1
+	}
+	return 0
 }

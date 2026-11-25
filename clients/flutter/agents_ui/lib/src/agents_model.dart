@@ -760,15 +760,30 @@ class AgentTask {
     required this.name,
     required this.text,
     this.slot = 0,
+    this.rank = 0,
+    this.source = 'custom',
+    this.pinned = false,
   });
 
   final String id;
   final String name;
   final String text;
 
-  /// The cell of the quick list it was made in, counted from the board's
-  /// first cell; 0 lets it fall in after the ones before it.
+  /// The cell of the quick list it was made in; only the seed of its rank.
   final int slot;
+
+  /// Its place within its band, from 0.
+  final int rank;
+
+  /// `custom` for one a person made, `mined` for one the deck found in the
+  /// session's own prompts. Custom tasks are drawn first.
+  final String source;
+
+  /// Kept through every rotation.
+  final bool pinned;
+
+  /// Mined tasks rotate; the ones you made never do.
+  bool get mined => source == 'mined';
 
   static AgentTask? fromJson(Object? j) {
     if (j is! Map) return null;
@@ -781,6 +796,9 @@ class AgentTask {
       name: _str(m['name']),
       text: text,
       slot: _int(m['slot']),
+      rank: _int(m['rank']),
+      source: _str(m['source']).isEmpty ? 'custom' : _str(m['source']),
+      pinned: m['pinned'] == true,
     );
   }
 }
@@ -791,7 +809,16 @@ class AgentTask {
 /// worth a tap rather than a keyboard: the text is what the local dashboard's
 /// message box would send.
 class AgentAsk {
-  const AgentAsk(this.label, this.text, this.pose, {this.id, this.slot = 0});
+  const AgentAsk(
+    this.label,
+    this.text,
+    this.pose, {
+    this.id,
+    this.slot = 0,
+    this.rank = 0,
+    this.mined = false,
+    this.pinned = false,
+  });
 
   /// Set for a task kept for one agent (its handle, for taking it away);
   /// null for the eight every agent has.
@@ -800,6 +827,15 @@ class AgentAsk {
 
   /// For a task of an agent's own: the cell it was made in.
   final int slot;
+
+  /// Its place within its band, for a drag to move it to another.
+  final int rank;
+
+  /// Found by the deck in the session's prompts, rather than made by hand.
+  final bool mined;
+
+  /// Kept through every rotation.
+  final bool pinned;
 
   /// What the card shows, hyphenated: it reads as the name of a task rather
   /// than a sentence, and fits a cell on a phone.

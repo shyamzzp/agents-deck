@@ -267,6 +267,8 @@ func (s *Server) api() *http.ServeMux {
 	mux.HandleFunc("GET /v1/agents/{id}/tasks", s.getTasks)
 	mux.HandleFunc("POST /v1/agents/{id}/tasks", s.addTask)
 	mux.HandleFunc("POST /v1/agents/{id}/tasks/{taskId}/remove", s.removeTask)
+	mux.HandleFunc("POST /v1/agents/{id}/tasks/{taskId}/move", s.moveTask)
+	mux.HandleFunc("POST /v1/agents/{id}/tasks/{taskId}/pin", s.pinTask)
 	mux.HandleFunc("POST /v1/agents/{id}/queue/{qid}/cancel", s.cancelQueued)
 	mux.HandleFunc("POST /v1/agents/{id}/focus", func(w http.ResponseWriter, r *http.Request) {
 		s.act(w, s.Ctl.Focus(r.PathValue("id")))
