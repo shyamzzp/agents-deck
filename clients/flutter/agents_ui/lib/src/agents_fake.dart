@@ -361,6 +361,22 @@ class FakeAgentsSource implements AgentsSource {
   }
 
   @override
+  Future<AgentsResult> moveTask(String agentId, String taskId, int to) async {
+    calls.add(('moveTask', agentId, {'taskId': taskId, 'to': '$to'}));
+    return AgentsResult.ok;
+  }
+
+  @override
+  Future<AgentsResult> pinTask(
+    String agentId,
+    String taskId,
+    bool pinned,
+  ) async {
+    calls.add(('pinTask', agentId, {'taskId': taskId, 'pinned': '$pinned'}));
+    return AgentsResult.ok;
+  }
+
+  @override
   Future<AgentsResult> removeTask(String agentId, String taskId) async {
     calls.add(('removeTask', agentId, {'taskId': taskId}));
     return AgentsResult.ok;

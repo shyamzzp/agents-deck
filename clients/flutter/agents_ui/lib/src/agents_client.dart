@@ -123,6 +123,15 @@ abstract class AgentsSource {
   /// `POST /v1/agents/{id}/tasks/{taskId}/remove` — takes one away again.
   Future<AgentsResult> removeTask(String agentId, String taskId);
 
+  /// `POST /v1/agents/{id}/tasks/{taskId}/move {"to"}` — puts a task at that
+  /// rank within its own band: the ones a person made hold the front of the
+  /// list, the mined ones follow, and neither moves into the other's places.
+  Future<AgentsResult> moveTask(String agentId, String taskId, int to);
+
+  /// `POST /v1/agents/{id}/tasks/{taskId}/pin {"pinned"}` — keeps a task
+  /// through every rotation, or lets it rotate again.
+  Future<AgentsResult> pinTask(String agentId, String taskId, bool pinned);
+
   /// `GET /v1/live` — Claude sessions started by hand in other terminals.
   Future<List<LiveSession>> liveSessions();
 
@@ -655,6 +664,24 @@ class HttpAgentsClient implements AgentsSource {
     false,
     const Duration(seconds: 10),
   );
+
+  @override
+  Future<AgentsResult> moveTask(String agentId, String taskId, int to) =>
+      _postPath(
+        ['v1', 'agents', agentId, 'tasks', taskId, 'move'],
+        {'to': to},
+        false,
+        const Duration(seconds: 10),
+      );
+
+  @override
+  Future<AgentsResult> pinTask(String agentId, String taskId, bool pinned) =>
+      _postPath(
+        ['v1', 'agents', agentId, 'tasks', taskId, 'pin'],
+        {'pinned': pinned},
+        false,
+        const Duration(seconds: 10),
+      );
 
   @override
   Future<AgentsResult> removeTask(String agentId, String taskId) => _postPath(
