@@ -8,11 +8,14 @@
 #
 #   packaging/macos/package.sh --app "build/.../agents deck.app" --agentctl dist/agentctl \
 #     --version 0.2.0 --out dist [--arch universal] [--identity "Developer ID Application: …"]
-#     [--deck-ble <dir>/deck-ble]
+#     [--deck-ble <dir>/deck-ble] [--deck-words <dir>/deck-words]
 #
 # --deck-ble adds the Bluetooth helper next to agentctl (without it, Bluetooth
 # says it isn't available on this Mac); <dir> is what `swift build -c release
 # --arch arm64 --arch x86_64 --show-bin-path` prints in clients/ble/macos.
+# --deck-words adds the sentence helper the same way, from clients/words/macos
+# (without it, the tasks the deck finds in a session's prompts are judged on
+# the words alone).
 #
 # Without --identity everything is signed ad hoc: it runs, but macOS asks before
 # the first open. With it, every piece is signed with that identity, the hardened
@@ -23,17 +26,18 @@
 # tools are used (codesign, ditto, hdiutil, notarytool, stapler).
 set -euo pipefail
 
-app="" agentctl="" deckble="" version="" out="" arch="universal" identity="" entitlements=""
+app="" agentctl="" deckble="" deckwords="" version="" out="" arch="universal" identity="" entitlements=""
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 entitlements="$root/clients/macos/macos/Runner/Release.entitlements"
 
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --app) app="$2"; shift ;;
     --agentctl) agentctl="$2"; shift ;;
     --deck-ble) deckble="$2"; shift ;;
+    --deck-words) deckwords="$2"; shift ;;
     --version) version="$2"; shift ;;
     --out) out="$2"; shift ;;
     --arch) arch="$2"; shift ;;
@@ -83,13 +87,19 @@ if [ -n "$deckble" ]; then
   install -m 0755 "$deckble" "$dest/Contents/MacOS/deck-ble"
   sign -i dev.agents-deck.deck-ble "$dest/Contents/MacOS/deck-ble"
 fi
+# The sentence helper: no entitlement and no usage text needed, it only reads
+# the system's own language model (clients/words/README.md).
+if [ -n "$deckwords" ]; then
+  install -m 0755 "$deckwords" "$dest/Contents/MacOS/deck-words"
+  sign -i dev.agents-deck.deck-words "$dest/Contents/MacOS/deck-words"
+fi
 while IFS= read -r -d '' item; do
   sign "$item"
 done < <(find "$dest/Contents" -depth \( -name '*.dylib' -o -name '*.framework' -o -name '*.xpc' \
   -o -name '*.appex' -o -name '*.bundle' -o \( -name '*.app' -not -path "$dest" \) \) -print0)
 # Any other executable in Contents/MacOS besides the app's own and agentctl.
 while IFS= read -r -d '' item; do
-  case "$item" in "$dest/Contents/MacOS/$name"|"$dest/Contents/MacOS/agentctl"|"$dest/Contents/MacOS/deck-ble"|*.dylib) continue ;; esac
+  case "$item" in "$dest/Contents/MacOS/$name"|"$dest/Contents/MacOS/agentctl"|"$dest/Contents/MacOS/deck-ble"|"$dest/Contents/MacOS/deck-words"|*.dylib) continue ;; esac
   sign "$item"
 done < <(find "$dest/Contents/MacOS" -type f -perm -u+x -print0)
 sign --entitlements "$entitlements" "$dest"

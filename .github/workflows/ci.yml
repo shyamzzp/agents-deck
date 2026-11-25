@@ -201,12 +201,22 @@ jobs:
           bin="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
           lipo -archs "$bin/deck-ble"
           cp "$bin/deck-ble" ../../../build/deck-ble
+      - name: sentence helper (deck-words), universal
+        working-directory: clients/words/macos
+        run: |
+          swift build -c release --arch arm64 --arch x86_64
+          bin="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
+          lipo -archs "$bin/deck-words"
+          # It must answer on this runner, or the deck would ship a helper that
+          # only ever fails: one request in, one line of vectors out.
+          echo '{"texts":["check the meetings scheduled for today"]}' | "$bin/deck-words" | grep -q '"dim":'
+          cp "$bin/deck-words" ../../../build/deck-words
       - name: package and check
         run: |
           app="clients/macos/build/macos/Build/Products/Release/agents deck.app"
           lipo -archs "$app/Contents/MacOS/agents deck"
           packaging/macos/package.sh --app "$app" --agentctl build/agentctl --deck-ble build/deck-ble \
-            --version 0.0.0-ci --arch universal --out dist
+            --deck-words build/deck-words --version 0.0.0-ci --arch universal --out dist
           mnt="$RUNNER_TEMP/dmg"
           mkdir -p "$mnt"
           hdiutil attach -nobrowse -readonly -mountpoint "$mnt" dist/agents-deck_0.0.0-ci_macos_universal.dmg
@@ -216,6 +226,8 @@ jobs:
           test -x "$mnt/agents deck.app/Contents/MacOS/deck-ble"
           # -dv, not -r-: an ad-hoc signature's designated requirement is a cdhash, without the identifier.
           codesign -dv "$mnt/agents deck.app/Contents/MacOS/deck-ble" 2>&1 | grep -q '^Identifier=dev.agents-deck.deck-ble$'
+          test -x "$mnt/agents deck.app/Contents/MacOS/deck-words"
+          codesign -dv "$mnt/agents deck.app/Contents/MacOS/deck-words" 2>&1 | grep -q '^Identifier=dev.agents-deck.deck-words$'
           # macOS reads the app's Info.plist for the helper inside it (clients/ble/README.md).
           /usr/libexec/PlistBuddy -c "Print :NSBluetoothAlwaysUsageDescription" "$mnt/agents deck.app/Contents/Info.plist"
           hdiutil detach "$mnt"
