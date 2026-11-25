@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/server"
-	"github.com/brushknight/agents-deck/backend/internal/store"
-	"github.com/brushknight/agents-deck/backend/internal/web"
+	"github.com/shyamzzp/agents-deck/backend/internal/server"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/web"
 )
 
 func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {

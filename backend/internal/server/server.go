@@ -19,16 +19,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/accounts"
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/groups"
-	"github.com/brushknight/agents-deck/backend/internal/hats"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/pets"
-	"github.com/brushknight/agents-deck/backend/internal/pki"
-	"github.com/brushknight/agents-deck/backend/internal/queue"
-	"github.com/brushknight/agents-deck/backend/internal/store"
-	"github.com/brushknight/agents-deck/backend/internal/tasks"
+	"github.com/shyamzzp/agents-deck/backend/internal/accounts"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/groups"
+	"github.com/shyamzzp/agents-deck/backend/internal/hats"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/pets"
+	"github.com/shyamzzp/agents-deck/backend/internal/pki"
+	"github.com/shyamzzp/agents-deck/backend/internal/queue"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/tasks"
 )
 
 // Controller performs agent actions; the live daemon and demo mode implement it.

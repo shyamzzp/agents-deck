@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/codex"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/paths"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/codex"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/paths"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 func TestCatalogSourcesAndSavedCodexAdd(t *testing.T) {

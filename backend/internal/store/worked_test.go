@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // Time worked today is the time spent running since midnight: stretches

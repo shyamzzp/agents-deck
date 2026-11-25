@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/pki"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/pki"
 )
 
 // boardWifi builds the firmware kit's board_wifi (C, mbedTLS 3): skipped

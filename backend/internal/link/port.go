@@ -3,7 +3,7 @@ package link
 import (
 	"io"
 
-	"github.com/brushknight/agents-deck/backend/internal/serial"
+	"github.com/shyamzzp/agents-deck/backend/internal/serial"
 )
 
 // ErrUnsupported: serial ports on this platform aren't implemented yet.

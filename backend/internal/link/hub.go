@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/link/linkpb"
+	"github.com/shyamzzp/agents-deck/backend/internal/link/linkpb"
 )
 
 // Hub knows every live Deck Link session, on either transport: for `agentctl

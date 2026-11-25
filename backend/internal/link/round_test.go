@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
 )
 
 // buildRoundSim compiles the round boards' host program

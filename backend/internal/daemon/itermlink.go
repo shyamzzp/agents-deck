@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/brushknight/agents-deck/backend/internal/iterm2"
+	"github.com/shyamzzp/agents-deck/backend/internal/iterm2"
 )
 
 // itermLink keeps one authenticated connection to iTerm's API and uses it to

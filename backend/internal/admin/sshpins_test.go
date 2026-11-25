@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/groups"
+	"github.com/shyamzzp/agents-deck/backend/internal/groups"
 )
 
 func TestSSHPinsScopedAndIdempotent(t *testing.T) {

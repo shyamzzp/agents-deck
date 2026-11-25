@@ -13,8 +13,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/firmware"
-	"github.com/brushknight/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/firmware"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
 )
 
 // fakeLocal is the hub's local images: it records what it was given.

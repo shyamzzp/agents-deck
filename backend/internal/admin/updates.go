@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/firmware"
-	"github.com/brushknight/agents-deck/backend/internal/update"
+	"github.com/shyamzzp/agents-deck/backend/internal/firmware"
+	"github.com/shyamzzp/agents-deck/backend/internal/update"
 )
 
 const catalogTTL = 15 * time.Minute

@@ -4,9 +4,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/proc"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/proc"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 // The deck's own agents by their tmux pane, hand-started Claude sessions by

@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/limits"
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/limits"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // Entry is one agent: the wire view plus private bookkeeping.

@@ -1,8 +1,8 @@
 <p align="center"><img src="docs/images/hero-v3.png" alt="agents deck: the board of Claude Code and Codex agents in the macOS menu bar, on a 4-inch wall panel and on a 2.4-inch LilyGo T4-S3, finding agents in Orca, herdr, cmux, Codex and tmux" width="100%"></p>
 
 <p align="center">
-  <a href="https://github.com/brushknight/agents-deck/actions/workflows/ci.yml"><img src="https://github.com/brushknight/agents-deck/actions/workflows/ci.yml/badge.svg" alt="ci"></a>
-  <a href="https://github.com/brushknight/agents-deck/releases/latest"><img src="https://img.shields.io/github/v/release/brushknight/agents-deck?label=release&color=FF4D00&labelColor=1b1b18" alt="latest release"></a>
+  <a href="https://github.com/shyamzzp/agents-deck/actions/workflows/ci.yml"><img src="https://github.com/shyamzzp/agents-deck/actions/workflows/ci.yml/badge.svg" alt="ci"></a>
+  <a href="https://github.com/shyamzzp/agents-deck/releases/latest"><img src="https://img.shields.io/github/v/release/shyamzzp/agents-deck?label=release&color=FF4D00&labelColor=1b1b18" alt="latest release"></a>
   <img src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-7A776F?labelColor=1b1b18" alt="macOS on Apple Silicon and Intel">
   <img src="https://img.shields.io/badge/Linux-x64%20%7C%20arm64-7A776F?labelColor=1b1b18" alt="Linux on x64 and arm64">
   <img src="https://img.shields.io/badge/Windows-preview-7A776F?labelColor=1b1b18" alt="Windows, preview">
@@ -37,7 +37,7 @@ and it works without the cable.
 ## Install
 
 **1. Download the app for your computer** from the
-[latest release](https://github.com/brushknight/agents-deck/releases/latest) (under **Assets**):
+[latest release](https://github.com/shyamzzp/agents-deck/releases/latest) (under **Assets**):
 
 | your computer | the file | then |
 |---|---|---|
@@ -198,7 +198,7 @@ the 1.47″, and the LilyGO with its shell. They change, and shipping and tax ar
 **2.8″ round** is the nicest to use; the **1.8″ AMOLED** is the smallest touch board with a
 rectangular screen and has the Needs you screen.
 
-**Want another board?** Ask for it in a [hardware request](https://github.com/brushknight/agents-deck/issues/new?title=Hardware+requests%3A+which+display+should+agents+deck+support+next%3F&body=agents+deck+runs+on+these+boards+today+%28see+%5Bdocs%2Fdevices.md%5D%28..%2Fblob%2Fmain%2Fdocs%2Fdevices.md%29%29%3A%0A%0A-+Waveshare+ESP32-S3-Touch-LCD-2.1+%28round%29%0A-+Waveshare+ESP32-S3-Touch-LCD-2.8C+%28round%29%0A-+Waveshare+ESP32-S3-Touch-LCD-4+%28square%2C+desk-panel+layout%29%0A-+Waveshare+ESP32-S3-Touch-AMOLED-1.8+%28small+square%29%0A-+LilyGO+T4-S3+2.41%E2%80%B3+AMOLED%0A-+Waveshare+ESP32-S3-LCD-1.47+%28strip%29%0A%0A%2A%2AWant+another+one%3F%2A%2A+Comment+here+with%3A%0A%0A1.+%2A%2ABoard%2A%2A+%E2%80%94+exact+name+and+a+link+to+the+maker%27s+product+page%0A2.+%2A%2AScreen%2A%2A+%E2%80%94+size%2C+resolution%2C+shape+%28round+%2F+square+%2F+bar%29%2C+touch+or+buttons%0A3.+%2A%2AChip%2A%2A+%E2%80%94+ESP32-S3+boards+are+easiest+%28USB%2C+PSRAM%2C+Wi-Fi%29%3B+others+are+welcome+but+take+longer%0A4.+%2A%2AHow+you%27d+use+it%2A%2A+%E2%80%94+on+the+desk%2C+on+the+wall%2C+in+a+keyboard%2C+as+a+status+light%E2%80%A6%0A%0A%F0%9F%91%8D+the+requests+you%27d+like+too%3A+the+most-wanted+boards+get+built+first.%0A%0AWriting+firmware+yourself%3F+Follow+%5Bdocs%2Flink%2Fnew-device.md%5D%28..%2Fblob%2Fmain%2Fdocs%2Flink%2Fnew-device.md%29+%E2%80%94+a+coding+agent+can+follow+it+too.&labels=hardware): say which board, its
+**Want another board?** Ask for it in a [hardware request](https://github.com/shyamzzp/agents-deck/issues/new?title=Hardware+requests%3A+which+display+should+agents+deck+support+next%3F&body=agents+deck+runs+on+these+boards+today+%28see+%5Bdocs%2Fdevices.md%5D%28..%2Fblob%2Fmain%2Fdocs%2Fdevices.md%29%29%3A%0A%0A-+Waveshare+ESP32-S3-Touch-LCD-2.1+%28round%29%0A-+Waveshare+ESP32-S3-Touch-LCD-2.8C+%28round%29%0A-+Waveshare+ESP32-S3-Touch-LCD-4+%28square%2C+desk-panel+layout%29%0A-+Waveshare+ESP32-S3-Touch-AMOLED-1.8+%28small+square%29%0A-+LilyGO+T4-S3+2.41%E2%80%B3+AMOLED%0A-+Waveshare+ESP32-S3-LCD-1.47+%28strip%29%0A%0A%2A%2AWant+another+one%3F%2A%2A+Comment+here+with%3A%0A%0A1.+%2A%2ABoard%2A%2A+%E2%80%94+exact+name+and+a+link+to+the+maker%27s+product+page%0A2.+%2A%2AScreen%2A%2A+%E2%80%94+size%2C+resolution%2C+shape+%28round+%2F+square+%2F+bar%29%2C+touch+or+buttons%0A3.+%2A%2AChip%2A%2A+%E2%80%94+ESP32-S3+boards+are+easiest+%28USB%2C+PSRAM%2C+Wi-Fi%29%3B+others+are+welcome+but+take+longer%0A4.+%2A%2AHow+you%27d+use+it%2A%2A+%E2%80%94+on+the+desk%2C+on+the+wall%2C+in+a+keyboard%2C+as+a+status+light%E2%80%A6%0A%0A%F0%9F%91%8D+the+requests+you%27d+like+too%3A+the+most-wanted+boards+get+built+first.%0A%0AWriting+firmware+yourself%3F+Follow+%5Bdocs%2Flink%2Fnew-device.md%5D%28..%2Fblob%2Fmain%2Fdocs%2Flink%2Fnew-device.md%29+%E2%80%94+a+coding+agent+can+follow+it+too.&labels=hardware): say which board, its
 
 ## Flash a board
 
@@ -211,7 +211,7 @@ with chargers only carry power). Then pick one way:
   mine**, pick the board from the pictures, and click **Install firmware**. The app downloads the
   image from the latest release, checks its signature, writes it and reads it back. When it's done
   the board restarts, pairs and shows your agents.
-- **From the [web flasher](https://brushknight.com/agents-deck)**, if you haven't installed anything: open it in Chrome or
+- **From the [web flasher](https://shyamzzp.github.io/agents-deck)**, if you haven't installed anything: open it in Chrome or
   Edge, pick your board, click **Connect**, choose the board's USB port, and click **Install**. (It
   uses Web Serial, which Safari and Firefox don't have.)
 - **From a terminal**, with `agentctl flash`, or by building the firmware yourself with PlatformIO
@@ -301,7 +301,7 @@ go over Bluetooth: a board updates over Wi-Fi or the cable. More in
 | signed by the platform | notarized by Apple, once the project's certificate is set up | no platform signing | not yet: SmartScreen warns |
 
 Windows has not been tried on a real Windows PC yet; please
-[report what you find](https://github.com/brushknight/agents-deck/issues).
+[report what you find](https://github.com/shyamzzp/agents-deck/issues).
 
 ## Where else it shows up
 
@@ -328,7 +328,7 @@ nothing to set up: the deck finds them and lets you answer, interrupt and jump t
 | Claude Code on its own | sessions you started by hand in any terminal, once you add them (`agentctl live`, `agentctl add`) |
 
 **Your harness missing?** Open a pull request ([docs/harnesses.md](docs/harnesses.md) walks through
-adding one), or name it in the [harness tracking issue](https://github.com/brushknight/agents-deck/issues/7).
+adding one), or name it in the [harness tracking issue](https://github.com/shyamzzp/agents-deck/issues/7).
 
 ## For the terminal
 
@@ -338,7 +338,7 @@ Everything in the app is also a command, and you don't need the app at all if yo
 tray app as well:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/brushknight/agents-deck/main/install.sh | sh -s -- --app
+curl -fsSL https://raw.githubusercontent.com/shyamzzp/agents-deck/main/install.sh | sh -s -- --app
 ```
 
 That downloads the latest release, checks it against the release's `SHA256SUMS`, installs `agentctl`
@@ -349,7 +349,7 @@ login too.
 release. A build from source never updates itself:
 
 ```bash
-git clone https://github.com/brushknight/agents-deck && cd agents-deck
+git clone https://github.com/shyamzzp/agents-deck && cd agents-deck
 ./install.sh --source --app
 ```
 

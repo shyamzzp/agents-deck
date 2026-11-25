@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/serial"
+	"github.com/shyamzzp/agents-deck/backend/internal/serial"
 )
 
 // fakeBoard is a simulated ESP32-S3 on a serial port: its reset circuit

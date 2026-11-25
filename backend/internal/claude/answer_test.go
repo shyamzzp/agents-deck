@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 func text(s string) string { return fmt.Sprintf(`{"type":"text","text":%q}`, s) }

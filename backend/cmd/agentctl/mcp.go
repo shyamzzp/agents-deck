@@ -21,7 +21,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
 )
 
 // mcpTokenEnv holds the token for `agentctl mcp`.

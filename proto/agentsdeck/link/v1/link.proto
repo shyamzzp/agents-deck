@@ -11,7 +11,7 @@ syntax = "proto3";
 
 package agentsdeck.link.v1;
 
-option go_package = "github.com/brushknight/agents-deck/backend/internal/link/linkpb";
+option go_package = "github.com/shyamzzp/agents-deck/backend/internal/link/linkpb";
 
 message Frame {
   uint32 seq = 1;

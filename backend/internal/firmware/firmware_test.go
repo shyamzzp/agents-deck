@@ -10,8 +10,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/update"
-	"github.com/brushknight/agents-deck/backend/internal/update/updatetest"
+	"github.com/shyamzzp/agents-deck/backend/internal/update"
+	"github.com/shyamzzp/agents-deck/backend/internal/update/updatetest"
 )
 
 var ctx = context.Background()

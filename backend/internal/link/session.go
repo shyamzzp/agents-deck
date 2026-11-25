@@ -18,9 +18,9 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/link/linkpb"
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/link/linkpb"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // Deck is what a session needs from the daemon: the state, its changes, the

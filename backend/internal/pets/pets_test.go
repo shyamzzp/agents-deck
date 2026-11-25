@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/hats"
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/hats"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // rig is a book on a fake clock with one agent, "a1".

@@ -34,7 +34,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // MinedMax is how many mined tasks one agent keeps; the oldest unpinned one

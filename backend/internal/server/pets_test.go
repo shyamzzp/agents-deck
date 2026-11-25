@@ -3,8 +3,8 @@ package server
 import (
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/pets"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/pets"
 )
 
 // POST /v1/agents/{id}/pet/hatch hatches a ready egg, for a device that may

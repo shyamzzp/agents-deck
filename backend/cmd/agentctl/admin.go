@@ -10,15 +10,15 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/admin"
-	"github.com/brushknight/agents-deck/backend/internal/firmware"
-	"github.com/brushknight/agents-deck/backend/internal/link"
-	"github.com/brushknight/agents-deck/backend/internal/paths"
-	"github.com/brushknight/agents-deck/backend/internal/proc"
-	"github.com/brushknight/agents-deck/backend/internal/serial"
-	"github.com/brushknight/agents-deck/backend/internal/server"
-	"github.com/brushknight/agents-deck/backend/internal/store"
-	"github.com/brushknight/agents-deck/backend/internal/update"
+	"github.com/shyamzzp/agents-deck/backend/internal/admin"
+	"github.com/shyamzzp/agents-deck/backend/internal/firmware"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/paths"
+	"github.com/shyamzzp/agents-deck/backend/internal/proc"
+	"github.com/shyamzzp/agents-deck/backend/internal/serial"
+	"github.com/shyamzzp/agents-deck/backend/internal/server"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/update"
 )
 
 // newAdmin makes the management API before the Deck Link manager, which asks

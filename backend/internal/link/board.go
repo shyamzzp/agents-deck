@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/link/linkpb"
+	"github.com/shyamzzp/agents-deck/backend/internal/link/linkpb"
 )
 
 // Board is the board side of Deck Link in Go: `agentctl link sim` and tests.

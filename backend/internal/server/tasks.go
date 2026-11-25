@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/tasks"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/tasks"
 )
 
 func (s *Server) getTasks(w http.ResponseWriter, r *http.Request) {

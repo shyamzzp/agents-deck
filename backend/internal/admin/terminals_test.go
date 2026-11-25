@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"github.com/brushknight/agents-deck/backend/internal/deskterm"
+	"github.com/shyamzzp/agents-deck/backend/internal/deskterm"
 	"testing"
 )
 

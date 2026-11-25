@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: agents deck
-Source: https://github.com/brushknight/agents-deck
+Source: https://github.com/shyamzzp/agents-deck
 
 Files: *
 Copyright: 2025-2026 the agents deck contributors

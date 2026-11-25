@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/brushknight/agents-deck/backend/internal/ble"
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/ble"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
 )
 
 // Bluetooth in the management API: whether this computer can use it, scanning

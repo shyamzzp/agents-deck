@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/serial"
+	"github.com/shyamzzp/agents-deck/backend/internal/serial"
 )
 
 func TestPortPresent(t *testing.T) {

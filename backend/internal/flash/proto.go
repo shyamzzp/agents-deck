@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/serial"
+	"github.com/shyamzzp/agents-deck/backend/internal/serial"
 )
 
 // The Espressif serial bootloader protocol, as the ROM of the ESP32-S3

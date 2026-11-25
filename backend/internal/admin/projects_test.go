@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/server"
+	"github.com/shyamzzp/agents-deck/backend/internal/server"
 )
 
 // fakeStarter records the agents it was asked to start and the prompts sent.

@@ -21,13 +21,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/paths"
+	"github.com/shyamzzp/agents-deck/backend/internal/paths"
 )
 
 // DefaultBase is the repository's releases on GitHub. Files are read from
 // Base/latest/download/<file> and Base/download/v<version>/<file>: plain
 // downloads, not the rate-limited API.
-const DefaultBase = "https://github.com/brushknight/agents-deck/releases"
+const DefaultBase = "https://github.com/shyamzzp/agents-deck/releases"
 
 const (
 	SumsFile = "SHA256SUMS"

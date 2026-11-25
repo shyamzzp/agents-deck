@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // fakeClock is the grid's clock in tests (the store's own timer may read it).

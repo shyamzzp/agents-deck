@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // The levels: ok below Near, near from Near, low from Low, out at 100 or hit.

@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/claude"
-	"github.com/brushknight/agents-deck/backend/internal/cmux"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/claude"
+	"github.com/shyamzzp/agents-deck/backend/internal/cmux"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 // cmuxWatch mirrors the Claude agents running in cmux's terminals onto the

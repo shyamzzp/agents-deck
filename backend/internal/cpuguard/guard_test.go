@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/proc"
+	"github.com/shyamzzp/agents-deck/backend/internal/proc"
 )
 
 // fakeMeter keeps a reading every 5 s on a fake clock and averages them the

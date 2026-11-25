@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
 )
 
 // A board may reach the deck over USB, Wi-Fi and Bluetooth at once, but the

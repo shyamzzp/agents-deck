@@ -26,8 +26,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/admin"
-	"github.com/brushknight/agents-deck/backend/internal/firmware"
+	"github.com/shyamzzp/agents-deck/backend/internal/admin"
+	"github.com/shyamzzp/agents-deck/backend/internal/firmware"
 )
 
 // buildFiles is one build to send: its manifest and its images on disk.

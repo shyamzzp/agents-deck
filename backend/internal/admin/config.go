@@ -2,12 +2,12 @@ package admin
 
 import (
 	"encoding/json"
-	"github.com/brushknight/agents-deck/backend/internal/configfile"
+	"github.com/shyamzzp/agents-deck/backend/internal/configfile"
 	"os"
 	"path/filepath"
 	"sync"
 
-	"github.com/brushknight/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
 )
 
 // config.json is shared with the rest of the service and with agentctl set:

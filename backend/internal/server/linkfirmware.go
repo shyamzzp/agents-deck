@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
 )
 
 // linkFirmware: POST /local/link/firmware {"device", "board", "version",

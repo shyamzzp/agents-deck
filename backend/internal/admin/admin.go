@@ -17,17 +17,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/ble"
-	"github.com/brushknight/agents-deck/backend/internal/cpuguard"
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/firmware"
-	"github.com/brushknight/agents-deck/backend/internal/flash"
-	"github.com/brushknight/agents-deck/backend/internal/link"
-	"github.com/brushknight/agents-deck/backend/internal/proc"
-	"github.com/brushknight/agents-deck/backend/internal/serial"
-	"github.com/brushknight/agents-deck/backend/internal/service"
-	"github.com/brushknight/agents-deck/backend/internal/store"
-	"github.com/brushknight/agents-deck/backend/internal/update"
+	"github.com/shyamzzp/agents-deck/backend/internal/ble"
+	"github.com/shyamzzp/agents-deck/backend/internal/cpuguard"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/firmware"
+	"github.com/shyamzzp/agents-deck/backend/internal/flash"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/proc"
+	"github.com/shyamzzp/agents-deck/backend/internal/serial"
+	"github.com/shyamzzp/agents-deck/backend/internal/service"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/update"
 )
 
 // Flasher talks to a board's ROM bootloader on a serial port (flash.Probe and

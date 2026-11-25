@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
 )
 
 // ProjectBook is the project list as MCP changes it. The admin service

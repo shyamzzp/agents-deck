@@ -12,11 +12,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/link"
-	"github.com/brushknight/agents-deck/backend/internal/link/linkpb"
-	"github.com/brushknight/agents-deck/backend/internal/paths"
-	"github.com/brushknight/agents-deck/backend/internal/serial"
-	"github.com/brushknight/agents-deck/backend/internal/server"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/link/linkpb"
+	"github.com/shyamzzp/agents-deck/backend/internal/paths"
+	"github.com/shyamzzp/agents-deck/backend/internal/serial"
+	"github.com/shyamzzp/agents-deck/backend/internal/server"
 )
 
 func linkCmd(args []string) error {

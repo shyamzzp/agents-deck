@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/claude"
+	"github.com/shyamzzp/agents-deck/backend/internal/claude"
 )
 
 // A found session's transcript is parsed again only when it changed: syncLive

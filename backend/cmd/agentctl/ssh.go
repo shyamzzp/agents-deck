@@ -12,8 +12,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/sshdeck"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/sshdeck"
 )
 
 const sshEndpoint = "/admin/v1/ssh-codex"

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // The "Needs you" grid: one grid of AttentionSpots spots (the 4 x 4 page of

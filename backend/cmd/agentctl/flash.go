@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/flash"
-	"github.com/brushknight/agents-deck/backend/internal/serial"
+	"github.com/shyamzzp/agents-deck/backend/internal/flash"
+	"github.com/shyamzzp/agents-deck/backend/internal/serial"
 )
 
 const flashUsage = "usage: agentctl flash <port> <image.bin> [--offset 0x0] [--baud N]\n       agentctl flash <port> --probe"

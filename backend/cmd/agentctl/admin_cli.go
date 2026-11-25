@@ -30,10 +30,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/admin"
-	"github.com/brushknight/agents-deck/backend/internal/cpuguard"
-	"github.com/brushknight/agents-deck/backend/internal/proc"
-	"github.com/brushknight/agents-deck/backend/internal/update"
+	"github.com/shyamzzp/agents-deck/backend/internal/admin"
+	"github.com/shyamzzp/agents-deck/backend/internal/cpuguard"
+	"github.com/shyamzzp/agents-deck/backend/internal/proc"
+	"github.com/shyamzzp/agents-deck/backend/internal/update"
 )
 
 // errOld: the service runs but has no management API (an older version).

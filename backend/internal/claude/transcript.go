@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/pricing"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/pricing"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 // One tail call reads up to maxChunks × maxRead (1 GiB): a whole long

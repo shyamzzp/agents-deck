@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/codex"
+	"github.com/shyamzzp/agents-deck/backend/internal/codex"
 )
 
 // Catalog includes the local history and agents owned by enabled harnesses.

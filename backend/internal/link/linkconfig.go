@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/link/linkpb"
+	"github.com/shyamzzp/agents-deck/backend/internal/link/linkpb"
 )
 
 // The board's side of the uplink preference (docs/link/protocol.md,

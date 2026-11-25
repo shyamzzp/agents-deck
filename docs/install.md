@@ -3,7 +3,7 @@
 One page per question: what to download for your computer, what it puts where, how it starts when you
 log in, how to update it, how to remove it completely, and what to do when something doesn't work.
 
-Everything is on the [latest release](https://github.com/brushknight/agents-deck/releases/latest)
+Everything is on the [latest release](https://github.com/shyamzzp/agents-deck/releases/latest)
 page, under **Assets**. `<version>` in a file name is the release's number, for example `0.2.0`.
 
 - [macOS](#macos)
@@ -77,7 +77,7 @@ Anyway**. The release notes say whether a release is notarized.
 
 **This is a preview, not yet tried on a real Windows PC.** The Windows build is made and checked
 on other systems only, so expect rough edges, and please
-[report what you find](https://github.com/brushknight/agents-deck/issues). On Windows the service
+[report what you find](https://github.com/shyamzzp/agents-deck/issues). On Windows the service
 runs, sees your Claude Code and Codex sessions, and drives boards on USB and Wi-Fi, including
 flashing them.
 
@@ -187,7 +187,7 @@ app menu entry.
 The install script sets it up for you, and checks the download against the release's checksums:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/brushknight/agents-deck/main/install.sh | sh -s -- --app --autostart
+curl -fsSL https://raw.githubusercontent.com/shyamzzp/agents-deck/main/install.sh | sh -s -- --app --autostart
 ```
 
 That puts the app in `~/.local/share/agents-deck/app`, `agentctl` in `~/.local/bin`, an entry in
@@ -219,7 +219,7 @@ sudo rm -f /etc/udev/rules.d/70-agents-deck.rules    # if you copied it
 No app, just `agentctl` and the service, on macOS or Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/brushknight/agents-deck/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/shyamzzp/agents-deck/main/install.sh | sh
 ```
 
 It downloads the latest release, checks it against the release's checksums (and its signature, once

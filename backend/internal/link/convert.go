@@ -3,8 +3,8 @@ package link
 import (
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/link/linkpb"
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/link/linkpb"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 var tools = map[string]linkpb.Tool{

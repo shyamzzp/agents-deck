@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
 )
 
 // The C firmware kit's board_sim (firmware/deck-link/test/host) against the

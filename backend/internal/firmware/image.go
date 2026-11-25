@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/brushknight/agents-deck/backend/internal/update"
+	"github.com/shyamzzp/agents-deck/backend/internal/update"
 )
 
 // Reading an ESP32 firmware file someone picked on this computer, before

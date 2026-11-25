@@ -6331,7 +6331,7 @@ const file_agentsdeck_link_v1_link_proto_rawDesc = "" +
 	"\x12FIRMWARE_VERIFYING\x10\x02\x12\x17\n" +
 	"\x13FIRMWARE_RESTARTING\x10\x03\x12\x13\n" +
 	"\x0fFIRMWARE_FAILED\x10\x04\x12\x14\n" +
-	"\x10FIRMWARE_REFUSED\x10\x05BAZ?github.com/brushknight/agents-deck/backend/internal/link/linkpbb\x06proto3"
+	"\x10FIRMWARE_REFUSED\x10\x05BAZ?github.com/shyamzzp/agents-deck/backend/internal/link/linkpbb\x06proto3"
 
 var (
 	file_agentsdeck_link_v1_link_proto_rawDescOnce sync.Once

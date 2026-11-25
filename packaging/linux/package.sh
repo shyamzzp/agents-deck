@@ -66,7 +66,7 @@ icon="$bundle/data/app_icon.png"
 [ -f "$icon" ] || icon="$here/../../clients/macos/linux/runner/app_icon.png"
 install -m 0644 "$icon" "$root/usr/share/icons/hicolor/256x256/apps/dev.agents-deck.menubar.png"
 install -m 0644 "$here/copyright" "$root/usr/share/doc/agents-deck/copyright"
-printf 'agents-deck (%s) unstable; urgency=medium\n\n  * Release %s: https://github.com/brushknight/agents-deck/releases\n\n -- agents deck <agents-deck@users.noreply.github.com>  %s\n' \
+printf 'agents-deck (%s) unstable; urgency=medium\n\n  * Release %s: https://github.com/shyamzzp/agents-deck/releases\n\n -- agents deck <agents-deck@users.noreply.github.com>  %s\n' \
   "$deb_version" "$version" "$(LC_ALL=C date -u -R)" | gzip -9n > "$root/usr/share/doc/agents-deck/changelog.gz"
 install -m 0644 "$here/lintian-overrides" "$root/usr/share/lintian/overrides/agents-deck"
 chmod -R u+rwX,go+rX,go-w "$root"
@@ -103,7 +103,7 @@ Depends: $depends
 Recommends: $recommends
 Section: devel
 Priority: optional
-Homepage: https://github.com/brushknight/agents-deck
+Homepage: https://github.com/shyamzzp/agents-deck
 Description: your coding agents on a deck: tray app, service and boards
  agents deck shows the coding agents (Claude Code, Codex) running on this
  computer on a 4x4 deck: in the system tray, in the browser and on small

@@ -3,7 +3,7 @@ package daemon
 import (
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/tmux"
+	"github.com/shyamzzp/agents-deck/backend/internal/tmux"
 )
 
 // screenCache keeps the last screen Run read of each agent (capture-pane),

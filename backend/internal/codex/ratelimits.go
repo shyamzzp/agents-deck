@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/limits"
+	"github.com/shyamzzp/agents-deck/backend/internal/limits"
 )
 
 // RateLimitReport is the newest rate_limits Codex wrote for one limit id,

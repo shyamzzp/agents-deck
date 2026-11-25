@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // HEADER_PREVIEW=file.html go test -run TestPreview ./internal/header

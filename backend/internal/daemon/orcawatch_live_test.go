@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/orca"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/orca"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 // liveOrca is the real Orca, read-only: screens are read once per terminal

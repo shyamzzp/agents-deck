@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // Shapes, in hash order (adding one reshuffles automatic hats, so append only).

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/web"
+	"github.com/shyamzzp/agents-deck/backend/internal/web"
 )
 
 // The pets' pixel art (pets.js, pet-poses.js), run in node when it is

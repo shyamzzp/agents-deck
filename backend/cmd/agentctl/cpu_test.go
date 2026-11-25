@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/cpuguard"
+	"github.com/shyamzzp/agents-deck/backend/internal/cpuguard"
 )
 
 // agentctl cpu's limit line says where the limit comes from and until when.

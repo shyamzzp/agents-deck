@@ -3,7 +3,7 @@ package store
 import (
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // How long each agent worked today: the time it spent running (at work on a

@@ -8,7 +8,7 @@ import (
 	"time"
 	_ "time/tzdata" // America/New_York for the clock-change weeks, on any machine
 
-	"github.com/brushknight/agents-deck/backend/internal/proc"
+	"github.com/shyamzzp/agents-deck/backend/internal/proc"
 )
 
 var zone = time.FixedZone("test", 2*3600)

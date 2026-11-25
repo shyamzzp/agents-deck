@@ -148,7 +148,7 @@ from the network.
 ## From the web flasher
 
 For a board when you haven't installed agents deck, or on a computer that isn't yours. The **[web
-flasher](https://brushknight.com/agents-deck)** runs in Chrome or Edge: pick your board, click **Connect**, choose the board's
+flasher](https://shyamzzp.github.io/agents-deck)** runs in Chrome or Edge: pick your board, click **Connect**, choose the board's
 USB port, and click **Install**. Nothing to install, about a minute. It uses Web Serial, which Safari
 and Firefox don't have.
 
@@ -158,7 +158,7 @@ It writes the same image as the app. To use the board with your agents afterward
 ## From a release image
 
 In a terminal, with `agentctl flash`. It talks to the board's bootloader itself: no Python, no
-esptool. Every [release](https://github.com/brushknight/agents-deck/releases/latest) has an image
+esptool. Every [release](https://github.com/shyamzzp/agents-deck/releases/latest) has an image
 per board, `agents-deck-<board>-<version>.bin`; `<board>` is the board's folder name (the
 [table below](#build-from-source) lists them, and `agentctl firmware ls` shows the ones in the latest
 release).
@@ -220,7 +220,7 @@ You also need:
 - A clone of this repository: the firmware is in it.
 
   ```bash
-  git clone https://github.com/brushknight/agents-deck && cd agents-deck
+  git clone https://github.com/shyamzzp/agents-deck && cd agents-deck
   ```
 
 ### 1. Install PlatformIO

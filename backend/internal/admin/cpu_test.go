@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/cpuguard"
-	"github.com/brushknight/agents-deck/backend/internal/proc"
+	"github.com/shyamzzp/agents-deck/backend/internal/cpuguard"
+	"github.com/shyamzzp/agents-deck/backend/internal/proc"
 )
 
 // steadyMeter reads the same percent forever.

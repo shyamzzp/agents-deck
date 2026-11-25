@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // An agent belongs to the project whose folder holds its working folder: the

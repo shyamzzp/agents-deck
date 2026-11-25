@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // CodexRateLimits is rate_limits on a Codex token_count event. limit_id

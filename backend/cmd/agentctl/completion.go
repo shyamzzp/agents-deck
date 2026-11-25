@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/brushknight/agents-deck/backend/internal/accounts"
-	"github.com/brushknight/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/accounts"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
 )
 
 // zshCompletion is printed by `agentctl completion zsh`; load it with
