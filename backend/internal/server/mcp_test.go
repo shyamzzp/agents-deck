@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 // mcpCtl is fakeCtl that also takes prompts and starts agents.

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/accounts"
+	"github.com/shyamzzp/agents-deck/backend/internal/accounts"
 )
 
 // No test looks at the real computer's programs, apps or login shell.

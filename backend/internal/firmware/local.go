@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/update"
+	"github.com/shyamzzp/agents-deck/backend/internal/update"
 )
 
 // Firmware built on this computer: a second catalog, next to the releases.

@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/link/linkpb"
-	"github.com/brushknight/agents-deck/backend/internal/pki"
-	"github.com/brushknight/agents-deck/backend/internal/server"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/link/linkpb"
+	"github.com/shyamzzp/agents-deck/backend/internal/pki"
+	"github.com/shyamzzp/agents-deck/backend/internal/server"
 )
 
 const testPort = "/dev/cu.usbmodem-test"

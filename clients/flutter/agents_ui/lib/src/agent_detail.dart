@@ -10,8 +10,18 @@ import 'agents_client.dart';
 import 'agents_model.dart';
 import 'agents_style.dart';
 import 'critter.dart';
+import 'critter_look.dart';
 import 'haptics.dart';
 import 'agents_app.dart';
+import 'pet_card.dart';
+import 'pet_art.dart';
+import 'pet_hatch.dart';
+import 'usage_limits.dart';
+
+part 'agent_detail_pets.dart';
+
+/// Matches the morph card's landed corner radius (the morph lerps to 26).
+const _cardRadius = 26.0;
 
 /// How long the "sent" invert holds before the card closes itself.
 const _sentHold = Duration(milliseconds: 600);
@@ -38,6 +48,7 @@ class AgentDetail extends StatefulWidget {
     this.showBack = false,
     this.onSpeakTask,
     this.ringWidth = ContextRingPainter.defaultStroke,
+    this.menuBar = false,
   });
 
   final AgentsSource source;
@@ -62,6 +73,10 @@ class AgentDetail extends StatefulWidget {
   /// the context gauge round every tile, which is set in Settings. The frame
   /// on the cell a carried task is over is drawn in it.
   final double ringWidth;
+
+  /// In the menu bar app: no clock, and no text under 16 design pixels (the
+  /// card is shown at 0.61).
+  final bool menuBar;
 
   @override
   State<AgentDetail> createState() => _AgentDetailState();
@@ -89,6 +104,14 @@ class _AgentDetailState extends State<AgentDetail> {
 
   /// The hat picker is open (tap the mascot).
   bool _hats = false;
+
+  /// The pet's own page is open (tap the pet, Agent pets on).
+  bool _petPage = false;
+
+  bool get _menuBar => widget.menuBar;
+
+  /// setState for the pets page (an extension can't call it).
+  void _set(VoidCallback f) => setState(f);
 
   /// "stop" on a live agent needs a second tap; this arms it for a few seconds.
   bool _confirmStop = false;
@@ -299,7 +322,7 @@ class _AgentDetailState extends State<AgentDetail> {
         : 'stop';
   }
 
-  Widget _removeButton(Agent a, (Color, Color)? flash) {
+  Widget _removeButton(Agent a, (Color, Color)? flash, {bool square = false}) {
     final exited = a.status == AgentStatus.exited;
     final armed = _confirmStop && !exited;
     return AgentButton(
@@ -311,9 +334,18 @@ class _AgentDetailState extends State<AgentDetail> {
       padX: 6,
       fill: flash?.$1 ?? (armed ? DeckHud.accent : const Color(0x00000000)),
       ink: flash?.$2 ?? (armed ? DeckHud.bg : DeckHud.ink),
-      outline: flash?.$1 ?? (armed ? DeckHud.accent : DeckHud.dim),
+      outline:
+          flash?.$1 ??
+          (armed
+              ? DeckHud.accent
+              : square
+              ? _pRule
+              : DeckHud.dim),
       pressedFill: DeckHud.accent,
       pressedInk: DeckHud.bg,
+      square: square,
+      height: square ? 64 : 68,
+      fontSize: square ? 18 : 19,
     );
   }
 
@@ -358,7 +390,7 @@ class _AgentDetailState extends State<AgentDetail> {
         final state = frozen?.$1 ?? snap.state;
         final a = frozen?.$2 ?? state?.byId(widget.agentId);
         if (state == null || a == null) return _gone();
-        if (_hats) return _hatPicker(a);
+        if (_hats && a.pet == null) return _hatPicker(a);
         final p = frozen != null
             ? frozen.$3
             : (a.status == AgentStatus.waiting ? a.waiting : null);
@@ -366,6 +398,8 @@ class _AgentDetailState extends State<AgentDetail> {
           _syncPrompt(p);
           _shown = (state, a, p);
         }
+        // Agent pets on: the pet is the only mascot (agent_detail_pets.dart).
+        if (a.pet != null) return _petsBuild(state, a, p);
         return switch (p?.kind) {
           PromptKind.permission => _permission(state, a, p!),
           PromptKind.question => _question(state, a, p!),
@@ -543,6 +577,9 @@ class _AgentDetailState extends State<AgentDetail> {
         widget.agentId,
         ask.text,
         mode: 'now',
+        // One of the agent's own: the deck follows what becomes of it, and
+        // the tile is drawn working until its turn ends.
+        taskId: ask.id,
       );
       if (!mounted) return;
       Haptics.fire(r.isOk ? HapticWhen.sent : HapticWhen.problem);
@@ -641,12 +678,14 @@ class _AgentDetailState extends State<AgentDetail> {
     Agent a, {
     String? shape,
     String? color,
+    String? critter,
     bool auto = false,
   }) async {
     final r = await widget.source.setHat(
       a.id,
       shape: shape,
       color: color,
+      critter: critter,
       auto: auto,
     );
     if (!mounted) return;
@@ -683,6 +722,8 @@ class _AgentDetailState extends State<AgentDetail> {
         rank: t.rank,
         mined: t.mined,
         pinned: t.pinned,
+        state: t.state,
+        ran: t.ran,
       );
       at++;
     }
@@ -720,7 +761,7 @@ class _AgentDetailState extends State<AgentDetail> {
         'This one cannot be told: it runs inside another app, which the deck '
         'cannot type into. Give it tasks where it lives.',
         key: const Key('asks-refused'),
-        style: DeckHud.mono(size: tight ? 13 : 15, color: DeckHud.dim),
+        style: DeckHud.mono(size: tight ? 12 : 13, color: DeckHud.dim),
       );
     }
     final columns = _askColumns(context);
@@ -1093,18 +1134,18 @@ class _AgentDetailState extends State<AgentDetail> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              CritterSprite(
-                pose: CritterPose.idle,
-                species: critterSpeciesFor(a.tool),
+              critterLookSprite(
+                hat.critter,
                 hat: a.hat,
+                tool: a.tool,
                 width: 54,
                 body: DeckHud.ink,
                 cut: DeckHud.bg,
               ),
               const SizedBox(width: 16),
               Text(
-                'hat',
-                style: DeckHud.rm(30, DeckHud.ink, weight: 700, spacing: -0.3),
+                'look',
+                style: DeckHud.rm(25, DeckHud.ink, weight: 700, spacing: -0.3),
               ),
             ],
           ),
@@ -1118,6 +1159,49 @@ class _AgentDetailState extends State<AgentDetail> {
               size: 15,
               color: DeckHud.dim,
             ).copyWith(height: 1.4),
+          ),
+          const SizedBox(height: 18),
+          // Who wears the hat: the deck's own critter, or one of the
+          // creatures. Picked for the folder, like the hat, and it stays as
+          // picked: nothing here hatches or grows.
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final look in ['', ...critterLooks])
+                Pressable(
+                  key: Key('look-${look.isEmpty ? 'critter' : look}'),
+                  onTap: () => _setHat(
+                    a,
+                    shape: hat.shape,
+                    color: hat.color,
+                    critter: look,
+                  ),
+                  builder: (context, pressed) => Container(
+                    width: 84,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: pressed ? DeckHud.ink : DeckHud.panel,
+                      borderRadius: BorderRadius.zero,
+                      border: Border.all(
+                        color: look == hat.critter
+                            ? DeckHud.ink
+                            : DeckHud.panel,
+                        width: 2,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: critterLookSprite(
+                      look,
+                      hat: a.hat,
+                      tool: a.tool,
+                      width: 64,
+                      body: pressed ? DeckHud.bg : DeckHud.dim,
+                      cut: pressed ? DeckHud.ink : DeckHud.panel,
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 18),
           Wrap(
@@ -1142,12 +1226,10 @@ class _AgentDetailState extends State<AgentDetail> {
                       ),
                     ),
                     alignment: Alignment.center,
-                    child: CritterSprite(
-                      pose: CritterPose.wait,
-                      species: critterSpeciesFor(a.tool),
+                    child: critterLookSprite(
+                      hat.critter,
                       hat: AgentHat(shape: shape, color: hat.color),
-                      showBubble: false,
-                      centerBody: true,
+                      tool: a.tool,
                       width: 64,
                       body: pressed ? DeckHud.bg : DeckHud.dim,
                       cut: pressed ? DeckHud.ink : DeckHud.panel,
@@ -1184,7 +1266,7 @@ class _AgentDetailState extends State<AgentDetail> {
           ),
           const Spacer(),
           if (_note != null) ...[
-            Text(_note!, style: DeckHud.mono(size: 15, color: DeckHud.accent)),
+            Text(_note!, style: DeckHud.mono(size: 13, color: DeckHud.accent)),
             const SizedBox(height: 12),
           ],
           Row(
@@ -1250,7 +1332,7 @@ class _AgentDetailState extends State<AgentDetail> {
         agentPillLabel(a, state),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: DeckHud.mono(size: 15, color: pillFill),
+        style: DeckHud.mono(size: 13, color: pillFill),
       ),
     );
     // Whose it is, kept at the far end so the clock can have the mascot's
@@ -1265,7 +1347,7 @@ class _AgentDetailState extends State<AgentDetail> {
               a.account!.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: DeckHud.mono(size: 15, color: ink),
+              style: DeckHud.mono(size: 13, color: ink),
             ),
           );
     // The status sits where the clock used to, beside the critter, so the
@@ -1286,7 +1368,8 @@ class _AgentDetailState extends State<AgentDetail> {
                       _hats = true;
                       _note = null;
                     }),
-              child: CritterSprite(
+              child: agentMascot(
+                a,
                 pose: critterPoseOf(a, inStatus: state.inStatus(a)),
                 celebrateUntil: DateTime.now().add(
                   critterCelebration - state.inStatus(a),
@@ -1294,8 +1377,6 @@ class _AgentDetailState extends State<AgentDetail> {
                 afterCelebrate: a.unseen
                     ? CritterPose.hungry
                     : CritterPose.idle,
-                species: critterSpeciesFor(a.tool),
-                hat: a.hat,
                 width: 54,
                 body: body,
                 cut: cut,
@@ -1325,7 +1406,7 @@ class _AgentDetailState extends State<AgentDetail> {
             a.title,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: DeckHud.rm(30, ink, weight: 700, spacing: -0.3),
+            style: DeckHud.rm(25, ink, weight: 700, spacing: -0.3),
           ),
         ),
       ],
@@ -1378,10 +1459,15 @@ class _AgentDetailState extends State<AgentDetail> {
   }
 
   Widget _label(String text, Color color) =>
-      Text(text, style: DeckHud.mono(size: 14, color: color));
+      Text(text, style: DeckHud.mono(size: 12, color: color));
 
   /// Text link variant of "focus terminal" (prompt cards' footers).
-  Widget _focusLink(Agent a, {required Color ink, required Color surface}) {
+  Widget _focusLink(
+    Agent a, {
+    required Color ink,
+    required Color surface,
+    bool square = false,
+  }) {
     final flash = _flashColors('focus', onAccent: surface == DeckHud.accent);
     return Pressable(
       key: const Key('agent-focus'),
@@ -1396,12 +1482,17 @@ class _AgentDetailState extends State<AgentDetail> {
               : BoxDecoration(color: fill, borderRadius: BorderRadius.zero),
           child: Text(
             _flashKey == 'focus' && _flash == _Flash.sent
-                ? 'focused'
-                : 'focus terminal',
-            style: DeckHud.mono(size: 15, color: color).copyWith(
-              decoration: TextDecoration.underline,
-              decorationColor: color,
-            ),
+                ? (square ? 'FOCUSED' : 'focused')
+                : (square ? 'FOCUS TERMINAL' : 'focus terminal'),
+            style:
+                (square
+                        ? DeckHud.rm(16, color, weight: 700, spacing: 1.92)
+                        : DeckHud.mono(size: 13, color: color))
+                    .copyWith(
+                      decoration: TextDecoration.underline,
+                      decorationColor: color,
+                      decorationThickness: square ? 2 : null,
+                    ),
           ),
         );
       },
@@ -1419,6 +1510,7 @@ class _AgentDetailState extends State<AgentDetail> {
     };
     final body = AgentLook.of(a).body;
     final (nowLabel, nowValue) = _doingNow(a);
+    final lastLabel = a.showsAnswer ? 'last answer' : 'last prompt';
     final footer = [
       a.modelLabel,
       tildePath(a.cwd),
@@ -1488,7 +1580,7 @@ class _AgentDetailState extends State<AgentDetail> {
                           Text(
                             subagentCount(a.subagents.length),
                             key: const Key('agent-subagent-count'),
-                            style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                            style: DeckHud.mono(size: 12, color: DeckHud.dim),
                           ),
                       ],
                     ),
@@ -1516,7 +1608,7 @@ class _AgentDetailState extends State<AgentDetail> {
                       children: [
                         Text(
                           'context',
-                          style: DeckHud.rm(22, DeckHud.ink, weight: 700),
+                          style: DeckHud.rm(19, DeckHud.ink, weight: 700),
                         ),
                         const SizedBox(width: 12),
                         // Flexible, since "410k / 1m" beside "context" and a
@@ -1528,13 +1620,13 @@ class _AgentDetailState extends State<AgentDetail> {
                                 : '--',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                            style: DeckHud.mono(size: 12, color: DeckHud.dim),
                           ),
                         ),
                         const Spacer(),
                         Text(
                           a.contextWindow > 0 ? '${a.contextPercent}%' : '--',
-                          style: DeckHud.rm(22, DeckHud.ink, weight: 700),
+                          style: DeckHud.rm(19, DeckHud.ink, weight: 700),
                         ),
                       ],
                     ),
@@ -1613,7 +1705,7 @@ class _AgentDetailState extends State<AgentDetail> {
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: DeckHud.rm(
-                                            18,
+                                            16,
                                             DeckHud.ink,
                                             weight: 600,
                                           ),
@@ -1628,27 +1720,27 @@ class _AgentDetailState extends State<AgentDetail> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    if (state.lastActiveText(a) case final active
-                        when active.isNotEmpty)
+                    if ((a.showsAnswer
+                            ? state.answeredText(a)
+                            : state.lastActiveText(a))
+                        case final active when active.isNotEmpty)
                       Row(
                         children: [
                           _label(
-                            a.queuedNext.isEmpty
-                                ? 'last prompt'
-                                : 'queued next',
+                            a.queuedNext.isEmpty ? lastLabel : 'queued next',
                             DeckHud.dim,
                           ),
                           const Spacer(),
                           Text(
                             active,
                             key: const Key('agent-last-active'),
-                            style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                            style: DeckHud.mono(size: 12, color: DeckHud.dim),
                           ),
                         ],
                       )
                     else
                       _label(
-                        a.queuedNext.isEmpty ? 'last prompt' : 'queued next',
+                        a.queuedNext.isEmpty ? lastLabel : 'queued next',
                         DeckHud.dim,
                       ),
                     const SizedBox(height: 8),
@@ -1659,14 +1751,20 @@ class _AgentDetailState extends State<AgentDetail> {
                     Text(
                       a.queuedNext.isNotEmpty
                           ? a.queuedNext
+                          : a.showsAnswer
+                          ? a.lastAnswer
                           : (a.lastPrompt.isEmpty ? '—' : a.lastPrompt),
-                      key: const Key('agent-last-prompt'),
+                      key: Key(
+                        a.queuedNext.isEmpty && a.showsAnswer
+                            ? 'agent-last-answer'
+                            : 'agent-last-prompt',
+                      ),
                       // Five lines at 13: it is the longest thing on the card,
                       // and smaller text shows more of it in less room.
                       maxLines: 5,
                       overflow: TextOverflow.ellipsis,
                       style: DeckHud.rm(
-                        13,
+                        12,
                         a.queuedNext.isNotEmpty ? DeckHud.accent : DeckHud.ink,
                       ).merge(const TextStyle(height: 1.45)),
                     ),
@@ -1702,7 +1800,7 @@ class _AgentDetailState extends State<AgentDetail> {
               const SizedBox(width: 16),
               Text(
                 state.server.name,
-                style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                style: DeckHud.mono(size: 12, color: DeckHud.dim),
               ),
             ],
           ),
@@ -1817,7 +1915,7 @@ class _AgentDetailState extends State<AgentDetail> {
     );
   }
 
-  Widget _handoffButton(Agent a, AgentAccount to) {
+  Widget _handoffButton(Agent a, AgentAccount to, {bool square = false}) {
     final key = 'handoff:${to.name}';
     final flash = _flashColors(key, onAccent: false);
     final armed = _confirmHandoff == to.name;
@@ -1836,6 +1934,7 @@ class _AgentDetailState extends State<AgentDetail> {
       pressedInk: DeckHud.bg,
       height: 52,
       fontSize: 16,
+      square: square,
     );
   }
 
@@ -1870,7 +1969,7 @@ class _AgentDetailState extends State<AgentDetail> {
       text,
       maxLines: lines,
       overflow: TextOverflow.ellipsis,
-      style: DeckHud.rm(20, color ?? DeckHud.ink),
+      style: DeckHud.rm(18, color ?? DeckHud.ink),
     );
     switch (a.status) {
       case AgentStatus.running:
@@ -1901,7 +2000,7 @@ class _AgentDetailState extends State<AgentDetail> {
             // cuts most of them off.
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
-            style: DeckHud.rm(17, DeckHud.ink),
+            style: DeckHud.rm(15, DeckHud.ink),
             // The verb is 17 and the detail 13, so without a strut the line
             // holding the verb is taller than the ones under it. Forced to
             // the larger of the two, every line of the paragraph is the same
@@ -1977,7 +2076,7 @@ class _AgentDetailState extends State<AgentDetail> {
                 p.detail,
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
-                style: DeckHud.rm(17, DeckHud.ink).copyWith(height: 1.45),
+                style: DeckHud.rm(15, DeckHud.ink).copyWith(height: 1.45),
               ),
             ),
           ],
@@ -1987,7 +2086,7 @@ class _AgentDetailState extends State<AgentDetail> {
               p.context,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: DeckHud.mono(size: 14, color: DeckHud.bg),
+              style: DeckHud.mono(size: 12, color: DeckHud.bg),
             ),
           ],
           const SizedBox(height: 22),
@@ -2011,7 +2110,7 @@ class _AgentDetailState extends State<AgentDetail> {
                   key: _note == null ? null : const Key('agent-note'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: DeckHud.mono(size: 15, color: DeckHud.bg),
+                  style: DeckHud.mono(size: 13, color: DeckHud.bg),
                 ),
               ),
               _focusLink(a, ink: DeckHud.bg, surface: DeckHud.accent),
@@ -2022,7 +2121,12 @@ class _AgentDetailState extends State<AgentDetail> {
     );
   }
 
-  Widget _permissionButton(Agent a, AgentPrompt p, AgentOption o) {
+  Widget _permissionButton(
+    Agent a,
+    AgentPrompt p,
+    AgentOption o, {
+    bool square = false,
+  }) {
     final flash = _flashColors(o.key, onAccent: true);
     final sent = _flashKey == o.key && _flash == _Flash.sent;
     final fill =
@@ -2038,8 +2142,9 @@ class _AgentDetailState extends State<AgentDetail> {
       pressedFill: o.primary ? DeckHud.ink : DeckHud.bg,
       pressedInk: o.primary ? DeckHud.bg : DeckHud.accent,
       height: 64,
-      fontSize: o.primary ? 20 : 18,
+      fontSize: square ? 20 : (o.primary ? 20 : 18),
       alignLeft: true,
+      square: square,
     );
     // Once one answer is out, the others step back.
     return Opacity(opacity: _closing && !sent ? 0.4 : 1, child: button);
@@ -2102,7 +2207,7 @@ class _AgentDetailState extends State<AgentDetail> {
               key: const Key('agent-question-context'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: DeckHud.mono(size: 14, color: DeckHud.dim),
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
             const SizedBox(height: 8),
           ],
@@ -2122,7 +2227,7 @@ class _AgentDetailState extends State<AgentDetail> {
               p.detail,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: DeckHud.rm(16, DeckHud.dim).copyWith(height: 1.4),
+              style: DeckHud.rm(14, DeckHud.dim).copyWith(height: 1.4),
             ),
           ],
           const SizedBox(height: 20),
@@ -2136,7 +2241,7 @@ class _AgentDetailState extends State<AgentDetail> {
               key: const Key('agent-note'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: DeckHud.mono(size: 15, color: DeckHud.accent),
+              style: DeckHud.mono(size: 13, color: DeckHud.accent),
             ),
           ],
           const SizedBox(height: 20),
@@ -2186,7 +2291,7 @@ class _AgentDetailState extends State<AgentDetail> {
     );
   }
 
-  Widget _questionRow(AgentOption o) {
+  Widget _questionRow(AgentOption o, {bool square = false}) {
     final on = o.key == _selected;
     final (title, sub) = o.titleAndSub;
     return Pressable(
@@ -2212,7 +2317,7 @@ class _AgentDetailState extends State<AgentDetail> {
             children: [
               SizedBox(
                 width: 22,
-                child: Text(o.key, style: DeckHud.rm(22, fg, weight: 700)),
+                child: Text(o.key, style: DeckHud.rm(19, fg, weight: 700)),
               ),
               const SizedBox(width: 18),
               Expanded(
@@ -2224,7 +2329,9 @@ class _AgentDetailState extends State<AgentDetail> {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: DeckHud.mono(size: 18, color: fg),
+                      style: square
+                          ? DeckHud.rm(16, fg, weight: 700)
+                          : DeckHud.mono(size: 16, color: fg),
                     ),
                     if (sub.isNotEmpty) ...[
                       const SizedBox(height: 4),
@@ -2232,10 +2339,15 @@ class _AgentDetailState extends State<AgentDetail> {
                         sub,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: DeckHud.mono(
-                          size: 13.5,
-                          color: ink ? agentsRowSubOnInk : DeckHud.dim,
-                        ),
+                        style: square
+                            ? DeckHud.rm(
+                                16,
+                                ink ? agentsRowSubOnInk : DeckHud.dim,
+                              )
+                            : DeckHud.mono(
+                                size: 13.5,
+                                color: ink ? agentsRowSubOnInk : DeckHud.dim,
+                              ),
                       ),
                     ],
                   ],
@@ -2246,7 +2358,7 @@ class _AgentDetailState extends State<AgentDetail> {
                 Text(
                   '✓', // ticked answer of a pick-any question
                   key: Key('agent-option-${o.key}-ticked'),
-                  style: DeckHud.rm(22, fg, weight: 700),
+                  style: DeckHud.rm(19, fg, weight: 700),
                 ),
               ],
             ],
@@ -2257,7 +2369,7 @@ class _AgentDetailState extends State<AgentDetail> {
   }
 
   /// Outlined "focus the terminal" button for the dark prompt cards.
-  Widget _terminalButton(Agent a, String label) {
+  Widget _terminalButton(Agent a, String label, {bool square = false}) {
     final flash = _flashColors('focus', onAccent: false);
     return AgentButton(
       key: const Key('agent-focus'),
@@ -2265,9 +2377,12 @@ class _AgentDetailState extends State<AgentDetail> {
       onTap: _busy ? null : () => _focus(a),
       fill: flash?.$1 ?? const Color(0x00000000),
       ink: flash?.$2 ?? DeckHud.ink,
-      outline: flash?.$1 ?? DeckHud.dim,
+      outline: flash?.$1 ?? (square ? _pRule : DeckHud.dim),
       pressedFill: DeckHud.ink,
       pressedInk: DeckHud.bg,
+      square: square,
+      height: square ? 64 : 68,
+      fontSize: square ? 18 : 19,
     );
   }
 
@@ -2312,7 +2427,7 @@ class _AgentDetailState extends State<AgentDetail> {
                 p.detail,
                 maxLines: 6,
                 overflow: TextOverflow.ellipsis,
-                style: DeckHud.rm(17, DeckHud.ink).copyWith(height: 1.45),
+                style: DeckHud.rm(15, DeckHud.ink).copyWith(height: 1.45),
               ),
             ),
           ],
@@ -2322,7 +2437,7 @@ class _AgentDetailState extends State<AgentDetail> {
               p.context,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: DeckHud.mono(size: 14, color: DeckHud.dim),
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
           ],
           const Spacer(),
@@ -2376,11 +2491,11 @@ class _AgentDetailState extends State<AgentDetail> {
               cut: DeckHud.bg,
             ),
             const SizedBox(height: 22),
-            Text('agent gone', style: DeckHud.rm(26, DeckHud.ink, weight: 700)),
+            Text('agent gone', style: DeckHud.rm(22, DeckHud.ink, weight: 700)),
             const SizedBox(height: 10),
             Text(
               'it left the fleet',
-              style: DeckHud.mono(size: 15, color: DeckHud.dim),
+              style: DeckHud.mono(size: 13, color: DeckHud.dim),
             ),
           ],
         ),
@@ -2455,7 +2570,7 @@ class SubagentRows extends StatelessWidget {
                   Text(
                     '+$more more',
                     key: const Key('agent-subagents-more'),
-                    style: DeckHud.mono(size: 15, color: DeckHud.dim),
+                    style: DeckHud.mono(size: 13, color: DeckHud.dim),
                   ),
                 ],
               ),
@@ -2488,9 +2603,9 @@ class _SubagentLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = subagent;
-    final titleStyle = DeckHud.rm(17, DeckHud.ink);
+    final titleStyle = DeckHud.rm(14, DeckHud.ink);
     final typeStyle = DeckHud.mono(
-      size: 15,
+      size: 12,
       color: DeckHud.dim,
     ).copyWith(height: 1.0);
     final title = s.title.isNotEmpty
@@ -2540,6 +2655,8 @@ class CardBackButton extends StatelessWidget {
     required this.outline,
     required this.pressedFill,
     required this.pressedInk,
+    this.square = false,
+    this.size,
   });
 
   final VoidCallback onTap;
@@ -2547,6 +2664,13 @@ class CardBackButton extends StatelessWidget {
   final Color outline;
   final Color pressedFill;
   final Color pressedInk;
+
+  /// Square corners (the agent page with pets on).
+  final bool square;
+
+  /// How big the square is drawn; null takes the deck's own sizes (49 on a
+  /// phone, 68 elsewhere).
+  final double? size;
 
   @override
   Widget build(BuildContext context) {
@@ -2559,8 +2683,11 @@ class CardBackButton extends StatelessWidget {
         // 49 on a phone, which is what AgentButton's 68 becomes there: a
         // square that keeps its full size stands taller than the row it is in.
         builder: (context, pressed) => Container(
-          width: DeckCompact.of(context) ? 49 : 68,
-          height: DeckCompact.of(context) ? 49 : 68,
+          // The caller's size where it gave one, else 49 on a phone, which is
+          // what AgentButton's 68 becomes there: a square that keeps its full
+          // size stands taller than the row it is in.
+          width: size ?? (DeckCompact.of(context) ? 49 : 68),
+          height: size ?? (DeckCompact.of(context) ? 49 : 68),
           decoration: BoxDecoration(
             color: pressed ? pressedFill : null,
             borderRadius: BorderRadius.zero,
@@ -3106,11 +3233,20 @@ class _AskTile extends StatelessWidget {
       onLongPress: null,
       builder: (context, pressed) {
         final on = pressed || sent || lifted;
-        final fill = on ? DeckHud.ink : DeckHud.panel;
+        // A task the agent is working on is drawn the way a working agent is:
+        // the accent behind it, so the board says at a glance which line is
+        // in the terminal now. One that was cut short keeps a mark until it
+        // is asked for again. A task never sleeps: when its turn is over the
+        // tile is simply itself again.
+        final fill = ask.running
+            ? DeckHud.accent
+            : on
+            ? DeckHud.ink
+            : DeckHud.panel;
         // One colour for every task, the agent colour of whichever theme is
         // on: what tells them apart is the hat, as it does on the deck. No
         // frame around it either, since the deck's own tiles have none.
-        final ink = on ? DeckHud.bg : DeckHud.ink;
+        final ink = ask.running || on ? DeckHud.bg : DeckHud.ink;
         return DecoratedBox(
           decoration: BoxDecoration(color: fill),
           child: FittedBox(
@@ -3139,20 +3275,35 @@ class _AskTile extends StatelessWidget {
                     child: SizedBox(
                       width: 158,
                       child: Text(
-                        // A pinned task says so: it is the one the rotation
+                        // What it is doing comes before what it is called: a
+                        // working task shows how long it has been at it, and
+                        // a pinned one says so, being the one the rotation
                         // will not touch.
                         sent
                             ? 'sent'
+                            : ask.interrupted
+                            ? '${ask.label} \u00b7 stopped'
                             : ask.pinned
                             ? '${ask.label} \u00b7 pinned'
                             : ask.label,
                         maxLines: 2,
                         textAlign: TextAlign.center,
                         overflow: TextOverflow.ellipsis,
-                        style: DeckHud.mono(size: 21, color: ink),
+                        style: DeckHud.mono(size: 18, color: ink),
                       ),
                     ),
                   ),
+                  if (ask.running)
+                    // The clock of a working task, counting from the moment
+                    // it went in, as the card's own does for its agent.
+                    Ticking(
+                      every: const Duration(milliseconds: 100),
+                      builder: (context) => Text(
+                        _taskClock(ask.ran),
+                        maxLines: 1,
+                        style: DeckHud.mono(size: 13, color: ink),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -3161,6 +3312,19 @@ class _AskTile extends StatelessWidget {
       },
     );
   }
+}
+
+/// How long a working task has been working, in the deck's own way: seconds
+/// to a tenth under a minute, then minutes and seconds.
+String _taskClock(DateTime? since) {
+  if (since == null) return '';
+  final d = DateTime.now().toUtc().difference(since.toUtc());
+  if (d.isNegative) return '0.0s';
+  if (d.inMinutes < 1) {
+    return '${(d.inMilliseconds / 1000).toStringAsFixed(1)}s';
+  }
+  final m = d.inMinutes, sec = d.inSeconds % 60;
+  return '${m}m ${sec.toString().padLeft(2, '0')}s';
 }
 
 /// A square-capped "<", the deck's pixel style.

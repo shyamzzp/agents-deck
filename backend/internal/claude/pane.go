@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // optionRe matches a numbered choice in Claude Code's dialogs, with or without

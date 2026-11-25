@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/hats"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/server"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/hats"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/server"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 //go:embed fixture.json
@@ -207,6 +207,9 @@ func (d *Demo) fill(f File) {
 			e.A.Slot = slot
 			e.A.StartedAt = now.Add(-started)
 			e.A.StatusSince = now.Add(-since)
+			if e.A.LastAnswer != "" {
+				e.A.LastAnswerAt = e.A.StatusSince // it answered as it finished
+			}
 			e.PromptN = 100
 			if ago, ok := d.ago[a.ID]; ok {
 				e.A.LastActive = now.Add(-ago)

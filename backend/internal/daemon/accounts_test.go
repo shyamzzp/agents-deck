@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/accounts"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/store"
-	"github.com/brushknight/agents-deck/backend/internal/tmux"
+	"github.com/shyamzzp/agents-deck/backend/internal/accounts"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/tmux"
 )
 
 // An agent out of usage in one account continues its conversation in the

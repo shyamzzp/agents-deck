@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/ble"
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/ble"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
 )
 
 // demoBluetooth is Bluetooth in serve --demo: boards appear one by one while

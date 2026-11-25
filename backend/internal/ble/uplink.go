@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
 )
 
 // Uplinks runs a Deck Link session over Bluetooth for every board you added

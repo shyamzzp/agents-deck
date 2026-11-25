@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 func book(t *testing.T) *Book {

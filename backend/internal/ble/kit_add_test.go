@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
 )
 
 // Adding a board over Bluetooth while it is live on USB or Wi-Fi, with the

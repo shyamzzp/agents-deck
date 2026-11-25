@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/pki"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/pki"
 )
 
 // noKeystore fails every call: a test that reaches for the platform's

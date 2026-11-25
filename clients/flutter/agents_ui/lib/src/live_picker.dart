@@ -77,7 +77,11 @@ class _LivePickerState extends State<LivePicker> {
           color: DeckHud.bg,
           borderRadius: BorderRadius.zero,
         ),
-        padding: const EdgeInsets.fromLTRB(36, 34, 36, 30),
+        // 14 each side on a phone: 36 was a fifth of its width spent on
+        // air, and the session names are what paid for it.
+        padding: DeckCompact.of(context)
+            ? const EdgeInsets.fromLTRB(14, 20, 14, 18)
+            : const EdgeInsets.fromLTRB(24, 28, 24, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -90,14 +94,14 @@ class _LivePickerState extends State<LivePicker> {
             const SizedBox(height: 10),
             Text(
               'add a session',
-              style: DeckHud.rm(30, DeckHud.ink, weight: 700, spacing: -0.3),
+              style: DeckHud.rm(25, DeckHud.ink, weight: 700, spacing: -0.3),
             ),
             const SizedBox(height: 10),
             Text(
               'claude sessions running in your own terminals. added ones are '
               'watched: status, context and cost; answer them in their terminal.',
               style: DeckHud.mono(
-                size: 15,
+                size: 13,
                 color: DeckHud.dim,
               ).copyWith(height: 1.4),
             ),
@@ -112,13 +116,13 @@ class _LivePickerState extends State<LivePicker> {
                     return Text(
                       'could not read the sessions: ${snap.error}',
                       key: const Key('live-error'),
-                      style: DeckHud.mono(size: 15, color: DeckHud.accent),
+                      style: DeckHud.mono(size: 13, color: DeckHud.accent),
                     );
                   }
                   if (!snap.hasData) {
                     return Text(
                       'looking…',
-                      style: DeckHud.mono(size: 16, color: DeckHud.dim),
+                      style: DeckHud.mono(size: 13, color: DeckHud.dim),
                     );
                   }
                   final list = snap.data!;
@@ -126,7 +130,7 @@ class _LivePickerState extends State<LivePicker> {
                     return Text(
                       'no other claude sessions running in your terminals',
                       key: const Key('live-empty'),
-                      style: DeckHud.mono(size: 16, color: DeckHud.dim),
+                      style: DeckHud.mono(size: 13, color: DeckHud.dim),
                     );
                   }
                   return ListView.separated(
@@ -142,7 +146,7 @@ class _LivePickerState extends State<LivePicker> {
               const SizedBox(height: 10),
               Text(
                 _note!,
-                style: DeckHud.mono(size: 15, color: DeckHud.accent),
+                style: DeckHud.mono(size: 13, color: DeckHud.accent),
               ),
             ],
             if (widget.showBack) ...[

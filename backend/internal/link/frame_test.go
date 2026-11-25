@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/brushknight/agents-deck/backend/internal/link/linkpb"
+	"github.com/shyamzzp/agents-deck/backend/internal/link/linkpb"
 )
 
 func TestCRC16(t *testing.T) {

@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/update"
+	"github.com/shyamzzp/agents-deck/backend/internal/update"
 )
 
 // ManifestFile lists every board's image in a release.

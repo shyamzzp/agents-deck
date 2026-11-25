@@ -20,9 +20,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/hats"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/paths"
+	"github.com/shyamzzp/agents-deck/backend/internal/hats"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/paths"
 )
 
 // Account is one Claude config folder.

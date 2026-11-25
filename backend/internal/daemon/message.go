@@ -7,9 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/brushknight/agents-deck/backend/internal/deskterm"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/tmux"
+	"github.com/shyamzzp/agents-deck/backend/internal/deskterm"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/tmux"
 )
 
 // Message addresses the selected session independently of terminal focus.

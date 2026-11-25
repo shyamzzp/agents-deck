@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/codex"
+	"github.com/shyamzzp/agents-deck/backend/internal/codex"
 )
 
 func TestAttachSavedSession(t *testing.T) {

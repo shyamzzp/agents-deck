@@ -1,9 +1,9 @@
 package admin
 
 import (
-	"github.com/brushknight/agents-deck/backend/internal/firmware"
-	"github.com/brushknight/agents-deck/backend/internal/link"
-	"github.com/brushknight/agents-deck/backend/internal/update"
+	"github.com/shyamzzp/agents-deck/backend/internal/firmware"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/update"
 )
 
 // Firmware status states: one per board, the line Settings and agentctl

@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 // Background subagents (the Agent tool with run_in_background, and Workflow

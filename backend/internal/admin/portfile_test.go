@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/firmware"
-	"github.com/brushknight/agents-deck/backend/internal/link"
-	"github.com/brushknight/agents-deck/backend/internal/serial"
+	"github.com/shyamzzp/agents-deck/backend/internal/firmware"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/serial"
 )
 
 func (r *rig) portUpload(t *testing.T, port string, body []byte) (int, map[string]any) {

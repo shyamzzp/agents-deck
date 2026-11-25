@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 func TestTailLifecycle(t *testing.T) {
@@ -101,5 +101,48 @@ func TestRolloutLastActive(t *testing.T) {
 	Tail(e)
 	if want := time.Date(2026, 11, 2, 9, 4, 0, 0, time.UTC); !e.A.LastActive.Equal(want) {
 		t.Fatalf("last active %v, want %v", e.A.LastActive, want)
+	}
+}
+
+func TestTailLastAnswer(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rollout.jsonl")
+	write := func(lines ...string) {
+		f, _ := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		f.WriteString(strings.Join(lines, "\n") + "\n")
+		f.Close()
+	}
+	e := &store.Entry{Transcript: path}
+	write(
+		`{"timestamp":"2026-03-02T10:00:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"add a health check"}]}}`,
+		`{"timestamp":"2026-03-02T10:00:01Z","type":"event_msg","payload":{"type":"task_started"}}`,
+		`{"timestamp":"2026-03-02T10:00:02Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Looking at the router."}]}}`,
+		`{"timestamp":"2026-03-02T10:00:05Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Added **/healthz** in `+"`server.go`"+`."}]}}`,
+	)
+	Tail(e)
+	if e.A.LastAnswer != "" {
+		t.Fatalf("turn still running: %q", e.A.LastAnswer)
+	}
+	write(`{"timestamp":"2026-03-02T10:00:06Z","type":"event_msg","payload":{"type":"task_complete"}}`)
+	Tail(e)
+	if e.A.LastAnswer != "Added /healthz in server.go." || e.A.LastAnswerAt.Format(time.RFC3339) != "2026-03-02T10:00:06Z" {
+		t.Fatalf("answer %q at %v", e.A.LastAnswer, e.A.LastAnswerAt)
+	}
+	// task_complete's own final message wins; an aborted turn keeps the answer before.
+	write(
+		`{"timestamp":"2026-03-02T10:01:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"and a readiness check"}]}}`,
+		`{"timestamp":"2026-03-02T10:01:02Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Working on it."}]}}`,
+		`{"timestamp":"2026-03-02T10:01:03Z","type":"event_msg","payload":{"type":"turn_aborted"}}`,
+	)
+	Tail(e)
+	if e.A.LastAnswer != "Added /healthz in server.go." {
+		t.Fatalf("aborted turn replaced the answer: %q", e.A.LastAnswer)
+	}
+	write(
+		`{"timestamp":"2026-03-02T10:02:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"go on"}]}}`,
+		`{"timestamp":"2026-03-02T10:02:09Z","type":"event_msg","payload":{"type":"task_complete","last_agent_message":"Added /readyz too.\n\nBoth return 200."}}`,
+	)
+	Tail(e)
+	if e.A.LastAnswer != "Added /readyz too. Both return 200." {
+		t.Fatalf("answer %q", e.A.LastAnswer)
 	}
 }

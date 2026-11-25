@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // Shapes, in hash order (adding one reshuffles automatic hats, so append only).
@@ -24,6 +24,11 @@ var Shapes = []string{"hard hat", "cap", "beanie", "helmet", "wizard", "beret", 
 
 // Colors: never the status orange.
 var Colors = []string{"teal", "blue", "yellow", "green", "purple", "pink", "sky", "ink"}
+
+// Critters are the creatures a folder may wear in place of the deck's own:
+// the shapes Agent pets draws, offered here as a choice rather than as
+// something that hatches and grows. "" is the deck's critter.
+var Critters = []string{"egg", "cracked", "baby", "kid", "grown", "strong", "mighty", "legend"}
 
 // None is the shape for "no hat".
 const None = "none"
@@ -47,8 +52,9 @@ func Clean(folder string) string {
 
 // Override is a manual choice for one folder.
 type Override struct {
-	Shape string `json:"shape"`
-	Color string `json:"color,omitempty"`
+	Shape   string `json:"shape"`
+	Color   string `json:"color,omitempty"`
+	Critter string `json:"critter,omitempty"` // the creature this folder wears ("" = the deck's own)
 }
 
 // Validate checks a shape and colour; an empty colour keeps the automatic one.
@@ -58,6 +64,14 @@ func Validate(shape, color string) error {
 	}
 	if color != "" && !contains(Colors, color) {
 		return fmt.Errorf("unknown colour %q (one of: %s)", color, strings.Join(Colors, ", "))
+	}
+	return nil
+}
+
+// ValidateCritter checks a creature; empty is the deck's own critter.
+func ValidateCritter(critter string) error {
+	if critter != "" && !contains(Critters, critter) {
+		return fmt.Errorf("unknown critter %q (one of: %s)", critter, strings.Join(Critters, ", "))
 	}
 	return nil
 }
@@ -90,12 +104,17 @@ func (b *Book) For(folder string) *model.Hat {
 	hat := Auto(folder)
 	if o, ok := b.overrides()[folder]; ok {
 		if o.Shape == None {
-			return nil
+			if o.Critter == "" {
+				return nil
+			}
+			// No hat, but a creature of its own: the shape says so.
+			return &model.Hat{Shape: None, Critter: o.Critter}
 		}
 		hat.Shape, hat.Auto = o.Shape, false
 		if o.Color != "" {
 			hat.Color = o.Color
 		}
+		hat.Critter = o.Critter
 	}
 	return &hat
 }
@@ -138,13 +157,19 @@ func (b *Book) overrides() map[string]Override {
 
 // Set stores a manual hat for folder (auto: removes it), keeping every other
 // key of config.json.
-func (b *Book) Set(folder, shape, color string, auto bool) error {
+// Set stores a folder's hat, and the creature it wears with it: critter is
+// one of [Critters], or "" for the deck's own. Keep passes the creature the
+// folder already had, so picking a hat does not clear the creature.
+func (b *Book) Set(folder, shape, color, critter string, auto bool) error {
 	folder = Clean(folder)
 	if folder == "" {
 		return errors.New("no folder")
 	}
 	if !auto {
 		if err := Validate(shape, color); err != nil {
+			return err
+		}
+		if err := ValidateCritter(critter); err != nil {
 			return err
 		}
 	}
@@ -166,7 +191,7 @@ func (b *Book) Set(folder, shape, color string, auto bool) error {
 	if auto {
 		delete(all, folder)
 	} else {
-		all[folder] = Override{Shape: shape, Color: color}
+		all[folder] = Override{Shape: shape, Color: color, Critter: critter}
 	}
 	if len(all) == 0 {
 		delete(cfg, "hats")

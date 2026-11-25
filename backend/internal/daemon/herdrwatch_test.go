@@ -3,10 +3,10 @@ package daemon
 import (
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/herdr"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/server"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/herdr"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/server"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 type fakeHerdr struct {

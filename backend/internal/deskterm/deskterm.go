@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/sshdeck"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/sshdeck"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 //go:embed terminal.js

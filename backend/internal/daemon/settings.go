@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/brushknight/agents-deck/backend/internal/paths"
+	"github.com/shyamzzp/agents-deck/backend/internal/paths"
 )
 
 // Focus modes (`agentctl set term …`).

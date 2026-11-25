@@ -9,10 +9,10 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/firmware"
-	"github.com/brushknight/agents-deck/backend/internal/link"
-	"github.com/brushknight/agents-deck/backend/internal/server"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/firmware"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/server"
 )
 
 // DeviceRow is one paired board or device in GET /admin/v1/devices.

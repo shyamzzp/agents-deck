@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/brushknight/agents-deck/backend/internal/codex"
-	"github.com/brushknight/agents-deck/backend/internal/sshdeck"
+	"github.com/shyamzzp/agents-deck/backend/internal/codex"
+	"github.com/shyamzzp/agents-deck/backend/internal/sshdeck"
 )
 
 // Return a binding only for a foreground Codex client on the SSH login TTY.

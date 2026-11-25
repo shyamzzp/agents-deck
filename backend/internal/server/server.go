@@ -19,15 +19,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/accounts"
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/groups"
-	"github.com/brushknight/agents-deck/backend/internal/hats"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/pki"
-	"github.com/brushknight/agents-deck/backend/internal/queue"
-	"github.com/brushknight/agents-deck/backend/internal/store"
-	"github.com/brushknight/agents-deck/backend/internal/tasks"
+	"github.com/shyamzzp/agents-deck/backend/internal/accounts"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/groups"
+	"github.com/shyamzzp/agents-deck/backend/internal/hats"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/pets"
+	"github.com/shyamzzp/agents-deck/backend/internal/pki"
+	"github.com/shyamzzp/agents-deck/backend/internal/queue"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/tasks"
 )
 
 // Controller performs agent actions; the live daemon and demo mode implement it.
@@ -52,6 +53,12 @@ type Prompter interface {
 // asks a question, so a typed prompt never answers one.
 type Typer interface {
 	Type(id, text string) error
+}
+
+// Hatcher hatches an agent's pet egg that is ready (POST
+// /v1/agents/{id}/pet/hatch); it returns an error when the egg isn't ready.
+type Hatcher interface {
+	Hatch(id string) error
 }
 
 // Restorer brings back agents lost with the tmux server (POST /v1/restore):
@@ -80,6 +87,12 @@ type LocalController interface {
 	Create(o CreateOpts) (string, error)
 	ResumeSession(sessionID, cwd, title string) (string, error)
 	HistoryJSON() any
+}
+
+// StatusLiner takes Claude Code's status line reports (agentctl
+// statusline): the account's config folder and the status line input.
+type StatusLiner interface {
+	StatusLine(dir string, body []byte) error
 }
 
 // CreateOpts is the body of POST /local/agents.
@@ -117,6 +130,10 @@ type Server struct {
 	Hats *hats.Book
 	// Groups holds the deck's group dividers (nil: groups can't be changed).
 	Groups *groups.Book
+
+	// Pets hatches the agents' eggs that are ready (nil: Agent pets isn't
+	// available, as in tests).
+	Pets Hatcher
 	// Devices and CA: paired devices and the authority that signs their
 	// certificates (nil: no network listener). Audit records their actions.
 	Devices *devices.Registry
@@ -132,6 +149,14 @@ type Server struct {
 	// Tasks holds the tasks an agent has been given of its own, beside the
 	// deck's built-in ones. nil: an agent keeps none.
 	Tasks *tasks.Store
+
+	// Projects is the project list MCP's project tools change (the admin
+	// service; nil: no project tools).
+	Projects ProjectBook
+
+	// Guard holds what can wait while the computer is busy (cpuguard):
+	// queued prompts. Starting agents is never held. nil: nothing is held.
+	Guard Holder
 	// DeviceURL is how devices reach the network listener (https://host:port).
 	DeviceURL string
 	// ServerFingerprint is the network listener's certificate SHA-256.
@@ -211,6 +236,11 @@ func (s *Server) api() *http.ServeMux {
 			Interrupt bool   `json:"interrupt"`
 			Mode      string `json:"mode"`     // now | interrupt | queue | type ("": now, or interrupt with "interrupt": true)
 			Position  string `json:"position"` // queue only: back (default) | front
+			// TaskID says this text is one of the agent's own tasks, so the
+			// deck can follow what became of it: it is working from here
+			// until its turn ends or is cut short, and the card draws it the
+			// way it draws a working agent.
+			TaskID string `json:"taskId"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 3*MaxPromptBytes)).Decode(&body); err != nil {
 			writeErr(w, http.StatusBadRequest, `body must be {"text": "...", "mode": "now"|"interrupt"|"queue"|"type"}`)
@@ -257,10 +287,21 @@ func (s *Server) api() *http.ServeMux {
 			unlock := s.queue.lock(id)
 			err := t.Type(id, text)
 			unlock()
+			if err == nil && body.TaskID != "" && s.Tasks != nil {
+				s.Tasks.Sent(id, body.TaskID)
+				s.Store.Touch()
+			}
 			s.act(w, err)
 			return
 		}
-		s.act(w, s.prompt(p, r.PathValue("id"), text, mode == "interrupt"))
+		id := r.PathValue("id")
+		err = s.prompt(p, id, text, mode == "interrupt")
+		if err == nil && body.TaskID != "" && s.Tasks != nil {
+			// It went in: that task is what the agent is working on now.
+			s.Tasks.Sent(id, body.TaskID)
+			s.Store.Touch()
+		}
+		s.act(w, err)
 	})
 	mux.HandleFunc("GET /v1/agents/{id}/queue", s.getQueue)
 	mux.HandleFunc("GET /v1/agents/{id}/prompts", s.getPrompts)
@@ -274,7 +315,14 @@ func (s *Server) api() *http.ServeMux {
 		s.act(w, s.Ctl.Focus(r.PathValue("id")))
 	})
 	mux.HandleFunc("POST /v1/agents/{id}/interrupt", func(w http.ResponseWriter, r *http.Request) {
-		s.act(w, s.Ctl.Interrupt(r.PathValue("id")))
+		id := r.PathValue("id")
+		err := s.Ctl.Interrupt(id)
+		// Esc on a working task: the tile says it was cut short rather than
+		// finished, as an agent's own status does.
+		if err == nil && s.Tasks != nil && s.Tasks.Interrupted(id) {
+			s.Store.Touch()
+		}
+		s.act(w, err)
 	})
 	mux.HandleFunc("POST /v1/agents/{id}/dismiss", func(w http.ResponseWriter, r *http.Request) {
 		s.act(w, s.Ctl.Dismiss(r.PathValue("id")))
@@ -430,6 +478,26 @@ func (s *Server) api() *http.ServeMux {
 	mux.HandleFunc("POST /v1/agents/{id}/resume", func(w http.ResponseWriter, r *http.Request) {
 		s.act(w, s.Ctl.Resume(r.PathValue("id")))
 	})
+	mux.HandleFunc("POST /v1/agents/{id}/pet/hatch", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if _, ok := s.Store.Get(id); !ok {
+			writeErr(w, http.StatusNotFound, ErrNotFound.Error())
+			return
+		}
+		if s.Pets == nil {
+			writeErr(w, http.StatusConflict, "Agent pets is off")
+			return
+		}
+		if err := s.Pets.Hatch(id); errors.Is(err, pets.ErrNotReady) {
+			writeErr(w, http.StatusConflict, err.Error())
+			return
+		} else if err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.Store.Touch() // every screen sees it hatch
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("GET /v1/accounts", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"accounts": accountList()})
 	})
@@ -484,6 +552,10 @@ type hatBody struct {
 	Shape  string `json:"shape"`
 	Color  string `json:"color"`
 	Auto   bool   `json:"auto"`
+	// Critter is the creature this folder wears in place of the deck's own:
+	// one of hats.Critters, or "" for the critter. Absent leaves whatever the
+	// folder already wears.
+	Critter *string `json:"critter"`
 }
 
 // setHat stores a folder's hat and tells every client.
@@ -496,7 +568,13 @@ func (s *Server) setHat(w http.ResponseWriter, folder string, b hatBody) {
 		writeErr(w, http.StatusBadRequest, `give a "shape" (or "auto": true)`)
 		return
 	}
-	if err := s.Hats.Set(folder, b.Shape, b.Color, b.Auto); err != nil {
+	critter := ""
+	if b.Critter != nil {
+		critter = *b.Critter
+	} else if h := s.Hats.For(folder); h != nil {
+		critter = h.Critter // picking a hat leaves the creature alone
+	}
+	if err := s.Hats.Set(folder, b.Shape, b.Color, critter, b.Auto); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -717,6 +795,19 @@ func (s *Server) UnixHandler(lc LocalController) http.Handler {
 	mux.HandleFunc("POST /hook", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err := lc.Hook(r.URL.Query().Get("agent"), body); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /statusline", func(w http.ResponseWriter, r *http.Request) {
+		sl, ok := lc.(StatusLiner)
+		if !ok {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		if err := sl.StatusLine(r.URL.Query().Get("dir"), body); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}

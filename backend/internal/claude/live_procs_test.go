@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/proc"
+	"github.com/shyamzzp/agents-deck/backend/internal/proc"
 )
 
 func TestClaudeArgv(t *testing.T) {

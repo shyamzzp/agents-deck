@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/update"
+	"github.com/shyamzzp/agents-deck/backend/internal/update"
 )
 
 type Server struct {

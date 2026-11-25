@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 // Captured from Claude Code 2.1.281 (paths shortened).
@@ -437,5 +437,28 @@ func TestInterruptedAt(t *testing.T) {
 	write(call)
 	if got := InterruptedAt(path); !got.IsZero() {
 		t.Errorf("not interrupted: %v", got)
+	}
+}
+
+// A usage limit hit goes to LimitHit with its text and time; other API
+// errors don't.
+func TestTailLimitHit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	body := `{"type":"assistant","timestamp":"2026-11-24T14:26:14.556Z","error":"rate_limit","isApiErrorMessage":true,"apiErrorStatus":429,"message":{"id":"e1","model":"<synthetic>","content":[{"type":"text","text":"You've hit your Fable limit · resets Nov 26 at 11pm (Europe/Lisbon). /model to switch models."}]}}
+{"type":"assistant","timestamp":"2026-11-24T14:27:00.000Z","error":"server_error","isApiErrorMessage":true,"message":{"id":"e2","model":"<synthetic>","content":[{"type":"text","text":"API Error: 529 Overloaded"}]}}
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	type hit struct {
+		transcript, text string
+		at               time.Time
+	}
+	var got []hit
+	LimitHit = func(tr, text string, at time.Time) { got = append(got, hit{tr, text, at}) }
+	defer func() { LimitHit = nil }()
+	Tail(&store.Entry{Transcript: path})
+	if len(got) != 1 || got[0].transcript != path || !strings.HasPrefix(got[0].text, "You've hit your Fable limit") || got[0].at.Minute() != 26 {
+		t.Fatalf("hits: %+v", got)
 	}
 }

@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/accounts"
-	"github.com/brushknight/agents-deck/backend/internal/claude"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/proc"
-	"github.com/brushknight/agents-deck/backend/internal/server"
-	"github.com/brushknight/agents-deck/backend/internal/store"
-	"github.com/brushknight/agents-deck/backend/internal/tmux"
+	"github.com/shyamzzp/agents-deck/backend/internal/accounts"
+	"github.com/shyamzzp/agents-deck/backend/internal/claude"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/proc"
+	"github.com/shyamzzp/agents-deck/backend/internal/server"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/tmux"
 )
 
 // accountOf is the Claude account an agent runs in: the one the deck started
@@ -60,27 +60,6 @@ func accountForSession(sessionID, cwd string) accounts.Account {
 		}
 	}
 	return accounts.Default()
-}
-
-// activeSessions asks every account's Claude Code for its sessions.
-func activeSessions(bin string, skip map[string]bool) ([]claude.Live, bool) {
-	var all []claude.Live
-	seen := map[string]bool{}
-	ok := false
-	for _, a := range accounts.List() {
-		got, answered := claude.ActiveSessions(bin, a.ConfigDir(), projectsDirs(a), skip)
-		if !answered {
-			continue
-		}
-		ok = true
-		for _, l := range got {
-			if !seen[l.SessionID] {
-				seen[l.SessionID] = true
-				all = append(all, l)
-			}
-		}
-	}
-	return all, ok
 }
 
 // accountsKey changes whenever the account setup does, so the deck can

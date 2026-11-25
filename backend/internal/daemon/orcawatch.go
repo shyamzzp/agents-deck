@@ -11,10 +11,10 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/brushknight/agents-deck/backend/internal/claude"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/orca"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/claude"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/orca"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 // orcaWatch mirrors agents running in the Orca app onto the board: status

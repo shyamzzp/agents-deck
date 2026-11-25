@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,16 +18,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/firmware"
-	"github.com/brushknight/agents-deck/backend/internal/flash"
-	"github.com/brushknight/agents-deck/backend/internal/link"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/serial"
-	"github.com/brushknight/agents-deck/backend/internal/service"
-	"github.com/brushknight/agents-deck/backend/internal/store"
-	"github.com/brushknight/agents-deck/backend/internal/update"
-	"github.com/brushknight/agents-deck/backend/internal/update/updatetest"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/firmware"
+	"github.com/shyamzzp/agents-deck/backend/internal/flash"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/pets"
+	"github.com/shyamzzp/agents-deck/backend/internal/serial"
+	"github.com/shyamzzp/agents-deck/backend/internal/service"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/update"
+	"github.com/shyamzzp/agents-deck/backend/internal/update/updatetest"
 )
 
 func TestMain(m *testing.M) {
@@ -315,7 +318,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 	os.WriteFile(r.a.Config, []byte(`{"term":"tmux","link":{"ports":[]}}`), 0o600)
 
 	code, out := r.do(t, "PATCH", "/admin/v1/settings",
-		`{"notifications":"finished","sound":true,"restore":"auto","sessions":"auto","updates":"off","network":false,"wifi":{"ssid":"Lab","password":"correct horse"}}`)
+		`{"notifications":"finished","sound":true,"restore":"auto","sessions":"auto","updates":"off","pets":true,"network":false,"wifi":{"ssid":"Lab","password":"correct horse"}}`)
 	if code != 200 {
 		t.Fatalf("patch: %d %v", code, out)
 	}
@@ -323,7 +326,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 		t.Errorf("turning the network off needs a restart: %v", out)
 	}
 	_, got := r.do(t, "GET", "/admin/v1/settings", "")
-	for k, v := range map[string]any{"notifications": "finished", "sound": true, "restore": "auto", "sessions": "auto", "updates": "off", "network": false} {
+	for k, v := range map[string]any{"notifications": "finished", "sound": true, "restore": "auto", "sessions": "auto", "updates": "off", "pets": true, "network": false} {
 		if got[k] != v {
 			t.Errorf("%s = %v, want %v", k, got[k], v)
 		}
@@ -339,10 +342,31 @@ func TestSettingsRoundTrip(t *testing.T) {
 	if !strings.Contains(string(cfg), `"term": "tmux"`) || strings.Contains(string(cfg), "correct horse") {
 		t.Errorf("config.json lost a key or holds the password:\n%s", cfg)
 	}
-	for _, bad := range []string{`{"notifications":"loud"}`, `{"updates":"weekly"}`, `{"restore":"never"}`, `{"sessions":"all"}`, `{"wifi":{"ssid":"x","password":"short"}}`, `nope`} {
+	for _, bad := range []string{`{"notifications":"loud"}`, `{"updates":"weekly"}`, `{"restore":"never"}`, `{"sessions":"all"}`, `{"wifi":{"ssid":"x","password":"short"}}`, `nope`,
+		`{"petFirstLevel":10}`, `{"petStep":1}`, `{"petStep":4.5}`} {
 		if code, _ := r.do(t, "PATCH", "/admin/v1/settings", bad); code != 400 {
 			t.Errorf("%s: %d", bad, code)
 		}
+	}
+	// Agent pets: on by default, with its levels, kept as one object.
+	if got["petFirstLevel"] != 50000.0 || got["petStep"] != 1.25 {
+		t.Errorf("pet levels: %v %v", got["petFirstLevel"], got["petStep"])
+	}
+	if code, out := r.do(t, "PATCH", "/admin/v1/settings", `{"pets":false,"petFirstLevel":20000,"petStep":1.5}`); code != 200 {
+		t.Fatalf("pet levels: %d %v", code, out)
+	}
+	_, got = r.do(t, "GET", "/admin/v1/settings", "")
+	// Agent pets can't be turned off for now: "off" is kept in config.json,
+	// but the effective value is on (pets.AlwaysOn).
+	if got["pets"] != pets.AlwaysOn || got["petFirstLevel"] != 20000.0 || got["petStep"] != 1.5 {
+		t.Errorf("pets after the patch: %v %v %v", got["pets"], got["petFirstLevel"], got["petStep"])
+	}
+	if cfg, _ := os.ReadFile(r.a.Config); !strings.Contains(string(cfg), `"firstLevel": 20000`) || !strings.Contains(string(cfg), `"on": false`) {
+		t.Errorf("config.json pets:\n%s", cfg)
+	}
+	os.WriteFile(r.a.Config, []byte(`{"term":"tmux"}`), 0o600)
+	if _, got = r.do(t, "GET", "/admin/v1/settings", ""); got["pets"] != true {
+		t.Error("no pets key: on by default")
 	}
 	// Start at login: registered after the answer went out.
 	if code, _ := r.do(t, "PATCH", "/admin/v1/settings", `{"startAtLogin":true}`); code != 200 {
@@ -886,5 +910,37 @@ func TestPortBorrow(t *testing.T) {
 	r.do(t, "POST", "/admin/v1/ports/cu.usbmodem9001/return", "")
 	if open() {
 		t.Error("return handed back the service's own hold")
+	}
+}
+
+// "Report usage from every Claude session": off by default, kept in
+// config.json, and each change goes to the daemon; a service without it says so.
+func TestSettingsUsageEverySession(t *testing.T) {
+	r := newRig(t)
+	_, got := r.do(t, "GET", "/admin/v1/settings", "")
+	if got["usageEverySession"] != false {
+		t.Errorf("default: %v", got["usageEverySession"])
+	}
+	if code, _ := r.do(t, "PATCH", "/admin/v1/settings", `{"usageEverySession":true}`); code != 501 {
+		t.Errorf("without the hook: %d, want 501", code)
+	}
+	var calls []bool
+	r.a.UsageEverySession = func(on bool) error { calls = append(calls, on); return nil }
+	if code, out := r.do(t, "PATCH", "/admin/v1/settings", `{"usageEverySession":true}`); code != 200 {
+		t.Fatalf("on: %d %v", code, out)
+	}
+	if _, got = r.do(t, "GET", "/admin/v1/settings", ""); got["usageEverySession"] != true {
+		t.Errorf("after on: %v", got["usageEverySession"])
+	}
+	r.a.UsageEverySession = func(on bool) error {
+		calls = append(calls, on)
+		return errors.New("settings.json: not a JSON object; left alone")
+	}
+	code, out := r.do(t, "PATCH", "/admin/v1/settings", `{"usageEverySession":false}`)
+	if code != 200 || !strings.Contains(fmt.Sprint(out["message"]), "left alone") {
+		t.Errorf("off with an error: %d %v", code, out)
+	}
+	if len(calls) != 2 || !calls[0] || calls[1] {
+		t.Errorf("calls %v", calls)
 	}
 }

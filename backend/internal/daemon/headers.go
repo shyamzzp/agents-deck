@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/header"
-	"github.com/brushknight/agents-deck/backend/internal/paths"
-	"github.com/brushknight/agents-deck/backend/internal/tmux"
+	"github.com/shyamzzp/agents-deck/backend/internal/header"
+	"github.com/shyamzzp/agents-deck/backend/internal/paths"
+	"github.com/shyamzzp/agents-deck/backend/internal/tmux"
 )
 
 // Header modes (`agentctl set header …`).

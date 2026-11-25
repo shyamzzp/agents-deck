@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/link/linkpb"
+	"github.com/shyamzzp/agents-deck/backend/internal/link/linkpb"
 )
 
 // The Go board passes the conformance check, in both modes.

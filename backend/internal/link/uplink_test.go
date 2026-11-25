@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
 )
 
 // session runs a session of one transport on hub and says Hello as id.

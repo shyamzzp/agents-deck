@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/proc"
+	"github.com/shyamzzp/agents-deck/backend/internal/proc"
 )
 
 // fakeRun records commands and answers from a table (default: success).

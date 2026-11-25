@@ -2,8 +2,8 @@ package daemon
 
 import (
 	"context"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 	"os"
 	"path/filepath"
 	"runtime"

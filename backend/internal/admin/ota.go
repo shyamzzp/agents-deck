@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/firmware"
-	"github.com/brushknight/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/firmware"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
 )
 
 // OTASource is the release catalog as the Deck Link hub reads it for updates

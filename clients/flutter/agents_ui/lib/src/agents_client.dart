@@ -96,6 +96,11 @@ abstract class AgentsSource {
   /// previous conversation.
   Future<AgentsResult> resume(String agentId);
 
+  /// `POST /v1/agents/{id}/pet/hatch`: hatches the agent's pet egg that is
+  /// ready ([AgentPet.ready]); a conflict when it isn't (or has hatched, or
+  /// Agent pets is off).
+  Future<AgentsResult> hatch(String agentId);
+
   /// `POST /v1/agents/{id}/move` — puts the agent at board position [slot]
   /// (free or not; an agent already there swaps into the old position).
   Future<AgentsResult> move(String agentId, int slot);
@@ -103,7 +108,14 @@ abstract class AgentsSource {
   /// `POST /v1/agents/{id}/prompt` — sends the agent something to do. It
   /// goes on its queue by default, so asking while it works does not cut the
   /// turn short.
-  Future<AgentsResult> prompt(String agentId, String text, {String mode});
+  /// [taskId] says the text is one of the agent's own tasks, so the service
+  /// can follow what becomes of it and the card can draw the tile working.
+  Future<AgentsResult> prompt(
+    String agentId,
+    String text, {
+    String mode,
+    String? taskId,
+  });
 
   /// `GET /v1/agents/{id}/prompts` — every prompt of the session, newest
   /// first, as the card lists them behind its turn count.
@@ -140,10 +152,14 @@ abstract class AgentsSource {
 
   /// `POST /v1/agents/{id}/hat` — picks the hat of the agent's working
   /// folder ([shape] + optional [color]), or back to the automatic one.
+  /// [critter] picks the creature that folder wears in place of the deck's
+  /// own ([critterLooks], or "" for the critter); left out, it keeps the one
+  /// it wears.
   Future<AgentsResult> setHat(
     String agentId, {
     String? shape,
     String? color,
+    String? critter,
     bool auto = false,
   });
 
@@ -596,6 +612,10 @@ class HttpAgentsClient implements AgentsSource {
   Future<AgentsResult> resume(String agentId) => _post(agentId, 'resume');
 
   @override
+  Future<AgentsResult> hatch(String agentId) =>
+      _postPath(['v1', 'agents', agentId, 'pet', 'hatch']);
+
+  @override
   Future<AgentsResult> move(String agentId, int slot) =>
       _postPath(['v1', 'agents', agentId, 'move'], {'slot': slot});
 
@@ -604,7 +624,9 @@ class HttpAgentsClient implements AgentsSource {
     String agentId,
     String text, {
     String mode = 'queue',
-  }) => _post(agentId, 'prompt', {'text': text, 'mode': mode});
+    String? taskId,
+  }) =>
+      _post(agentId, 'prompt', {'text': text, 'mode': mode, 'taskId': ?taskId});
 
   @override
   Future<AgentsResult> magicView(List<String> ids) =>
@@ -716,13 +738,14 @@ class HttpAgentsClient implements AgentsSource {
     String agentId, {
     String? shape,
     String? color,
+    String? critter,
     bool auto = false,
-  }) => _postPath([
-    'v1',
-    'agents',
-    agentId,
-    'hat',
-  ], auto ? {'auto': true} : {'shape': shape, 'color': ?color});
+  }) => _postPath(
+    ['v1', 'agents', agentId, 'hat'],
+    auto
+        ? {'auto': true}
+        : {'shape': shape, 'color': ?color, 'critter': ?critter},
+  );
 
   @override
   Future<AgentsResult> addLive(String sessionId, {int? slot}) => _postPath([

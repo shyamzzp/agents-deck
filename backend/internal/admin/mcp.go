@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
 )
 
 // mcpInfo is GET /admin/v1/mcp: the tokens (never their secrets) and where

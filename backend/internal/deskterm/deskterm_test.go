@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brushknight/agents-deck/backend/internal/sshdeck"
+	"github.com/shyamzzp/agents-deck/backend/internal/sshdeck"
 )
 
 func TestForegroundSSH(t *testing.T) {

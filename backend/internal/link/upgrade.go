@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
 )
 
 // UpgradeHandler serves POST /local/link on the daemon's unix socket: the

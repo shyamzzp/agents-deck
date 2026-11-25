@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/link/linkpb"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/link/linkpb"
 )
 
 // The firmware kit's Bluetooth byte stream (deck_ble.c) against the real

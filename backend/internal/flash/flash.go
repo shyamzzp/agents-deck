@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/brushknight/agents-deck/backend/internal/serial"
+	"github.com/shyamzzp/agents-deck/backend/internal/serial"
 )
 
 // Chip is what Probe found.

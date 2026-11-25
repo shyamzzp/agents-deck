@@ -13,7 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/brushknight/agents-deck/backend/internal/configfile"
+	"github.com/shyamzzp/agents-deck/backend/internal/configfile"
 	"os"
 	"sort"
 	"strings"
@@ -21,8 +21,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 // Row is the deck's width in tiles. A divider is anchored at the start of a

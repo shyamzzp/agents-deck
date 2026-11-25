@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 func writeLines(t *testing.T, lines ...string) string {

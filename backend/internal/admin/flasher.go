@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/brushknight/agents-deck/backend/internal/flash"
-	"github.com/brushknight/agents-deck/backend/internal/serial"
+	"github.com/shyamzzp/agents-deck/backend/internal/flash"
+	"github.com/shyamzzp/agents-deck/backend/internal/serial"
 )
 
 // SerialFlasher is the real Flasher: it opens the port itself (only ever a

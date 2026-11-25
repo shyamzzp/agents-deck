@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/devices"
-	"github.com/brushknight/agents-deck/backend/internal/firmware"
-	"github.com/brushknight/agents-deck/backend/internal/flash"
-	"github.com/brushknight/agents-deck/backend/internal/link"
-	"github.com/brushknight/agents-deck/backend/internal/serial"
-	"github.com/brushknight/agents-deck/backend/internal/update"
+	"github.com/shyamzzp/agents-deck/backend/internal/devices"
+	"github.com/shyamzzp/agents-deck/backend/internal/firmware"
+	"github.com/shyamzzp/agents-deck/backend/internal/flash"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/serial"
+	"github.com/shyamzzp/agents-deck/backend/internal/update"
 )
 
 // UseDemo turns a into the pretend deck of serve --demo: its own folder for
@@ -235,7 +235,7 @@ var demoCatalog = firmware.Catalog{Version: "0.2.0", Boards: []firmware.Board{
 
 func (f *demoFirmware) Latest(ctx context.Context) (firmware.Catalog, error) {
 	if f.mode == "offline" {
-		return firmware.Catalog{}, errors.New("Get \"https://github.com/brushknight/agents-deck/releases/latest\": dial tcp: lookup github.com: no such host")
+		return firmware.Catalog{}, errors.New("Get \"https://github.com/shyamzzp/agents-deck/releases/latest\": dial tcp: lookup github.com: no such host")
 	}
 	return demoCatalog, nil
 }

@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/proc"
+	"github.com/shyamzzp/agents-deck/backend/internal/proc"
 )
 
 // list globs the callout devices and asks ioreg (no cgo, no port opened)

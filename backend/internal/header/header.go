@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 // Lines is how many status lines the header takes (tmux allows at most 5).

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/proc"
+	"github.com/shyamzzp/agents-deck/backend/internal/proc"
 )
 
 // Bin is the tmux binary; launchd's PATH is minimal, so look in the usual places.

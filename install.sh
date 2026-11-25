@@ -10,7 +10,7 @@
 # releases), a clone builds from source instead. --app from source needs
 # Flutter and GTK 3 build tools; add --autostart to start the tray app at login.
 #
-#   curl -fsSL https://raw.githubusercontent.com/brushknight/agents-deck/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/shyamzzp/agents-deck/main/install.sh | sh
 #   curl -fsSL …/install.sh | sh -s -- --app            # also the menu bar app
 #   curl -fsSL …/install.sh | sh -s -- --version v0.2.0
 #   ./install.sh --source --app                         # from a clone (needs Go; Flutter for --app)
@@ -18,7 +18,7 @@
 #   --no-daemon: install agentctl but don't (re)start its login item
 set -eu
 
-repo="brushknight/agents-deck"
+repo="shyamzzp/agents-deck"
 # The release signing key (base64), pinned here once the project has one. With
 # it, an agentctl already installed here checks SHA256SUMS.sig with this key;
 # without it, with the key built into that agentctl.

@@ -3,7 +3,7 @@
 # or open agents deck from the app menu, which does that for you.
 [Unit]
 Description=agents deck service (agentctl serve)
-Documentation=https://github.com/brushknight/agents-deck
+Documentation=https://github.com/shyamzzp/agents-deck
 After=default.target
 
 [Service]

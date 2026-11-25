@@ -19,10 +19,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/admin"
-	"github.com/brushknight/agents-deck/backend/internal/ble"
-	"github.com/brushknight/agents-deck/backend/internal/link"
-	"github.com/brushknight/agents-deck/backend/internal/server"
+	"github.com/shyamzzp/agents-deck/backend/internal/admin"
+	"github.com/shyamzzp/agents-deck/backend/internal/ble"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/server"
 )
 
 // startBluetooth runs the Bluetooth helper (deck-ble next to agentctl, or

@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/proc"
+	"github.com/shyamzzp/agents-deck/backend/internal/proc"
 )
 
 // Dir is herdr's config folder, which holds the sockets.

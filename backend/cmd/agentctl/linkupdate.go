@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/link"
+	"github.com/shyamzzp/agents-deck/backend/internal/link"
 )
 
 // linkUpdate: `agentctl link update <board> --image FILE --board B --version V`

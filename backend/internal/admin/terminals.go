@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/deskterm"
-	"github.com/brushknight/agents-deck/backend/internal/tmux"
+	"github.com/shyamzzp/agents-deck/backend/internal/deskterm"
+	"github.com/shyamzzp/agents-deck/backend/internal/tmux"
 )
 
 func (a *Admin) terminalInventory(ctx context.Context) (deskterm.Inventory, error) {

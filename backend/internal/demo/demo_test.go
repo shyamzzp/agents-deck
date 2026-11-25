@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
 )
 
 // A still fleet keeps each agent's last activity the fixture's time ago,

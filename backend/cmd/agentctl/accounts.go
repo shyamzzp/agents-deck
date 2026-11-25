@@ -8,9 +8,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/brushknight/agents-deck/backend/internal/accounts"
-	"github.com/brushknight/agents-deck/backend/internal/claude"
-	"github.com/brushknight/agents-deck/backend/internal/hats"
+	"github.com/shyamzzp/agents-deck/backend/internal/accounts"
+	"github.com/shyamzzp/agents-deck/backend/internal/claude"
+	"github.com/shyamzzp/agents-deck/backend/internal/hats"
 )
 
 var accountUsage = `usage:

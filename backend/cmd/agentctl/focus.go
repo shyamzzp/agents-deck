@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/brushknight/agents-deck/backend/internal/deskterm"
-	"github.com/brushknight/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/deskterm"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
 )
 
 func paneInventory() deskterm.Inventory {

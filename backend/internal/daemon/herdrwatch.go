@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brushknight/agents-deck/backend/internal/claude"
-	"github.com/brushknight/agents-deck/backend/internal/herdr"
-	"github.com/brushknight/agents-deck/backend/internal/model"
-	"github.com/brushknight/agents-deck/backend/internal/store"
-	"github.com/brushknight/agents-deck/backend/internal/term"
+	"github.com/shyamzzp/agents-deck/backend/internal/claude"
+	"github.com/shyamzzp/agents-deck/backend/internal/herdr"
+	"github.com/shyamzzp/agents-deck/backend/internal/model"
+	"github.com/shyamzzp/agents-deck/backend/internal/store"
+	"github.com/shyamzzp/agents-deck/backend/internal/term"
 )
 
 // herdrWatch mirrors agents running in herdr's panes onto the board: status

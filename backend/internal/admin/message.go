@@ -7,8 +7,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/brushknight/agents-deck/backend/internal/deskterm"
-	"github.com/brushknight/agents-deck/backend/internal/sshdeck"
+	"github.com/shyamzzp/agents-deck/backend/internal/deskterm"
+	"github.com/shyamzzp/agents-deck/backend/internal/sshdeck"
 )
 
 func (a *Admin) message(w http.ResponseWriter, r *http.Request) {

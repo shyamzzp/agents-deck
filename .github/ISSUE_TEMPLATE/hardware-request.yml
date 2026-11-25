@@ -6,10 +6,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        agents deck runs on these boards today: [docs/devices.md](https://github.com/brushknight/agents-deck/blob/main/docs/devices.md).
+        agents deck runs on these boards today: [docs/devices.md](https://github.com/shyamzzp/agents-deck/blob/main/docs/devices.md).
         Check the open hardware requests first: if your board is there, give it a 👍 instead. The most-wanted boards get built first.
 
-        Writing the firmware yourself? [docs/link/new-device.md](https://github.com/brushknight/agents-deck/blob/main/docs/link/new-device.md) walks through it, and a coding agent can follow it too.
+        Writing the firmware yourself? [docs/link/new-device.md](https://github.com/shyamzzp/agents-deck/blob/main/docs/link/new-device.md) walks through it, and a coding agent can follow it too.
   - type: input
     id: board
     attributes:
