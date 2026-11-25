@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart' show kTouchSlop;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
@@ -67,6 +68,12 @@ class _AgentDetailState extends State<AgentDetail> {
   /// The tasks, for the double tap to bring into view.
   final _asksKey = GlobalKey();
 
+  /// The card itself and its scroller, measured while a task is carried: one
+  /// to place the tile under the finger, the other to know when the finger
+  /// has reached an edge and the card should scroll.
+  final _cardKey = GlobalKey();
+  final _scrollKey = GlobalKey();
+
   /// Prompt the per-prompt UI state (selection, notes) belongs to.
   String? _promptId;
   String? _selected;
@@ -120,6 +127,8 @@ class _AgentDetailState extends State<AgentDetail> {
   void dispose() {
     _timer?.cancel();
     _confirmTimer?.cancel();
+    _carryTimer?.cancel();
+    _edgeTimer?.cancel();
     widget.onVisible?.call(false);
     super.dispose();
   }
@@ -375,10 +384,14 @@ class _AgentDetailState extends State<AgentDetail> {
       // only way back that does not need them to be reachable.
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onHorizontalDragUpdate: (d) => _swipe += d.delta.dx,
+        // A task in hand is carried, not a page swiped away: the card stays.
+        onHorizontalDragUpdate: (d) {
+          if (_heldCell == null) _swipe += d.delta.dx;
+        },
         onHorizontalDragEnd: (d) {
           final back =
-              _swipe > 80 || (d.primaryVelocity ?? 0) > 420 && _swipe > 24;
+              _heldCell == null &&
+              (_swipe > 80 || (d.primaryVelocity ?? 0) > 420 && _swipe > 24);
           _swipe = 0;
           if (back) widget.onClose();
         },
@@ -394,6 +407,7 @@ class _AgentDetailState extends State<AgentDetail> {
             return DeckCompact(
               compact: tight,
               child: Stack(
+                key: _cardKey,
                 children: [
                   // Under the content, not around it: a double tap wrapped
                   // around the card puts every button on it behind the
@@ -426,6 +440,7 @@ class _AgentDetailState extends State<AgentDetail> {
                         onPin: () => unawaited(_pinTaskAt(i)),
                       ),
                     ),
+                  if (_heldCell case final cell?) _carriedAsk(cell),
                   if (_history)
                     Positioned.fill(
                       child: _PromptDrawer(
@@ -727,27 +742,34 @@ class _AgentDetailState extends State<AgentDetail> {
                     ),
                     child: AspectRatio(
                       aspectRatio: 1,
-                      child: switch (cells[r * columns + c]) {
-                        final AgentAsk ask => _AskTile(
-                          key: Key('ask-${r * columns + c}'),
-                          ask: ask,
-                          sent: _askSent == r * columns + c,
-                          onHold: _busy
-                              ? null
-                              : () => setState(() => _taskAt = r * columns + c),
-                        ),
-                        // An empty cell is where a new task is spoken into,
-                        // for a host that has a microphone to offer. A tap
-                        // does it as well as a hold: a tap on an empty cell
-                        // has nothing else it could mean, and a hold inside a
-                        // scroller is a gesture people miss.
-                        _ => _EmptyAskCell(
-                          key: Key('ask-empty-${r * columns + c}'),
-                          onSpeak: widget.onSpeakTask == null
-                              ? null
-                              : () => unawaited(_speakTask(r * columns + c)),
-                        ),
-                      },
+                      child: _carryCell(
+                        cell: r * columns + c,
+                        held: cells[r * columns + c] != null && !_busy,
+                        // Only a task of the agent's own can be carried: the
+                        // built-in eight keep their cells on every card, so
+                        // the same task is always in the same place.
+                        own: cells[r * columns + c]?.id != null && !_busy,
+                        child: switch (cells[r * columns + c]) {
+                          final AgentAsk ask => _AskTile(
+                            key: Key('ask-${r * columns + c}'),
+                            ask: ask,
+                            sent: _askSent == r * columns + c,
+                            lifted: _heldCell == r * columns + c,
+                          ),
+                          // An empty cell is where a new task is spoken into,
+                          // for a host that has a microphone to offer. A tap
+                          // does it as well as a hold: a tap on an empty cell
+                          // has nothing else it could mean, and a hold inside a
+                          // scroller is a gesture people miss.
+                          _ => _EmptyAskCell(
+                            key: Key('ask-empty-${r * columns + c}'),
+                            onSpeak:
+                                widget.onSpeakTask == null || _heldCell != null
+                                ? null
+                                : () => unawaited(_speakTask(r * columns + c)),
+                          ),
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -755,6 +777,262 @@ class _AgentDetailState extends State<AgentDetail> {
           ),
         ],
       ],
+    );
+  }
+
+  // ---- carrying a task to another cell ---------------------------------------
+
+  /// How long a finger has to stay down before the task comes up in it.
+  static const _carryDelay = Duration(milliseconds: 220);
+
+  final _cellKeys = <int, GlobalKey>{};
+  Timer? _carryTimer;
+  Timer? _edgeTimer;
+
+  /// Which way the card is scrolling itself while a task is held at an edge.
+  double _edgeStep = 0;
+
+  /// The cell the task was picked up from, and the one the finger is over.
+  int? _heldCell;
+  int? _overCell;
+
+  /// A task held down: which cell, whether it is the agent's own (only those
+  /// can be carried), and whether the hold has lasted long enough to count.
+  /// A finger that travels before the carry starts is a scroll, and disarms
+  /// it, so the card never answers a scroll with a dialog.
+  int? _armedCell;
+  bool _armedOwn = false;
+  bool _armedLong = false;
+
+  /// Whether the finger travelled after it picked the task up. A hold that
+  /// stays put is the task's dialog, as a hold has always been; a hold that
+  /// moves is a carry.
+  bool _carriedIt = false;
+  Offset _pointer = Offset.zero;
+  Offset _wentDown = Offset.zero;
+  Size _heldSize = const Size(90, 90);
+
+  /// One cell of the quick list, and the whole of picking a task up.
+  ///
+  /// This is a Listener rather than a LongPressDraggable for the reason the
+  /// deck's own cells are: a recognizer that waits for a long press gives up
+  /// the moment the finger passes touch slop, and the card's scroller is
+  /// right here to take the drag instead -- so the hold started nothing and
+  /// the card scrolled away under the thumb. A Listener never enters the
+  /// gesture arena, so nothing can take the pointer from it: the task arms on
+  /// a timer and from then on follows the finger, with the scroller frozen
+  /// while it does.
+  Widget _carryCell({
+    required int cell,
+    required bool held,
+    required bool own,
+    required Widget child,
+  }) {
+    final key = _cellKeys.putIfAbsent(cell, GlobalKey.new);
+    final over = _heldCell != null && _overCell == cell && _heldCell != cell;
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: held ? (e) => _armCarry(cell, own, e) : null,
+      onPointerMove: _carryMoved,
+      onPointerUp: (e) => _carryEnded(),
+      onPointerCancel: (e) => _carryEnded(),
+      child: Stack(
+        key: key,
+        fit: StackFit.expand,
+        children: [
+          child,
+          if (over)
+            IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border.all(color: DeckHud.ink, width: 3),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Picks the task up after [_carryDelay], moved or not, when it is one the
+  /// agent owns; a built-in one only becomes a hold worth answering.
+  void _armCarry(int cell, bool own, PointerDownEvent e) {
+    _carryTimer?.cancel();
+    _pointer = e.position;
+    _wentDown = e.position;
+    _carriedIt = false;
+    _armedCell = cell;
+    _armedOwn = own;
+    _armedLong = false;
+    final box = _cellKeys[cell]?.currentContext?.findRenderObject();
+    if (box is RenderBox && box.hasSize) _heldSize = box.size;
+    _carryTimer = Timer(_carryDelay, () {
+      if (!mounted || _armedCell != cell) return;
+      _armedLong = true;
+      if (!own) return;
+      Haptics.fire(HapticWhen.hold);
+      setState(() {
+        _heldCell = cell;
+        _overCell = cell;
+      });
+    });
+  }
+
+  void _carryMoved(PointerMoveEvent e) {
+    final travelled = (e.position - _wentDown).distance > kTouchSlop;
+    if (_heldCell == null) {
+      // Still only held down: a finger that travels is scrolling the card,
+      // and what it scrolls past must not open anything.
+      if (travelled) {
+        _carryTimer?.cancel();
+        _carryTimer = null;
+        _armedCell = null;
+        _armedLong = false;
+      }
+      return;
+    }
+    final cell = _cellUnder(e.position);
+    setState(() {
+      _pointer = e.position;
+      if (travelled) _carriedIt = true;
+      if (cell != null) _overCell = cell;
+    });
+    _scrollAtEdge(e.position);
+  }
+
+  /// Held at the top or bottom of the card, the card scrolls itself, so a
+  /// task can be carried to a row that is off the screen.
+  void _scrollAtEdge(Offset p) {
+    final box = _scrollKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize || !_scroll.hasClients) return;
+    final rect = box.localToGlobal(Offset.zero) & box.size;
+    const margin = 56.0;
+    final step = p.dy <= rect.top + margin
+        ? -42.0
+        : p.dy >= rect.bottom - margin
+        ? 42.0
+        : 0.0;
+    if (step == _edgeStep) return;
+    _edgeTimer?.cancel();
+    _edgeTimer = null;
+    _edgeStep = step;
+    if (step == 0) return;
+    _edgeTimer = Timer.periodic(const Duration(milliseconds: 80), (t) {
+      if (!mounted || _heldCell == null || !_scroll.hasClients) {
+        t.cancel();
+        _edgeTimer = null;
+        _edgeStep = 0;
+        return;
+      }
+      _scroll.jumpTo(
+        (_scroll.offset + step).clamp(0, _scroll.position.maxScrollExtent),
+      );
+    });
+  }
+
+  void _carryEnded() {
+    _carryTimer?.cancel();
+    _carryTimer = null;
+    _edgeTimer?.cancel();
+    _edgeTimer = null;
+    _edgeStep = 0;
+    final from = _heldCell, to = _overCell;
+    final armed = _armedCell;
+    final long = _armedLong && _armedCell != null;
+    _armedCell = null;
+    _armedLong = false;
+    if (from == null) {
+      // Nothing was picked up. A long enough hold on a built-in task still
+      // opens what can be done with it, as a hold has always done.
+      if (long && !_armedOwn && armed != null) {
+        Haptics.fire(HapticWhen.hold);
+        setState(() => _taskAt = armed);
+      }
+      return;
+    }
+    setState(() {
+      _heldCell = null;
+      _overCell = null;
+    });
+    if (!_carriedIt) {
+      // Held and let go where it was: what can be done with the task.
+      setState(() => _taskAt = from);
+      return;
+    }
+    if (to == null || to == from) return;
+    unawaited(_carryTo(from, to));
+  }
+
+  /// Which cell is under [p], by asking each one where it is.
+  int? _cellUnder(Offset p) {
+    for (final e in _cellKeys.entries) {
+      final box = e.value.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) continue;
+      final rect = box.localToGlobal(Offset.zero) & box.size;
+      if (rect.contains(p)) return e.key;
+    }
+    return null;
+  }
+
+  /// Puts the task from cell [from] where cell [to] is, within its own band.
+  ///
+  /// The tasks a person made keep the first places and the mined ones follow,
+  /// so one never lands among the other: a task carried onto the other band
+  /// stops at the near end of its own. What goes to the service is a rank, a
+  /// position in that band, not a cell, because the board is four cells wide
+  /// on a phone and ten on a tablet held sideways -- the same task would be
+  /// in a different cell on each.
+  Future<void> _carryTo(int from, int to) async {
+    final a = _shown?.$2;
+    if (a == null) return;
+    final base = agentAsks.length;
+    final at = from - base, onto = to - base;
+    // The built-in cells are not places to drop one.
+    if (at < 0 || at >= a.tasks.length || onto < 0) return;
+    final moving = a.tasks[at];
+    // Where the others of its band sit now, in the order they are drawn.
+    final others = [
+      for (final (i, t) in a.tasks.indexed)
+        if (i != at && t.mined == moving.mined) i,
+    ];
+    var rank = others.length; // an empty cell past the end: last of its band
+    if (onto < a.tasks.length) {
+      rank = 0;
+      for (final i in others) {
+        if (onto > at ? i <= onto : i < onto) rank++;
+      }
+    }
+    if (rank == moving.rank) return;
+    final r = await widget.source.moveTask(a.id, moving.id, rank);
+    if (!mounted) return;
+    Haptics.fire(r.isOk ? HapticWhen.tap : HapticWhen.problem);
+    setState(() => _note = r.isOk ? null : (r.message ?? 'could not move it'));
+  }
+
+  /// The carried task, centred on the finger and a little larger, so it reads
+  /// as lifted off the card.
+  Widget _carriedAsk(int cell) {
+    final box = _cardKey.currentContext?.findRenderObject();
+    final origin = box is RenderBox && box.hasSize
+        ? box.localToGlobal(Offset.zero)
+        : Offset.zero;
+    final local = _pointer - origin;
+    return Positioned(
+      left: local.dx - _heldSize.width / 2,
+      top: local.dy - _heldSize.height / 2,
+      width: _heldSize.width,
+      height: _heldSize.height,
+      child: IgnorePointer(
+        child: Transform.scale(
+          scale: 1.08,
+          child: _AskTile(
+            key: const Key('ask-carried'),
+            ask: _taskOf(cell),
+            sent: false,
+            lifted: true,
+          ),
+        ),
+      ),
     );
   }
 
@@ -1144,210 +1422,220 @@ class _AgentDetailState extends State<AgentDetail> {
           // The title above and the two actions below stay where they are,
           // since those are what a glance and a thumb want.
           Expanded(
-            child: SingleChildScrollView(
-              key: const Key('agent-scroll'),
-              controller: _scroll,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Doing now, and how many subagents work for it on the right.
-                  Row(
-                    children: [
-                      Expanded(child: _label(nowLabel, DeckHud.dim)),
-                      if (a.subagents.isNotEmpty)
-                        Text(
-                          subagentCount(a.subagents.length),
-                          key: const Key('agent-subagent-count'),
-                          style: DeckHud.mono(size: 14, color: DeckHud.dim),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  nowValue,
-                  if (_nowAside(state, a) case final aside?) ...[
-                    const SizedBox(height: 6),
-                    aside,
-                  ],
-                  // The working subagents, one to a row, like the boards draw them.
-                  if (a.subagents.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    SubagentRows(
-                      subagents: a.subagents,
-                      body: body,
-                      cut: DeckHud.bg,
-                      // The other account's row below takes the room of two.
-                      maxRows: others.isEmpty ? 4 : 2,
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Text(
-                        'context',
-                        style: DeckHud.rm(22, DeckHud.ink, weight: 700),
-                      ),
-                      const SizedBox(width: 12),
-                      // Flexible, since "410k / 1m" beside "context" and a
-                      // percentage is wider than a phone at its narrowest.
-                      Flexible(
-                        child: Text(
-                          a.contextWindow > 0
-                              ? '${compactCount(a.contextUsed)} / ${compactCount(a.contextWindow)}'
-                              : '--',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: DeckHud.mono(size: 14, color: DeckHud.dim),
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        a.contextWindow > 0 ? '${a.contextPercent}%' : '--',
-                        style: DeckHud.rm(22, DeckHud.ink, weight: 700),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  TickBar(value: a.contextFraction, color: DeckHud.ink),
-                  const SizedBox(height: 16),
-                  // Four figures as a table: one hairline round the lot and one
-                  // between each pair, so a column is a cell rather than a gap. Half
-                  // a point and a third of the dim ink: a rule has to be found rather
-                  // than seen, or it reads as heavier than the figures it holds.
-                  DecoratedBox(
-                    key: const Key('agent-figures'),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: _rule, width: 0.5),
-                    ),
-                    child: IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (final (i, (label, value)) in [
-                            ('tokens out', compactCount(a.tokensOutput)),
-                            ('cache read', compactCount(a.cacheRead)),
-                            (
-                              'cost · est',
-                              a.codexThread
-                                  ? '—'
-                                  : '\$${a.costUsd.toStringAsFixed(2)}',
-                            ),
-                            ('turns', '${a.turns}'),
-                          ].indexed)
-                            Expanded(
-                              child: GestureDetector(
-                                // The turn count is a door: behind it are the
-                                // prompts it counts.
-                                behavior: HitTestBehavior.opaque,
-                                onTap: label == 'turns' && a.turns > 0
-                                    ? () => setState(() => _history = true)
-                                    : null,
-                                child: Container(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    8,
-                                    7,
-                                    8,
-                                    8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    border: i == 0
-                                        ? null
-                                        : Border(
-                                            left: BorderSide(
-                                              color: _rule,
-                                              width: 0.5,
-                                            ),
-                                          ),
-                                  ),
-                                  child: Column(
-                                    // Centred in the cell, not pushed to its left edge:
-                                    // "turns" holds the shortest figure of the four, so
-                                    // left-aligned it looked as though its cell had been
-                                    // given all its room on the right.
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    // The label at the top of the cell and the figure on
-                                    // its floor: a cell whose label wraps to two lines
-                                    // would otherwise lift its figure above the rest.
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      _label(label, DeckHud.dim),
-                                      const SizedBox(height: 6),
-                                      // 18, not 22: four of these across a phone was
-                                      // the widest thing on the card, and "3.1m" does
-                                      // not need to be read from across the desk.
-                                      Text(
-                                        value,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: DeckHud.rm(
-                                          18,
-                                          DeckHud.ink,
-                                          weight: 600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (state.lastActiveText(a) case final active
-                      when active.isNotEmpty)
+            child: KeyedSubtree(
+              key: _scrollKey,
+              child: SingleChildScrollView(
+                key: const Key('agent-scroll'),
+                controller: _scroll,
+                // Frozen while a task is in hand: the carry owns the finger,
+                // and the card scrolls only when one is held at an edge.
+                physics: _heldCell == null
+                    ? null
+                    : const NeverScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Doing now, and how many subagents work for it on the right.
                     Row(
                       children: [
-                        _label(
-                          a.queuedNext.isEmpty ? 'last prompt' : 'queued next',
-                          DeckHud.dim,
+                        Expanded(child: _label(nowLabel, DeckHud.dim)),
+                        if (a.subagents.isNotEmpty)
+                          Text(
+                            subagentCount(a.subagents.length),
+                            key: const Key('agent-subagent-count'),
+                            style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    nowValue,
+                    if (_nowAside(state, a) case final aside?) ...[
+                      const SizedBox(height: 6),
+                      aside,
+                    ],
+                    // The working subagents, one to a row, like the boards draw them.
+                    if (a.subagents.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      SubagentRows(
+                        subagents: a.subagents,
+                        body: body,
+                        cut: DeckHud.bg,
+                        // The other account's row below takes the room of two.
+                        maxRows: others.isEmpty ? 4 : 2,
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          'context',
+                          style: DeckHud.rm(22, DeckHud.ink, weight: 700),
+                        ),
+                        const SizedBox(width: 12),
+                        // Flexible, since "410k / 1m" beside "context" and a
+                        // percentage is wider than a phone at its narrowest.
+                        Flexible(
+                          child: Text(
+                            a.contextWindow > 0
+                                ? '${compactCount(a.contextUsed)} / ${compactCount(a.contextWindow)}'
+                                : '--',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                          ),
                         ),
                         const Spacer(),
                         Text(
-                          active,
-                          key: const Key('agent-last-active'),
-                          style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                          a.contextWindow > 0 ? '${a.contextPercent}%' : '--',
+                          style: DeckHud.rm(22, DeckHud.ink, weight: 700),
                         ),
                       ],
-                    )
-                  else
-                    _label(
-                      a.queuedNext.isEmpty ? 'last prompt' : 'queued next',
-                      DeckHud.dim,
                     ),
-                  const SizedBox(height: 8),
-                  // A prompt the deck has queued is shown instead of the last one: it
-                  // is what goes in next, and it is the thing someone looking at the
-                  // card wants to see arrive. Four lines of it, now that the card
-                  // scrolls: there is no leftover height left to measure.
-                  Text(
-                    a.queuedNext.isNotEmpty
-                        ? a.queuedNext
-                        : (a.lastPrompt.isEmpty ? '—' : a.lastPrompt),
-                    key: const Key('agent-last-prompt'),
-                    // Five lines at 13: it is the longest thing on the card,
-                    // and smaller text shows more of it in less room.
-                    maxLines: 5,
-                    overflow: TextOverflow.ellipsis,
-                    style: DeckHud.rm(
-                      13,
-                      a.queuedNext.isNotEmpty ? DeckHud.accent : DeckHud.ink,
-                    ).merge(const TextStyle(height: 1.45)),
-                  ),
-                  // The tasks, in the cells of the page this agent was picked from.
-                  const SizedBox(height: 18),
-                  _label('ask it to\u2026', DeckHud.dim),
-                  const SizedBox(height: 8),
-                  Padding(
-                    key: _asksKey,
-                    padding: EdgeInsets.zero,
-                    child: _askBoard(tight, a),
-                  ),
-                ],
+                    const SizedBox(height: 10),
+                    TickBar(value: a.contextFraction, color: DeckHud.ink),
+                    const SizedBox(height: 16),
+                    // Four figures as a table: one hairline round the lot and one
+                    // between each pair, so a column is a cell rather than a gap. Half
+                    // a point and a third of the dim ink: a rule has to be found rather
+                    // than seen, or it reads as heavier than the figures it holds.
+                    DecoratedBox(
+                      key: const Key('agent-figures'),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: _rule, width: 0.5),
+                      ),
+                      child: IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (final (i, (label, value)) in [
+                              ('tokens out', compactCount(a.tokensOutput)),
+                              ('cache read', compactCount(a.cacheRead)),
+                              (
+                                'cost · est',
+                                a.codexThread
+                                    ? '—'
+                                    : '\$${a.costUsd.toStringAsFixed(2)}',
+                              ),
+                              ('turns', '${a.turns}'),
+                            ].indexed)
+                              Expanded(
+                                child: GestureDetector(
+                                  // The turn count is a door: behind it are the
+                                  // prompts it counts.
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: label == 'turns' && a.turns > 0
+                                      ? () => setState(() => _history = true)
+                                      : null,
+                                  child: Container(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      8,
+                                      7,
+                                      8,
+                                      8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      border: i == 0
+                                          ? null
+                                          : Border(
+                                              left: BorderSide(
+                                                color: _rule,
+                                                width: 0.5,
+                                              ),
+                                            ),
+                                    ),
+                                    child: Column(
+                                      // Centred in the cell, not pushed to its left edge:
+                                      // "turns" holds the shortest figure of the four, so
+                                      // left-aligned it looked as though its cell had been
+                                      // given all its room on the right.
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      // The label at the top of the cell and the figure on
+                                      // its floor: a cell whose label wraps to two lines
+                                      // would otherwise lift its figure above the rest.
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        _label(label, DeckHud.dim),
+                                        const SizedBox(height: 6),
+                                        // 18, not 22: four of these across a phone was
+                                        // the widest thing on the card, and "3.1m" does
+                                        // not need to be read from across the desk.
+                                        Text(
+                                          value,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: DeckHud.rm(
+                                            18,
+                                            DeckHud.ink,
+                                            weight: 600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (state.lastActiveText(a) case final active
+                        when active.isNotEmpty)
+                      Row(
+                        children: [
+                          _label(
+                            a.queuedNext.isEmpty
+                                ? 'last prompt'
+                                : 'queued next',
+                            DeckHud.dim,
+                          ),
+                          const Spacer(),
+                          Text(
+                            active,
+                            key: const Key('agent-last-active'),
+                            style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                          ),
+                        ],
+                      )
+                    else
+                      _label(
+                        a.queuedNext.isEmpty ? 'last prompt' : 'queued next',
+                        DeckHud.dim,
+                      ),
+                    const SizedBox(height: 8),
+                    // A prompt the deck has queued is shown instead of the last one: it
+                    // is what goes in next, and it is the thing someone looking at the
+                    // card wants to see arrive. Four lines of it, now that the card
+                    // scrolls: there is no leftover height left to measure.
+                    Text(
+                      a.queuedNext.isNotEmpty
+                          ? a.queuedNext
+                          : (a.lastPrompt.isEmpty ? '—' : a.lastPrompt),
+                      key: const Key('agent-last-prompt'),
+                      // Five lines at 13: it is the longest thing on the card,
+                      // and smaller text shows more of it in less room.
+                      maxLines: 5,
+                      overflow: TextOverflow.ellipsis,
+                      style: DeckHud.rm(
+                        13,
+                        a.queuedNext.isNotEmpty ? DeckHud.accent : DeckHud.ink,
+                      ).merge(const TextStyle(height: 1.45)),
+                    ),
+                    // The tasks, in the cells of the page this agent was picked from.
+                    const SizedBox(height: 18),
+                    _label('ask it to\u2026', DeckHud.dim),
+                    const SizedBox(height: 8),
+                    Padding(
+                      key: _asksKey,
+                      padding: EdgeInsets.zero,
+                      child: _askBoard(tight, a),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -2756,23 +3044,23 @@ class _AskTile extends StatelessWidget {
     super.key,
     required this.ask,
     required this.sent,
-    required this.onHold,
+    this.lifted = false,
   });
 
   final AgentAsk ask;
   final bool sent;
 
-  /// Held rather than tapped: opens what can be done with the task. A tap
-  /// does nothing, because a tap used to send it the instant it landed.
-  final VoidCallback? onHold;
+  /// In hand, being carried to another cell: drawn inverted, like a press.
+  /// The hold itself belongs to the board's Listener, not to this tile.
+  final bool lifted;
 
   @override
   Widget build(BuildContext context) {
     return Pressable(
       onTap: null,
-      onLongPress: onHold,
+      onLongPress: null,
       builder: (context, pressed) {
-        final on = pressed || sent;
+        final on = pressed || sent || lifted;
         final fill = on ? DeckHud.ink : DeckHud.panel;
         // One colour for every task, the agent colour of whichever theme is
         // on: what tells them apart is the hat, as it does on the deck. No
