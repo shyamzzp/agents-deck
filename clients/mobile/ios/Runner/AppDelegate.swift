@@ -16,5 +16,8 @@ import UIKit
     // be: it is this app's own code, not a package.
     Dictation.register(
       with: engineBridge.pluginRegistry.registrar(forPlugin: "Dictation")!)
+    // Whether this device has anything to buzz with (Buzz.swift).
+    Buzz.register(
+      with: engineBridge.pluginRegistry.registrar(forPlugin: "Buzz")!)
   }
 }

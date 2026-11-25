@@ -25,6 +25,8 @@ void main() {
             onRing: (w) => log.add('ring -> $w'),
             onTheme: (t) => log.add('theme -> ${t?.name ?? 'agents deck'}'),
             onHaptics: (h) => log.add('haptics -> ${h.on} ${h.strength.name}'),
+            // A device that can buzz: the page then has its haptics section.
+            canBuzz: true,
           ),
         ),
       ),
