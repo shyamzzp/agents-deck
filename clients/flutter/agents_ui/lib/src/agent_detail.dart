@@ -761,7 +761,7 @@ class _AgentDetailState extends State<AgentDetail> {
         'This one cannot be told: it runs inside another app, which the deck '
         'cannot type into. Give it tasks where it lives.',
         key: const Key('asks-refused'),
-        style: DeckHud.mono(size: tight ? 13 : 15, color: DeckHud.dim),
+        style: DeckHud.mono(size: tight ? 12 : 13, color: DeckHud.dim),
       );
     }
     final columns = _askColumns(context);
@@ -1145,7 +1145,7 @@ class _AgentDetailState extends State<AgentDetail> {
               const SizedBox(width: 16),
               Text(
                 'look',
-                style: DeckHud.rm(30, DeckHud.ink, weight: 700, spacing: -0.3),
+                style: DeckHud.rm(25, DeckHud.ink, weight: 700, spacing: -0.3),
               ),
             ],
           ),
@@ -1266,7 +1266,7 @@ class _AgentDetailState extends State<AgentDetail> {
           ),
           const Spacer(),
           if (_note != null) ...[
-            Text(_note!, style: DeckHud.mono(size: 15, color: DeckHud.accent)),
+            Text(_note!, style: DeckHud.mono(size: 13, color: DeckHud.accent)),
             const SizedBox(height: 12),
           ],
           Row(
@@ -1332,7 +1332,7 @@ class _AgentDetailState extends State<AgentDetail> {
         agentPillLabel(a, state),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: DeckHud.mono(size: 15, color: pillFill),
+        style: DeckHud.mono(size: 13, color: pillFill),
       ),
     );
     // Whose it is, kept at the far end so the clock can have the mascot's
@@ -1347,7 +1347,7 @@ class _AgentDetailState extends State<AgentDetail> {
               a.account!.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: DeckHud.mono(size: 15, color: ink),
+              style: DeckHud.mono(size: 13, color: ink),
             ),
           );
     // The status sits where the clock used to, beside the critter, so the
@@ -1406,7 +1406,7 @@ class _AgentDetailState extends State<AgentDetail> {
             a.title,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: DeckHud.rm(30, ink, weight: 700, spacing: -0.3),
+            style: DeckHud.rm(25, ink, weight: 700, spacing: -0.3),
           ),
         ),
       ],
@@ -1459,7 +1459,7 @@ class _AgentDetailState extends State<AgentDetail> {
   }
 
   Widget _label(String text, Color color) =>
-      Text(text, style: DeckHud.mono(size: 14, color: color));
+      Text(text, style: DeckHud.mono(size: 12, color: color));
 
   /// Text link variant of "focus terminal" (prompt cards' footers).
   Widget _focusLink(
@@ -1487,7 +1487,7 @@ class _AgentDetailState extends State<AgentDetail> {
             style:
                 (square
                         ? DeckHud.rm(16, color, weight: 700, spacing: 1.92)
-                        : DeckHud.mono(size: 15, color: color))
+                        : DeckHud.mono(size: 13, color: color))
                     .copyWith(
                       decoration: TextDecoration.underline,
                       decorationColor: color,
@@ -1580,7 +1580,7 @@ class _AgentDetailState extends State<AgentDetail> {
                           Text(
                             subagentCount(a.subagents.length),
                             key: const Key('agent-subagent-count'),
-                            style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                            style: DeckHud.mono(size: 12, color: DeckHud.dim),
                           ),
                       ],
                     ),
@@ -1608,7 +1608,7 @@ class _AgentDetailState extends State<AgentDetail> {
                       children: [
                         Text(
                           'context',
-                          style: DeckHud.rm(22, DeckHud.ink, weight: 700),
+                          style: DeckHud.rm(19, DeckHud.ink, weight: 700),
                         ),
                         const SizedBox(width: 12),
                         // Flexible, since "410k / 1m" beside "context" and a
@@ -1620,13 +1620,13 @@ class _AgentDetailState extends State<AgentDetail> {
                                 : '--',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                            style: DeckHud.mono(size: 12, color: DeckHud.dim),
                           ),
                         ),
                         const Spacer(),
                         Text(
                           a.contextWindow > 0 ? '${a.contextPercent}%' : '--',
-                          style: DeckHud.rm(22, DeckHud.ink, weight: 700),
+                          style: DeckHud.rm(19, DeckHud.ink, weight: 700),
                         ),
                       ],
                     ),
@@ -1705,7 +1705,7 @@ class _AgentDetailState extends State<AgentDetail> {
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: DeckHud.rm(
-                                            18,
+                                            16,
                                             DeckHud.ink,
                                             weight: 600,
                                           ),
@@ -1734,7 +1734,7 @@ class _AgentDetailState extends State<AgentDetail> {
                           Text(
                             active,
                             key: const Key('agent-last-active'),
-                            style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                            style: DeckHud.mono(size: 12, color: DeckHud.dim),
                           ),
                         ],
                       )
@@ -1764,7 +1764,7 @@ class _AgentDetailState extends State<AgentDetail> {
                       maxLines: 5,
                       overflow: TextOverflow.ellipsis,
                       style: DeckHud.rm(
-                        13,
+                        12,
                         a.queuedNext.isNotEmpty ? DeckHud.accent : DeckHud.ink,
                       ).merge(const TextStyle(height: 1.45)),
                     ),
@@ -1800,7 +1800,7 @@ class _AgentDetailState extends State<AgentDetail> {
               const SizedBox(width: 16),
               Text(
                 state.server.name,
-                style: DeckHud.mono(size: 14, color: DeckHud.dim),
+                style: DeckHud.mono(size: 12, color: DeckHud.dim),
               ),
             ],
           ),
@@ -1969,7 +1969,7 @@ class _AgentDetailState extends State<AgentDetail> {
       text,
       maxLines: lines,
       overflow: TextOverflow.ellipsis,
-      style: DeckHud.rm(20, color ?? DeckHud.ink),
+      style: DeckHud.rm(18, color ?? DeckHud.ink),
     );
     switch (a.status) {
       case AgentStatus.running:
@@ -2000,7 +2000,7 @@ class _AgentDetailState extends State<AgentDetail> {
             // cuts most of them off.
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
-            style: DeckHud.rm(17, DeckHud.ink),
+            style: DeckHud.rm(15, DeckHud.ink),
             // The verb is 17 and the detail 13, so without a strut the line
             // holding the verb is taller than the ones under it. Forced to
             // the larger of the two, every line of the paragraph is the same
@@ -2076,7 +2076,7 @@ class _AgentDetailState extends State<AgentDetail> {
                 p.detail,
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
-                style: DeckHud.rm(17, DeckHud.ink).copyWith(height: 1.45),
+                style: DeckHud.rm(15, DeckHud.ink).copyWith(height: 1.45),
               ),
             ),
           ],
@@ -2086,7 +2086,7 @@ class _AgentDetailState extends State<AgentDetail> {
               p.context,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: DeckHud.mono(size: 14, color: DeckHud.bg),
+              style: DeckHud.mono(size: 12, color: DeckHud.bg),
             ),
           ],
           const SizedBox(height: 22),
@@ -2110,7 +2110,7 @@ class _AgentDetailState extends State<AgentDetail> {
                   key: _note == null ? null : const Key('agent-note'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: DeckHud.mono(size: 15, color: DeckHud.bg),
+                  style: DeckHud.mono(size: 13, color: DeckHud.bg),
                 ),
               ),
               _focusLink(a, ink: DeckHud.bg, surface: DeckHud.accent),
@@ -2207,7 +2207,7 @@ class _AgentDetailState extends State<AgentDetail> {
               key: const Key('agent-question-context'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: DeckHud.mono(size: 14, color: DeckHud.dim),
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
             const SizedBox(height: 8),
           ],
@@ -2227,7 +2227,7 @@ class _AgentDetailState extends State<AgentDetail> {
               p.detail,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: DeckHud.rm(16, DeckHud.dim).copyWith(height: 1.4),
+              style: DeckHud.rm(14, DeckHud.dim).copyWith(height: 1.4),
             ),
           ],
           const SizedBox(height: 20),
@@ -2241,7 +2241,7 @@ class _AgentDetailState extends State<AgentDetail> {
               key: const Key('agent-note'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: DeckHud.mono(size: 15, color: DeckHud.accent),
+              style: DeckHud.mono(size: 13, color: DeckHud.accent),
             ),
           ],
           const SizedBox(height: 20),
@@ -2317,7 +2317,7 @@ class _AgentDetailState extends State<AgentDetail> {
             children: [
               SizedBox(
                 width: 22,
-                child: Text(o.key, style: DeckHud.rm(22, fg, weight: 700)),
+                child: Text(o.key, style: DeckHud.rm(19, fg, weight: 700)),
               ),
               const SizedBox(width: 18),
               Expanded(
@@ -2330,8 +2330,8 @@ class _AgentDetailState extends State<AgentDetail> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: square
-                          ? DeckHud.rm(18, fg, weight: 700)
-                          : DeckHud.mono(size: 18, color: fg),
+                          ? DeckHud.rm(16, fg, weight: 700)
+                          : DeckHud.mono(size: 16, color: fg),
                     ),
                     if (sub.isNotEmpty) ...[
                       const SizedBox(height: 4),
@@ -2358,7 +2358,7 @@ class _AgentDetailState extends State<AgentDetail> {
                 Text(
                   '✓', // ticked answer of a pick-any question
                   key: Key('agent-option-${o.key}-ticked'),
-                  style: DeckHud.rm(22, fg, weight: 700),
+                  style: DeckHud.rm(19, fg, weight: 700),
                 ),
               ],
             ],
@@ -2427,7 +2427,7 @@ class _AgentDetailState extends State<AgentDetail> {
                 p.detail,
                 maxLines: 6,
                 overflow: TextOverflow.ellipsis,
-                style: DeckHud.rm(17, DeckHud.ink).copyWith(height: 1.45),
+                style: DeckHud.rm(15, DeckHud.ink).copyWith(height: 1.45),
               ),
             ),
           ],
@@ -2437,7 +2437,7 @@ class _AgentDetailState extends State<AgentDetail> {
               p.context,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: DeckHud.mono(size: 14, color: DeckHud.dim),
+              style: DeckHud.mono(size: 12, color: DeckHud.dim),
             ),
           ],
           const Spacer(),
@@ -2491,11 +2491,11 @@ class _AgentDetailState extends State<AgentDetail> {
               cut: DeckHud.bg,
             ),
             const SizedBox(height: 22),
-            Text('agent gone', style: DeckHud.rm(26, DeckHud.ink, weight: 700)),
+            Text('agent gone', style: DeckHud.rm(22, DeckHud.ink, weight: 700)),
             const SizedBox(height: 10),
             Text(
               'it left the fleet',
-              style: DeckHud.mono(size: 15, color: DeckHud.dim),
+              style: DeckHud.mono(size: 13, color: DeckHud.dim),
             ),
           ],
         ),
@@ -2570,7 +2570,7 @@ class SubagentRows extends StatelessWidget {
                   Text(
                     '+$more more',
                     key: const Key('agent-subagents-more'),
-                    style: DeckHud.mono(size: 15, color: DeckHud.dim),
+                    style: DeckHud.mono(size: 13, color: DeckHud.dim),
                   ),
                 ],
               ),
@@ -2603,9 +2603,9 @@ class _SubagentLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = subagent;
-    final titleStyle = DeckHud.rm(17, DeckHud.ink);
+    final titleStyle = DeckHud.rm(14, DeckHud.ink);
     final typeStyle = DeckHud.mono(
-      size: 15,
+      size: 12,
       color: DeckHud.dim,
     ).copyWith(height: 1.0);
     final title = s.title.isNotEmpty
@@ -3289,7 +3289,7 @@ class _AskTile extends StatelessWidget {
                         maxLines: 2,
                         textAlign: TextAlign.center,
                         overflow: TextOverflow.ellipsis,
-                        style: DeckHud.mono(size: 21, color: ink),
+                        style: DeckHud.mono(size: 18, color: ink),
                       ),
                     ),
                   ),
@@ -3301,7 +3301,7 @@ class _AskTile extends StatelessWidget {
                       builder: (context) => Text(
                         _taskClock(ask.ran),
                         maxLines: 1,
-                        style: DeckHud.mono(size: 15, color: ink),
+                        style: DeckHud.mono(size: 13, color: ink),
                       ),
                     ),
                 ],
