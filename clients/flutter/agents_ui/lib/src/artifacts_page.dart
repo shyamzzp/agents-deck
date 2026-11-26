@@ -8,6 +8,8 @@
 // Tapping one opens it in the browser on the Mac the deck runs on: the phone
 // cannot show the file itself, and the thing is on that computer anyway.
 
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
 import 'agents_app.dart' show AgentsEmptyTile;
@@ -25,9 +27,14 @@ const artifactKinds = ['', 'link', 'page', 'document', 'image', 'sheet'];
 /// The grid the artifacts are drawn in. Seven across on a tablet, which has
 /// the width for it; four on a phone, where seven tiles to a row leaves each
 /// one too narrow to read, and seven rows down instead.
+///
+/// Six rows on the tablet rather than seven: a taller tile has the room for a
+/// name on two lines. Forty-two is then all the page holds, and the forty
+/// third thing, which is the one longest since anybody opened it, is not
+/// shown at all.
 DeckShape artifactShapeFor(BuildContext context) =>
     MediaQuery.sizeOf(context).shortestSide >= 600
-    ? const DeckShape(7, 7)
+    ? const DeckShape(7, 6)
     : const DeckShape(4, 7);
 
 class ArtifactsPage extends StatefulWidget {
@@ -54,18 +61,64 @@ class ArtifactsPage extends StatefulWidget {
   State<ArtifactsPage> createState() => _ArtifactsPageState();
 }
 
+/// How often the page asks the deck again. The deck sweeps what the agents
+/// made every fifteen seconds and hands back what it has in a few
+/// milliseconds, so the page can keep up with it: a page opened and left
+/// alone still shows what was opened since, in the order it was opened, and
+/// every tile's "7m" turns into "8m" where it stands.
+const _retime = Duration(seconds: 20);
+
 class _ArtifactsPageState extends State<ArtifactsPage> {
-  late Future<List<AgentArtifact>> _made = widget.source.artifacts();
+  /// What the last answer held, kept across a reload so the page never blinks
+  /// back to "looking…" while the next one is on its way.
+  List<AgentArtifact>? _made;
+  Object? _trouble;
+
+  /// The clock the tiles read their times off.
+  DateTime _now = DateTime.now();
+  Timer? _clock;
 
   /// The one the deck is opening now, and what went wrong with the last one.
   String? _opening;
   String? _note;
 
-  Future<void> _reload() async {
-    setState(() {
-      _note = null;
-      _made = widget.source.artifacts();
+  @override
+  void initState() {
+    super.initState();
+    _ask();
+    _clock = Timer.periodic(_retime, (_) {
+      if (!mounted) return;
+      setState(() => _now = DateTime.now());
+      _ask();
     });
+  }
+
+  @override
+  void dispose() {
+    _clock?.cancel();
+    super.dispose();
+  }
+
+  /// Asks the deck what there is, and keeps what it had until the answer
+  /// comes back.
+  Future<void> _ask() async {
+    try {
+      final made = await widget.source.artifacts();
+      if (!mounted) return;
+      setState(() {
+        _made = made;
+        _trouble = null;
+        _now = DateTime.now();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _trouble = e);
+    }
+  }
+
+  Future<void> _reload() async {
+    setState(() => _note = null);
+    await _ask();
   }
 
   Future<void> _open(AgentArtifact a) async {
@@ -109,26 +162,18 @@ class _ArtifactsPageState extends State<ArtifactsPage> {
                   style: DeckHud.mono(size: 11, color: DeckHud.dim),
                 ),
               ),
-              Pressable(
-                key: const Key('artifacts-reload'),
-                onTap: _reload,
-                builder: (context, pressed) => Text(
-                  'refresh',
-                  style: DeckHud.mono(
-                    size: 11,
-                    color: pressed ? DeckHud.accent : DeckHud.dim,
-                  ),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 8),
           // What to show: kept by the host, so the page opens on the same
           // one next time.
-          Row(
+          // Six kinds do not fit across a phone, so they wrap rather than
+          // run off the edge.
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
               for (final kind in artifactKinds) ...[
-                if (kind != artifactKinds.first) const SizedBox(width: 6),
                 Pressable(
                   key: Key('artifact-kind-${kind.isEmpty ? 'all' : kind}'),
                   onTap: () => widget.onKind?.call(kind),
@@ -168,60 +213,87 @@ class _ArtifactsPageState extends State<ArtifactsPage> {
           Expanded(
             child: ValueListenableBuilder<AgentsSnapshot>(
               valueListenable: widget.source.snapshot,
-              builder: (context, deck, _) => FutureBuilder<List<AgentArtifact>>(
-                future: _made,
-                builder: (context, snap) {
-                  if (snap.hasError) {
+              builder: (context, deck, _) {
+                final all = _made;
+                if (all == null) {
+                  if (_trouble case final e?) {
                     return Text(
-                      'could not ask the deck: ${snap.error}',
+                      'could not ask the deck: $e',
                       key: const Key('artifacts-error'),
                       style: DeckHud.mono(size: 12, color: DeckHud.accent),
                     );
                   }
-                  final all = snap.data;
-                  if (all == null) {
-                    return Text(
-                      'looking…',
-                      style: DeckHud.mono(size: 12, color: DeckHud.dim),
-                    );
-                  }
-                  final made = [
-                    for (final m in all)
-                      if (widget.kind.isEmpty || m.kind == widget.kind) m,
-                  ];
-                  if (made.isEmpty) {
-                    return Text(
-                      all.isEmpty
-                          ? 'nothing yet. A page, a document or a chart an '
-                                'agent writes shows up here.'
-                          : 'nothing of that kind yet.',
-                      key: const Key('artifacts-empty'),
-                      style: DeckHud.mono(size: 12, color: DeckHud.dim),
-                    );
-                  }
-                  final room = shape.cells;
-                  return DeckGrid(
-                    key: const Key('artifacts-grid'),
-                    square: false,
-                    columns: shape.columns,
-                    rows: shape.rows,
-                    cells: [
-                      for (var i = 0; i < room; i++)
-                        if (i < made.length)
-                          _ArtifactTile(
-                            key: Key('artifact-$i'),
-                            made: made[i],
-                            // Whose it is, so the tile can wear its mascot.
-                            by: deck.state?.byId(made[i].agent),
-                            opening: _opening == made[i].path,
-                            onTap: () => _open(made[i]),
-                          )
-                        else
-                          const AgentsEmptyTile(key: Key('artifact-empty')),
-                    ],
+                  return Text(
+                    'looking…',
+                    style: DeckHud.mono(size: 12, color: DeckHud.dim),
                   );
-                },
-              ),
+                }
+                final made = [
+                  for (final m in all)
+                    if (widget.kind.isEmpty || m.kind == widget.kind) m,
+                ];
+                if (made.isEmpty) {
+                  return Text(
+                    all.isEmpty
+                        ? 'nothing yet. A page, a document or a chart an '
+                              'agent writes shows up here.'
+                        : 'nothing of that kind yet.',
+                    key: const Key('artifacts-empty'),
+                    style: DeckHud.mono(size: 12, color: DeckHud.dim),
+                  );
+                }
+                final room = shape.cells;
+                return DeckGrid(
+                  key: const Key('artifacts-grid'),
+                  square: false,
+                  columns: shape.columns,
+                  rows: shape.rows,
+                  cells: [
+                    for (var i = 0; i < room; i++)
+                      if (i < made.length)
+                        _ArtifactTile(
+                          key: Key('artifact-$i'),
+                          made: made[i],
+                          // Whose it is, so the tile can wear its mascot.
+                          by: deck.state?.byId(made[i].agent),
+                          small: shape.columns >= 7,
+                          now: _now,
+                          opening: _opening == made[i].path,
+                          onTap: () => _open(made[i]),
+                        )
+                      else
+                        const AgentsEmptyTile(key: Key('artifact-empty')),
+                  ],
+                );
+              },
+            ),
+          ),
+          // Asking the deck again, under the grid where it is out of the
+          // way: the page keeps itself up to date, so this is for when you
+          // want it now rather than in a few seconds.
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Pressable(
+                  key: const Key('artifacts-reload'),
+                  onTap: _reload,
+                  builder: (context, pressed) => Text(
+                    'refresh',
+                    style:
+                        DeckHud.mono(
+                          size: 11,
+                          color: pressed ? DeckHud.accent : DeckHud.dim,
+                        ).copyWith(
+                          decoration: TextDecoration.underline,
+                          decorationColor: pressed
+                              ? DeckHud.accent
+                              : DeckHud.dim,
+                        ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -238,8 +310,17 @@ class _ArtifactTile extends StatelessWidget {
     required this.made,
     required this.opening,
     required this.onTap,
+    required this.now,
     this.by,
+    this.small = false,
   });
+
+  /// The moment the page is drawing, which moves on its own (the page
+  /// retimes itself), so "7m" becomes "8m" without anybody touching it.
+  final DateTime now;
+
+  /// Drawn for a seven-across grid: the same tile with less in it.
+  final bool small;
 
   final AgentArtifact made;
 
@@ -257,85 +338,101 @@ class _ArtifactTile extends StatelessWidget {
       final ink = on ? DeckHud.bg : DeckHud.ink;
       return Container(
         color: on ? DeckHud.ink : DeckHud.panel,
-        padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.topLeft,
-          child: SizedBox(
-            // A tile of the design grid, scaled to whatever cell it lands in,
-            // so a 7 x 7 page and a 4 x 4 one read the same.
-            width: 120,
-            height: 150,
-            child: Column(
+        // The same air on both sides: the time stands off the right edge by
+        // what the kind stands off the left.
+        padding: const EdgeInsets.all(4),
+        child: LayoutBuilder(
+          builder: (context, box) {
+            // The deck's tile is drawn for a cell about 120 points across.
+            // A narrower one (a phone's four to a row) takes everything down
+            // with it; a wider one keeps the drawn size rather than blowing
+            // the mascot up.
+            //
+            // The cell itself is the width the row is laid out in, so the
+            // time ends where the tile ends: the fixed box it used to be
+            // drawn in was narrower than the cell, and left the time short
+            // of the edge by whatever the cell had spare.
+            final scale = (box.maxWidth / 120).clamp(0.5, 1.0);
+            // A phone's tile is drawn at about three quarters of the design
+            // size, so its numbers start higher to land where the tablet's
+            // do: what the eye gets is the same small tile either way.
+            final meta = (small ? 8.0 : 10.5) * scale;
+            final label = (small ? 9.0 : 11.5) * scale;
+            final mascot = (small ? 54.0 : 64.0) * scale;
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // What it is on the left, when it was last written on the
-                // right, as far apart as the tile allows.
+                // What it is on the left, when it was last opened on the
+                // right, hard against the tile's own edges.
                 Row(
                   children: [
                     Text(
                       made.kind,
                       maxLines: 1,
                       style: DeckHud.mono(
-                        size: 13,
+                        size: meta,
                         color: on ? DeckHud.bg : DeckHud.accent,
                       ),
                     ),
                     const Spacer(),
                     if (made.at case final wrote?)
                       Text(
-                        _ago(wrote),
+                        _ago(wrote, now),
+                        maxLines: 1,
                         style: DeckHud.mono(
-                          size: 13,
+                          size: meta,
                           color: on ? DeckHud.bg : DeckHud.dim,
                         ),
                       ),
                   ],
                 ),
-                const Spacer(),
-                // Its maker, at the size the deck draws its agents: the
-                // mascot is what the eye lands on, here as on the board. A
-                // published Artifact nobody on the deck still owns gets the
-                // reading critter instead.
-                Center(
-                  child: by == null
-                      ? CritterSprite(
-                          pose: CritterPose.read,
-                          width: 86,
-                          centerBody: true,
-                          showBubble: false,
-                          body: on ? DeckHud.bg : DeckHud.dim,
-                          cut: on ? DeckHud.ink : DeckHud.panel,
-                        )
-                      : agentMascot(
-                          by!,
-                          pose: CritterPose.idle,
-                          width: 86,
-                          centerBody: true,
-                          showBubble: false,
-                          body: on ? DeckHud.bg : DeckHud.ink,
-                          cut: on ? DeckHud.ink : DeckHud.panel,
-                        ),
+                // Its maker, at the size the deck draws its agents, taking
+                // whatever the tile has left between the two lines.
+                Expanded(
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: by == null
+                          ? CritterSprite(
+                              pose: CritterPose.read,
+                              width: mascot,
+                              centerBody: true,
+                              showBubble: false,
+                              body: on ? DeckHud.bg : DeckHud.dim,
+                              cut: on ? DeckHud.ink : DeckHud.panel,
+                            )
+                          : agentMascot(
+                              by!,
+                              pose: CritterPose.idle,
+                              width: mascot,
+                              centerBody: true,
+                              showBubble: false,
+                              body: on ? DeckHud.bg : DeckHud.ink,
+                              cut: on ? DeckHud.ink : DeckHud.panel,
+                            ),
+                    ),
+                  ),
                 ),
-                const Spacer(),
                 Text(
                   opening ? 'opening…' : made.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: DeckHud.mono(size: 14, color: ink),
+                  style: DeckHud.mono(size: label, color: ink),
                 ),
               ],
-            ),
-          ),
+            );
+          },
         ),
       );
     },
   );
 }
 
-/// How long ago it was written, in the deck's own short way.
-String _ago(DateTime at) {
-  final d = DateTime.now().difference(at.toLocal());
+/// The ask-again glyph: a ring broken at the top with an arrow head on it,
+/// drawn square like everything else on the deck rather than set as a word.
+/// How long ago it was opened, in the deck's own short way.
+String _ago(DateTime at, DateTime now) {
+  final d = now.difference(at.toLocal());
   if (d.inMinutes < 1) return 'now';
   if (d.inHours < 1) return '${d.inMinutes}m';
   if (d.inHours < 48) return '${d.inHours}h';
