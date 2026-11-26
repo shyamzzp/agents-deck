@@ -501,6 +501,9 @@ class _DeckAppState extends State<DeckApp> {
                   // every Claude session": turning that off clears it from
                   // the phone too, not only from Claude's own settings.
                   usageFollowsSetting: true,
+                  // On the tablet the card's two actions ride beside the
+                  // agent's name rather than at the foot of a tall card.
+                  headerActions: true,
                   pageShapes: _layout.pageShapes,
                   attentionShape: _layout.attentionShape,
                   contextRingWidth: _layout.ring,

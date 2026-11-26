@@ -49,6 +49,7 @@ class AgentDetail extends StatefulWidget {
     this.onSpeakTask,
     this.ringWidth = ContextRingPainter.defaultStroke,
     this.menuBar = false,
+    this.headerActions = false,
   });
 
   final AgentsSource source;
@@ -58,6 +59,12 @@ class AgentDetail extends StatefulWidget {
   /// Mounted (true) / unmounted (false) — the grid pauses its critters
   /// while the card covers it.
   final ValueChanged<bool>? onVisible;
+
+  /// On a screen wide enough for it (a tablet): the terminal and remove
+  /// buttons sit on the title's own row rather than at the foot of the card,
+  /// where a tablet leaves them a long way from the eye. A phone keeps them
+  /// at the bottom, under the thumb.
+  final bool headerActions;
 
   /// A back button left of the mascot, for hosts without an edge swipe
   /// (the menu bar app). The desk panel closes cards with its swipe.
@@ -1613,6 +1620,12 @@ class _AgentDetailState extends State<AgentDetail> {
     ],
   ];
 
+  /// Whether the two actions ride on the title's row: asked for by the host
+  /// and only where the screen is a tablet's, since a phone has no width to
+  /// spare beside a two-line name.
+  bool _actionsOnTitle(BuildContext context) =>
+      widget.headerActions && MediaQuery.sizeOf(context).shortestSide >= 600;
+
   /// A button in the card's bottom row, given room in proportion to the text
   /// it holds: "review in terminal" is eighteen characters and "stop" four,
   /// so the row is divided 18 to 4 rather than by a number picked in advance.
@@ -1721,376 +1734,431 @@ class _AgentDetailState extends State<AgentDetail> {
         : 'resume';
     return _card(
       fill: DeckHud.bg,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _topBar(
-            state,
-            a,
-            ink: DeckHud.ink,
-            pillFill: pillFill,
-            pillInk: pillInk,
-            body: body,
-            cut: DeckHud.bg,
-          ),
-          const SizedBox(height: 14),
-          // Everything between the mascot and the buttons scrolls as one:
-          // what it is doing, its numbers, the last prompt and the tasks.
-          // The title above and the two actions below stay where they are,
-          // since those are what a glance and a thumb want.
-          Expanded(
-            child: KeyedSubtree(
-              key: _scrollKey,
-              child: SingleChildScrollView(
-                key: const Key('agent-scroll'),
-                controller: _scroll,
-                // Frozen while a task is in hand: the carry owns the finger,
-                // and the card scrolls only when one is held at an edge.
-                physics: _heldCell == null
-                    ? null
-                    : const NeverScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Doing now, and how many subagents work for it on the right.
-                    Row(
-                      children: [
-                        Expanded(child: _label(nowLabel, DeckHud.dim)),
-                        if (a.subagents.isNotEmpty)
-                          Text(
-                            subagentCount(a.subagents.length),
-                            key: const Key('agent-subagent-count'),
-                            style: DeckHud.mono(size: 12, color: DeckHud.dim),
+      child: Builder(
+        builder: (context) {
+          // A tablet puts the terminal and the remove beside the name; a
+          // phone leaves them at the foot of the card, where the thumb is.
+          final onTitle = _actionsOnTitle(context);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _topBar(
+                state,
+                a,
+                ink: DeckHud.ink,
+                pillFill: pillFill,
+                pillInk: pillInk,
+                body: body,
+                cut: DeckHud.bg,
+                actions: !onTitle
+                    ? const []
+                    : [
+                        if (!exited)
+                          AgentButton(
+                            key: const Key('agent-focus-top'),
+                            label: focusLabel,
+                            onTap: _busy ? null : () => _focus(a),
+                            fill: focusFlash?.$1 ?? DeckHud.ink,
+                            ink: focusFlash?.$2 ?? DeckHud.bg,
+                            outline: focusFlash?.$1 ?? DeckHud.ink,
+                            pressedFill: DeckHud.accent,
+                            pressedInk: DeckHud.bg,
+                            height: 48,
+                            fontSize: 15,
+                            padX: 14,
                           ),
+                        _removeButton(a, rmFlash, short: true),
                       ],
-                    ),
-                    const SizedBox(height: 6),
-                    nowValue,
-                    if (_nowAside(state, a) case final aside?) ...[
-                      const SizedBox(height: 6),
-                      aside,
-                    ],
-                    // The working subagents, one to a row, like the boards draw them.
-                    if (a.subagents.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      SubagentRows(
-                        subagents: a.subagents,
-                        body: body,
-                        cut: DeckHud.bg,
-                        // The other account's row below takes the room of two.
-                        maxRows: others.isEmpty ? 4 : 2,
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
+              ),
+              const SizedBox(height: 14),
+              // Everything between the mascot and the buttons scrolls as one:
+              // what it is doing, its numbers, the last prompt and the tasks.
+              // The title above and the two actions below stay where they are,
+              // since those are what a glance and a thumb want.
+              Expanded(
+                child: KeyedSubtree(
+                  key: _scrollKey,
+                  child: SingleChildScrollView(
+                    key: const Key('agent-scroll'),
+                    controller: _scroll,
+                    // Frozen while a task is in hand: the carry owns the finger,
+                    // and the card scrolls only when one is held at an edge.
+                    physics: _heldCell == null && _fillCell == null
+                        ? null
+                        : const NeverScrollableScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          'context',
-                          style: DeckHud.rm(19, DeckHud.ink, weight: 700),
-                        ),
-                        const SizedBox(width: 12),
-                        // Flexible, since "410k / 1m" beside "context" and a
-                        // percentage is wider than a phone at its narrowest.
-                        Flexible(
-                          child: Text(
-                            a.contextWindow > 0
-                                ? '${compactCount(a.contextUsed)} / ${compactCount(a.contextWindow)}'
-                                : '--',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: DeckHud.mono(size: 12, color: DeckHud.dim),
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          a.contextWindow > 0 ? '${a.contextPercent}%' : '--',
-                          style: DeckHud.rm(19, DeckHud.ink, weight: 700),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    TickBar(value: a.contextFraction, color: DeckHud.ink),
-                    const SizedBox(height: 16),
-                    // Four figures as a table: one hairline round the lot and one
-                    // between each pair, so a column is a cell rather than a gap. Half
-                    // a point and a third of the dim ink: a rule has to be found rather
-                    // than seen, or it reads as heavier than the figures it holds.
-                    DecoratedBox(
-                      key: const Key('agent-figures'),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: _rule, width: 0.5),
-                      ),
-                      child: IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                        // Doing now, and how many subagents work for it on the right.
+                        Row(
                           children: [
-                            for (final (i, (label, value)) in [
-                              ('tokens out', compactCount(a.tokensOutput)),
-                              ('cache read', compactCount(a.cacheRead)),
-                              (
-                                'cost · est',
-                                a.codexThread
-                                    ? '—'
-                                    : '\$${a.costUsd.toStringAsFixed(2)}',
-                              ),
-                              ('turns', '${a.turns}'),
-                            ].indexed)
-                              Expanded(
-                                child: GestureDetector(
-                                  // The turn count is a door: behind it are the
-                                  // prompts it counts.
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: label == 'turns' && a.turns > 0
-                                      ? () => setState(() => _history = true)
-                                      : null,
-                                  child: Container(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      8,
-                                      7,
-                                      8,
-                                      8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      border: i == 0
-                                          ? null
-                                          : Border(
-                                              left: BorderSide(
-                                                color: _rule,
-                                                width: 0.5,
-                                              ),
-                                            ),
-                                    ),
-                                    child: Column(
-                                      // Centred in the cell, not pushed to its left edge:
-                                      // "turns" holds the shortest figure of the four, so
-                                      // left-aligned it looked as though its cell had been
-                                      // given all its room on the right.
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
-                                      // The label at the top of the cell and the figure on
-                                      // its floor: a cell whose label wraps to two lines
-                                      // would otherwise lift its figure above the rest.
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        _label(label, DeckHud.dim),
-                                        const SizedBox(height: 6),
-                                        // 18, not 22: four of these across a phone was
-                                        // the widest thing on the card, and "3.1m" does
-                                        // not need to be read from across the desk.
-                                        Text(
-                                          value,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: DeckHud.rm(
-                                            16,
-                                            DeckHud.ink,
-                                            weight: 600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                            Expanded(child: _label(nowLabel, DeckHud.dim)),
+                            if (a.subagents.isNotEmpty)
+                              Text(
+                                subagentCount(a.subagents.length),
+                                key: const Key('agent-subagent-count'),
+                                style: DeckHud.mono(
+                                  size: 12,
+                                  color: DeckHud.dim,
                                 ),
                               ),
                           ],
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if ((a.showsAnswer
-                            ? state.answeredText(a)
-                            : state.lastActiveText(a))
-                        case final active when active.isNotEmpty)
-                      Row(
-                        children: [
+                        const SizedBox(height: 6),
+                        nowValue,
+                        if (_nowAside(state, a) case final aside?) ...[
+                          const SizedBox(height: 6),
+                          aside,
+                        ],
+                        // The working subagents, one to a row, like the boards draw them.
+                        if (a.subagents.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          SubagentRows(
+                            subagents: a.subagents,
+                            body: body,
+                            cut: DeckHud.bg,
+                            // The other account's row below takes the room of two.
+                            maxRows: others.isEmpty ? 4 : 2,
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text(
+                              'context',
+                              style: DeckHud.rm(19, DeckHud.ink, weight: 700),
+                            ),
+                            const SizedBox(width: 12),
+                            // Flexible, since "410k / 1m" beside "context" and a
+                            // percentage is wider than a phone at its narrowest.
+                            Flexible(
+                              child: Text(
+                                a.contextWindow > 0
+                                    ? '${compactCount(a.contextUsed)} / ${compactCount(a.contextWindow)}'
+                                    : '--',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: DeckHud.mono(
+                                  size: 12,
+                                  color: DeckHud.dim,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              a.contextWindow > 0
+                                  ? '${a.contextPercent}%'
+                                  : '--',
+                              style: DeckHud.rm(19, DeckHud.ink, weight: 700),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        TickBar(value: a.contextFraction, color: DeckHud.ink),
+                        const SizedBox(height: 16),
+                        // Four figures as a table: one hairline round the lot and one
+                        // between each pair, so a column is a cell rather than a gap. Half
+                        // a point and a third of the dim ink: a rule has to be found rather
+                        // than seen, or it reads as heavier than the figures it holds.
+                        DecoratedBox(
+                          key: const Key('agent-figures'),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: _rule, width: 0.5),
+                          ),
+                          child: IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                for (final (i, (label, value)) in [
+                                  ('tokens out', compactCount(a.tokensOutput)),
+                                  ('cache read', compactCount(a.cacheRead)),
+                                  (
+                                    'cost · est',
+                                    a.codexThread
+                                        ? '—'
+                                        : '\$${a.costUsd.toStringAsFixed(2)}',
+                                  ),
+                                  ('turns', '${a.turns}'),
+                                ].indexed)
+                                  Expanded(
+                                    child: GestureDetector(
+                                      // The turn count is a door: behind it are the
+                                      // prompts it counts.
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: label == 'turns' && a.turns > 0
+                                          ? () =>
+                                                setState(() => _history = true)
+                                          : null,
+                                      child: Container(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          8,
+                                          7,
+                                          8,
+                                          8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          border: i == 0
+                                              ? null
+                                              : Border(
+                                                  left: BorderSide(
+                                                    color: _rule,
+                                                    width: 0.5,
+                                                  ),
+                                                ),
+                                        ),
+                                        child: Column(
+                                          // Centred in the cell, not pushed to its left edge:
+                                          // "turns" holds the shortest figure of the four, so
+                                          // left-aligned it looked as though its cell had been
+                                          // given all its room on the right.
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          // The label at the top of the cell and the figure on
+                                          // its floor: a cell whose label wraps to two lines
+                                          // would otherwise lift its figure above the rest.
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            _label(label, DeckHud.dim),
+                                            const SizedBox(height: 6),
+                                            // 18, not 22: four of these across a phone was
+                                            // the widest thing on the card, and "3.1m" does
+                                            // not need to be read from across the desk.
+                                            Text(
+                                              value,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: DeckHud.rm(
+                                                16,
+                                                DeckHud.ink,
+                                                weight: 600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        if ((a.showsAnswer
+                                ? state.answeredText(a)
+                                : state.lastActiveText(a))
+                            case final active when active.isNotEmpty)
+                          Row(
+                            children: [
+                              _label(
+                                a.queuedNext.isEmpty
+                                    ? lastLabel
+                                    : 'queued next',
+                                DeckHud.dim,
+                              ),
+                              const Spacer(),
+                              Text(
+                                active,
+                                key: const Key('agent-last-active'),
+                                style: DeckHud.mono(
+                                  size: 12,
+                                  color: DeckHud.dim,
+                                ),
+                              ),
+                            ],
+                          )
+                        else
                           _label(
                             a.queuedNext.isEmpty ? lastLabel : 'queued next',
                             DeckHud.dim,
                           ),
-                          const Spacer(),
-                          Text(
-                            active,
-                            key: const Key('agent-last-active'),
-                            style: DeckHud.mono(size: 12, color: DeckHud.dim),
+                        const SizedBox(height: 8),
+                        // A prompt the deck has queued is shown instead of the last one: it
+                        // is what goes in next, and it is the thing someone looking at the
+                        // card wants to see arrive. Four lines of it, now that the card
+                        // scrolls: there is no leftover height left to measure.
+                        Text(
+                          a.queuedNext.isNotEmpty
+                              ? a.queuedNext
+                              : a.showsAnswer
+                              ? a.lastAnswer
+                              : (a.lastPrompt.isEmpty ? '—' : a.lastPrompt),
+                          key: Key(
+                            a.queuedNext.isEmpty && a.showsAnswer
+                                ? 'agent-last-answer'
+                                : 'agent-last-prompt',
                           ),
-                        ],
-                      )
-                    else
-                      _label(
-                        a.queuedNext.isEmpty ? lastLabel : 'queued next',
-                        DeckHud.dim,
-                      ),
-                    const SizedBox(height: 8),
-                    // A prompt the deck has queued is shown instead of the last one: it
-                    // is what goes in next, and it is the thing someone looking at the
-                    // card wants to see arrive. Four lines of it, now that the card
-                    // scrolls: there is no leftover height left to measure.
-                    Text(
-                      a.queuedNext.isNotEmpty
-                          ? a.queuedNext
-                          : a.showsAnswer
-                          ? a.lastAnswer
-                          : (a.lastPrompt.isEmpty ? '—' : a.lastPrompt),
-                      key: Key(
-                        a.queuedNext.isEmpty && a.showsAnswer
-                            ? 'agent-last-answer'
-                            : 'agent-last-prompt',
-                      ),
-                      // Five lines at 13: it is the longest thing on the card,
-                      // and smaller text shows more of it in less room.
-                      maxLines: 5,
+                          // Five lines at 13: it is the longest thing on the card,
+                          // and smaller text shows more of it in less room.
+                          maxLines: 5,
+                          overflow: TextOverflow.ellipsis,
+                          style: DeckHud.rm(
+                            12,
+                            a.queuedNext.isNotEmpty
+                                ? DeckHud.accent
+                                : DeckHud.ink,
+                          ).merge(const TextStyle(height: 1.45)),
+                        ),
+                        // The tasks, in the cells of the page this agent was picked from.
+                        const SizedBox(height: 18),
+                        _label('ask it to\u2026', DeckHud.dim),
+                        const SizedBox(height: 8),
+                        Padding(
+                          key: _asksKey,
+                          padding: EdgeInsets.zero,
+                          child: _askBoard(tight, a),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _note ?? footer,
+                      key: _note == null ? null : const Key('agent-note'),
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: DeckHud.rm(
-                        12,
-                        a.queuedNext.isNotEmpty ? DeckHud.accent : DeckHud.ink,
-                      ).merge(const TextStyle(height: 1.45)),
-                    ),
-                    // The tasks, in the cells of the page this agent was picked from.
-                    const SizedBox(height: 18),
-                    _label('ask it to\u2026', DeckHud.dim),
-                    const SizedBox(height: 8),
-                    Padding(
-                      key: _asksKey,
-                      padding: EdgeInsets.zero,
-                      child: _askBoard(tight, a),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _note ?? footer,
-                  key: _note == null ? null : const Key('agent-note'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: DeckHud.mono(
-                    size: 14,
-                    color: _note == null ? DeckHud.dim : DeckHud.accent,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Text(
-                state.server.name,
-                style: DeckHud.mono(size: 12, color: DeckHud.dim),
-              ),
-            ],
-          ),
-          // Another Claude account (when this one runs out of usage).
-          if (others.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _handoffNote(a, (armed ?? others.first).name),
-                    key: const Key('agent-handoff-note'),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: DeckHud.mono(
-                      size: 14,
-                      color: armed == null ? DeckHud.dim : DeckHud.accent,
+                      style: DeckHud.mono(
+                        size: 14,
+                        color: _note == null ? DeckHud.dim : DeckHud.accent,
+                      ),
                     ),
                   ),
-                ),
-                for (final to in others) ...[
-                  const SizedBox(width: 14),
-                  Builder(
-                    builder: (context) => DeckCompact.of(context)
-                        ? Expanded(child: _handoffButton(a, to))
-                        : SizedBox(width: 240, child: _handoffButton(a, to)),
+                  const SizedBox(width: 16),
+                  Text(
+                    state.server.name,
+                    style: DeckHud.mono(size: 12, color: DeckHud.dim),
                   ),
                 ],
-              ],
-            ),
-          ],
-          const SizedBox(height: 14),
-          // Built here, not above: DeckCompact is put in the tree by _card,
-          // which is below this method, so a flag read in _overview itself is
-          // always false -- which is how this row kept the desk panel's fixed
-          // widths on a phone.
-          Builder(
-            builder: (context) => Row(
-              children: [
-                ..._back(
-                  ink: DeckHud.ink,
-                  outline: DeckHud.dim,
-                  pressedFill: DeckHud.ink,
-                  pressedInk: DeckHud.bg,
-                ),
-                if (!exited)
-                  _share(
-                    context,
-                    focusLabel,
-                    main: true,
-                    AgentButton(
-                      key: const Key('agent-focus'),
-                      label: focusLabel,
-                      onTap: _busy ? null : () => _focus(a),
-                      fill: focusFlash?.$1 ?? DeckHud.ink,
-                      ink: focusFlash?.$2 ?? DeckHud.bg,
-                      outline: focusFlash?.$1 ?? DeckHud.ink,
-                      pressedFill: DeckHud.accent,
-                      pressedInk: DeckHud.bg,
+              ),
+              // Another Claude account (when this one runs out of usage).
+              if (others.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _handoffNote(a, (armed ?? others.first).name),
+                        key: const Key('agent-handoff-note'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: DeckHud.mono(
+                          size: 14,
+                          color: armed == null ? DeckHud.dim : DeckHud.accent,
+                        ),
+                      ),
                     ),
-                  ),
-                if (running && (!a.external || a.inApp)) ...[
-                  const SizedBox(width: 14),
-                  _share(
-                    context,
-                    interruptLabel,
-                    AgentButton(
-                      key: const Key('agent-interrupt'),
-                      label: interruptLabel,
-                      onTap: _busy ? null : () => _interrupt(a),
-                      fill: intFlash?.$1 ?? const Color(0x00000000),
-                      ink: intFlash?.$2 ?? DeckHud.ink,
-                      outline: intFlash?.$1 ?? DeckHud.dim,
+                    for (final to in others) ...[
+                      const SizedBox(width: 14),
+                      Builder(
+                        builder: (context) => DeckCompact.of(context)
+                            ? Expanded(child: _handoffButton(a, to))
+                            : SizedBox(
+                                width: 240,
+                                child: _handoffButton(a, to),
+                              ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+              const SizedBox(height: 14),
+              // Built here, not above: DeckCompact is put in the tree by _card,
+              // which is below this method, so a flag read in _overview itself is
+              // always false -- which is how this row kept the desk panel's fixed
+              // widths on a phone.
+              Builder(
+                builder: (context) => Row(
+                  children: [
+                    ..._back(
+                      ink: DeckHud.ink,
+                      outline: DeckHud.dim,
                       pressedFill: DeckHud.ink,
                       pressedInk: DeckHud.bg,
                     ),
-                  ),
-                ] else if (exited && a.resumable) ...[
-                  _share(
-                    context,
-                    resumeLabel,
-                    main: true,
-                    AgentButton(
-                      key: const Key('agent-resume'),
-                      label: resumeLabel,
-                      onTap: _busy ? null : () => _resume(a),
-                      fill: resumeFlash?.$1 ?? DeckHud.ink,
-                      ink: resumeFlash?.$2 ?? DeckHud.bg,
-                      outline: resumeFlash?.$1 ?? DeckHud.ink,
-                      pressedFill: DeckHud.accent,
-                      pressedInk: DeckHud.bg,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  _share(context, _removeLabel(a), _removeButton(a, rmFlash)),
-                ] else if (exited)
-                  _share(
-                    context,
-                    _removeLabel(a),
-                    main: true,
-                    _removeButton(a, rmFlash),
-                  )
-                else ...[
-                  const SizedBox(width: 14),
-                  _share(context, _removeLabel(a), _removeButton(a, rmFlash)),
-                ],
-              ],
-            ),
-          ),
-        ],
+                    if (!exited && !onTitle)
+                      _share(
+                        context,
+                        focusLabel,
+                        main: true,
+                        AgentButton(
+                          key: const Key('agent-focus'),
+                          label: focusLabel,
+                          onTap: _busy ? null : () => _focus(a),
+                          fill: focusFlash?.$1 ?? DeckHud.ink,
+                          ink: focusFlash?.$2 ?? DeckHud.bg,
+                          outline: focusFlash?.$1 ?? DeckHud.ink,
+                          pressedFill: DeckHud.accent,
+                          pressedInk: DeckHud.bg,
+                        ),
+                      ),
+                    if (running && (!a.external || a.inApp)) ...[
+                      const SizedBox(width: 14),
+                      _share(
+                        context,
+                        interruptLabel,
+                        AgentButton(
+                          key: const Key('agent-interrupt'),
+                          label: interruptLabel,
+                          onTap: _busy ? null : () => _interrupt(a),
+                          fill: intFlash?.$1 ?? const Color(0x00000000),
+                          ink: intFlash?.$2 ?? DeckHud.ink,
+                          outline: intFlash?.$1 ?? DeckHud.dim,
+                          pressedFill: DeckHud.ink,
+                          pressedInk: DeckHud.bg,
+                        ),
+                      ),
+                    ] else if (exited && a.resumable) ...[
+                      _share(
+                        context,
+                        resumeLabel,
+                        main: true,
+                        AgentButton(
+                          key: const Key('agent-resume'),
+                          label: resumeLabel,
+                          onTap: _busy ? null : () => _resume(a),
+                          fill: resumeFlash?.$1 ?? DeckHud.ink,
+                          ink: resumeFlash?.$2 ?? DeckHud.bg,
+                          outline: resumeFlash?.$1 ?? DeckHud.ink,
+                          pressedFill: DeckHud.accent,
+                          pressedInk: DeckHud.bg,
+                        ),
+                      ),
+                      if (!onTitle) ...[
+                        const SizedBox(width: 14),
+                        _share(
+                          context,
+                          _removeLabel(a),
+                          _removeButton(a, rmFlash),
+                        ),
+                      ],
+                    ] else if (exited && !onTitle)
+                      _share(
+                        context,
+                        _removeLabel(a),
+                        main: true,
+                        _removeButton(a, rmFlash),
+                      )
+                    else if (!onTitle) ...[
+                      const SizedBox(width: 14),
+                      _share(
+                        context,
+                        _removeLabel(a),
+                        _removeButton(a, rmFlash),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -56,6 +56,7 @@ class AgentsApp extends StatefulWidget {
     this.onSpeakTask,
     this.menuBar = false,
     this.usageFollowsSetting = false,
+    this.headerActions = false,
   }) : assert(pageShapes.length > 0, 'the deck needs a shape'),
        assert(
          (openCard == null) == (cardHost == null),
@@ -136,6 +137,11 @@ class AgentsApp extends StatefulWidget {
   /// In the menu bar app: an agent's page has no clock and no text under
   /// 16 design pixels (the deck is shown at 0.61 there).
   final bool menuBar;
+
+  /// On a tablet: an agent's card puts the terminal and remove buttons on
+  /// the title's own row instead of at the foot of the card. A phone ignores
+  /// it, since it has no width beside the name.
+  final bool headerActions;
 
   /// On a phone or a tablet: the usage line is drawn only while "Report
   /// usage from every Claude session" is on, so turning that off clears it
@@ -357,6 +363,7 @@ class _AgentsAppState extends State<AgentsApp> {
             onSpeakTask: widget.onSpeakTask,
             ringWidth: widget.contextRingWidth,
             menuBar: widget.menuBar,
+            headerActions: widget.headerActions,
           ),
         ),
       ),
