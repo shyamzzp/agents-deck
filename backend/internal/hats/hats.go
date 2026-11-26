@@ -42,6 +42,35 @@ func Auto(folder string) model.Hat {
 	return model.Hat{Shape: Shapes[v%uint32(len(Shapes))], Color: Colors[(v>>8)%uint32(len(Colors))], Auto: true}
 }
 
+// worn are the shapes an agent is given by itself. Headphones are not among
+// them: they are a thin band at the side of the head, 386 pixels of a tile
+// against 621 for the next quietest hat, and an agent wearing them reads as
+// an agent wearing nothing. Anybody can still choose them for a folder.
+var worn = func() []string {
+	out := make([]string, 0, len(Shapes))
+	for _, s := range Shapes {
+		if s == "headphones" {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}()
+
+// AutoFor picks a hat from an agent's own name rather than its folder, so a
+// deck where everything runs out of one place is not a row of identical hats.
+// The same agent keeps the same hat for as long as it is on the deck.
+func AutoFor(id string) model.Hat {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(id))
+	v := h.Sum32()
+	return model.Hat{
+		Shape: worn[v%uint32(len(worn))],
+		Color: Colors[(v>>8)%uint32(len(Colors))],
+		Auto:  true,
+	}
+}
+
 // Clean normalizes a folder key (absolute, no trailing slash).
 func Clean(folder string) string {
 	if folder == "" {
@@ -117,6 +146,32 @@ func (b *Book) For(folder string) *model.Hat {
 		hat.Critter = o.Critter
 	}
 	return &hat
+}
+
+// ForAgent is the hat one agent wears. A folder somebody chose a hat for
+// dresses its agents alike, as it always has, but the home directory is not a
+// project: it is where everything happens to run, and a dozen agents sitting
+// in it are not a team. Those get a hat of their own, and every agent has one.
+func (b *Book) ForAgent(folder, id string) *model.Hat {
+	folder = Clean(folder)
+	if _, chosen := b.overrides()[folder]; chosen && !everywhere(folder) {
+		return b.For(folder)
+	}
+	if id == "" {
+		return b.For(folder)
+	}
+	h := AutoFor(id)
+	return &h
+}
+
+// everywhere says the folder is where work happens to start rather than a
+// project of its own.
+func everywhere(folder string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	return folder == Clean(home) || folder == "" || folder == "/"
 }
 
 // Overrides returns a copy of every manual choice, by folder.

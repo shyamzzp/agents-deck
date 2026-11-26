@@ -193,7 +193,7 @@ type Store struct {
 	Version string
 
 	// Hat gives each agent its hat by working folder (nil: no hats).
-	Hat func(cwd string) *model.Hat
+	Hat func(a model.Agent) *model.Hat
 	// Account gives each agent its Claude account, from the account it was
 	// started in or its transcript's folder (nil: accounts aren't shown).
 	Account func(name, transcript string) *model.Account
@@ -217,6 +217,10 @@ type Store struct {
 	// Limits is each account's usage limits, as the tools last reported
 	// them (nil: none are kept).
 	Limits func() []model.Limits
+
+	// UsageAsked is "Report usage from every Claude session": passed through
+	// to the screens, which decide for themselves whether to draw it.
+	UsageAsked func() bool
 
 	// TaskList is each agent's own tasks (nil: the deck keeps none).
 	TaskList func() map[string][]model.Task
@@ -544,7 +548,7 @@ func (s *Store) Snapshot() model.State {
 		by := slowedBy[agents[i].ID]
 		agents[i].Slowed, agents[i].SlowedByYou, agents[i].CPU = by != "", by == "you", cpu[agents[i].ID]
 		if hat != nil {
-			agents[i].Hat = hat(agents[i].Cwd)
+			agents[i].Hat = hat(agents[i])
 		}
 		if account != nil && agents[i].Tool == "claude" {
 			agents[i].Account = account(places[i].account, places[i].transcript)
@@ -563,10 +567,11 @@ func (s *Store) Snapshot() model.State {
 		lines = groups()
 	}
 	return model.State{
-		Server: model.Server{Name: s.Name, Version: s.Version, Time: time.Now().UTC()},
-		Agents: agents,
-		Groups: lines,
-		Limits: ls,
+		Server:            model.Server{Name: s.Name, Version: s.Version, Time: time.Now().UTC()},
+		Agents:            agents,
+		Groups:            lines,
+		Limits:            ls,
+		UsageEverySession: s.UsageAsked != nil && s.UsageAsked(),
 	}
 }
 

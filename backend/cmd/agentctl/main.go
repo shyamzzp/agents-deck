@@ -1257,7 +1257,7 @@ func serve(args []string) error {
 		return err
 	}
 	book := &hats.Book{Path: paths.Config()}
-	st.Hat = book.For
+	st.Hat = func(a model.Agent) *model.Hat { return book.ForAgent(a.Cwd, a.ID) }
 	if fleet != nil {
 		st.Hat = demoHats(fleet, book)
 	}
@@ -1456,14 +1456,14 @@ func serve(args []string) error {
 
 // demoHats gives a demo agent its hat: one picked by hand on a screen, else
 // the one its dataset names, else the usual one for its folder.
-func demoHats(d *demo.Demo, book *hats.Book) func(cwd string) *model.Hat {
-	return func(cwd string) *model.Hat {
-		if _, byHand := book.Overrides()[hats.Clean(cwd)]; !byHand {
-			if h := d.Hat(cwd); h != nil {
+func demoHats(d *demo.Demo, book *hats.Book) func(a model.Agent) *model.Hat {
+	return func(a model.Agent) *model.Hat {
+		if _, byHand := book.Overrides()[hats.Clean(a.Cwd)]; !byHand {
+			if h := d.Hat(a.Cwd); h != nil {
 				return h
 			}
 		}
-		return book.For(cwd)
+		return book.ForAgent(a.Cwd, a.ID)
 	}
 }
 
