@@ -13,6 +13,8 @@ import 'package:flutter/widgets.dart';
 import 'agents_app.dart' show AgentsEmptyTile;
 import 'agents_client.dart';
 import 'agents_model.dart';
+import 'critter.dart';
+import 'critter_look.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -20,8 +22,13 @@ import 'widgets.dart';
 /// all of them.
 const artifactKinds = ['', 'page', 'document', 'image', 'sheet'];
 
-/// The grid the artifacts are drawn in: as many as a page of the deck holds.
-const artifactShape = DeckShape(7, 7);
+/// The grid the artifacts are drawn in. Seven across on a tablet, which has
+/// the width for it; four on a phone, where seven tiles to a row leaves each
+/// one too narrow to read, and seven rows down instead.
+DeckShape artifactShapeFor(BuildContext context) =>
+    MediaQuery.sizeOf(context).shortestSide >= 600
+    ? const DeckShape(7, 7)
+    : const DeckShape(4, 7);
 
 class ArtifactsPage extends StatefulWidget {
   const ArtifactsPage({
@@ -29,7 +36,7 @@ class ArtifactsPage extends StatefulWidget {
     required this.source,
     this.kind = '',
     this.onKind,
-    this.shape = artifactShape,
+    this.shape,
   });
 
   final AgentsSource source;
@@ -39,8 +46,9 @@ class ArtifactsPage extends StatefulWidget {
   final String kind;
   final void Function(String kind)? onKind;
 
-  /// The grid it is drawn in.
-  final DeckShape shape;
+  /// The grid it is drawn in; null takes the shape this screen has room for
+  /// ([artifactShapeFor]).
+  final DeckShape? shape;
 
   @override
   State<ArtifactsPage> createState() => _ArtifactsPageState();
@@ -76,6 +84,7 @@ class _ArtifactsPageState extends State<ArtifactsPage> {
   @override
   Widget build(BuildContext context) {
     final tight = MediaQuery.sizeOf(context).width < 480;
+    final shape = widget.shape ?? artifactShapeFor(context);
     return Padding(
       key: const Key('artifacts-page'),
       padding: tight
@@ -156,57 +165,62 @@ class _ArtifactsPageState extends State<ArtifactsPage> {
           ],
           const SizedBox(height: 8),
           Expanded(
-            child: FutureBuilder<List<AgentArtifact>>(
-              future: _made,
-              builder: (context, snap) {
-                if (snap.hasError) {
-                  return Text(
-                    'could not ask the deck: ${snap.error}',
-                    key: const Key('artifacts-error'),
-                    style: DeckHud.mono(size: 12, color: DeckHud.accent),
+            child: ValueListenableBuilder<AgentsSnapshot>(
+              valueListenable: widget.source.snapshot,
+              builder: (context, deck, _) => FutureBuilder<List<AgentArtifact>>(
+                future: _made,
+                builder: (context, snap) {
+                  if (snap.hasError) {
+                    return Text(
+                      'could not ask the deck: ${snap.error}',
+                      key: const Key('artifacts-error'),
+                      style: DeckHud.mono(size: 12, color: DeckHud.accent),
+                    );
+                  }
+                  final all = snap.data;
+                  if (all == null) {
+                    return Text(
+                      'looking…',
+                      style: DeckHud.mono(size: 12, color: DeckHud.dim),
+                    );
+                  }
+                  final made = [
+                    for (final m in all)
+                      if (widget.kind.isEmpty || m.kind == widget.kind) m,
+                  ];
+                  if (made.isEmpty) {
+                    return Text(
+                      all.isEmpty
+                          ? 'nothing yet. A page, a document or a chart an '
+                                'agent writes shows up here.'
+                          : 'nothing of that kind yet.',
+                      key: const Key('artifacts-empty'),
+                      style: DeckHud.mono(size: 12, color: DeckHud.dim),
+                    );
+                  }
+                  final room = shape.cells;
+                  return DeckGrid(
+                    key: const Key('artifacts-grid'),
+                    square: false,
+                    columns: shape.columns,
+                    rows: shape.rows,
+                    cells: [
+                      for (var i = 0; i < room; i++)
+                        if (i < made.length)
+                          _ArtifactTile(
+                            key: Key('artifact-$i'),
+                            made: made[i],
+                            // Whose it is, so the tile can wear its mascot.
+                            by: deck.state?.byId(made[i].agent),
+                            opening: _opening == made[i].path,
+                            onTap: () => _open(made[i]),
+                          )
+                        else
+                          const AgentsEmptyTile(key: Key('artifact-empty')),
+                    ],
                   );
-                }
-                final all = snap.data;
-                if (all == null) {
-                  return Text(
-                    'looking…',
-                    style: DeckHud.mono(size: 12, color: DeckHud.dim),
-                  );
-                }
-                final made = [
-                  for (final m in all)
-                    if (widget.kind.isEmpty || m.kind == widget.kind) m,
-                ];
-                if (made.isEmpty) {
-                  return Text(
-                    all.isEmpty
-                        ? 'nothing yet. A page, a document or a chart an '
-                              'agent writes shows up here.'
-                        : 'nothing of that kind yet.',
-                    key: const Key('artifacts-empty'),
-                    style: DeckHud.mono(size: 12, color: DeckHud.dim),
-                  );
-                }
-                final room = widget.shape.cells;
-                return DeckGrid(
-                  key: const Key('artifacts-grid'),
-                  square: false,
-                  columns: widget.shape.columns,
-                  rows: widget.shape.rows,
-                  cells: [
-                    for (var i = 0; i < room; i++)
-                      if (i < made.length)
-                        _ArtifactTile(
-                          key: Key('artifact-$i'),
-                          made: made[i],
-                          opening: _opening == made[i].path,
-                          onTap: () => _open(made[i]),
-                        )
-                      else
-                        const AgentsEmptyTile(key: Key('artifact-empty')),
-                  ],
-                );
-              },
+                },
+              ),
             ),
           ),
         ],
@@ -223,9 +237,14 @@ class _ArtifactTile extends StatelessWidget {
     required this.made,
     required this.opening,
     required this.onTap,
+    this.by,
   });
 
   final AgentArtifact made;
+
+  /// The agent that made it, where it is still on the deck: the tile wears
+  /// its mascot, hat and all, so a glance says whose work this is.
+  final Agent? by;
   final bool opening;
   final VoidCallback onTap;
 
@@ -245,23 +264,23 @@ class _ArtifactTile extends StatelessWidget {
             // A tile of the design grid, scaled to whatever cell it lands in,
             // so a 7 x 7 page and a 4 x 4 one read the same.
             width: 120,
-            height: 120,
+            height: 172,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // What it is on the left, when it was last written on the
+                // right, as far apart as the tile allows.
                 Row(
                   children: [
-                    Expanded(
-                      child: Text(
-                        made.kind,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: DeckHud.mono(
-                          size: 13,
-                          color: on ? DeckHud.bg : DeckHud.accent,
-                        ),
+                    Text(
+                      made.kind,
+                      maxLines: 1,
+                      style: DeckHud.mono(
+                        size: 13,
+                        color: on ? DeckHud.bg : DeckHud.accent,
                       ),
                     ),
+                    const Spacer(),
                     if (made.at case final wrote?)
                       Text(
                         _ago(wrote),
@@ -273,9 +292,20 @@ class _ArtifactTile extends StatelessWidget {
                   ],
                 ),
                 const Spacer(),
+                // Its maker, drawn as the deck draws it.
+                if (by case final agent?)
+                  agentMascot(
+                    agent,
+                    pose: CritterPose.idle,
+                    width: 44,
+                    body: on ? DeckHud.bg : DeckHud.ink,
+                    cut: on ? DeckHud.ink : DeckHud.panel,
+                    showBubble: false,
+                  ),
+                if (by != null) const SizedBox(height: 4),
                 Text(
                   opening ? 'opening…' : made.name,
-                  maxLines: 3,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: DeckHud.mono(size: 16, color: ink),
                 ),
