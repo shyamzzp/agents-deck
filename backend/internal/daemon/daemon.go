@@ -74,8 +74,16 @@ type Daemon struct {
 	live            liveWatch
 	lastMine        time.Time
 	made            artifacts.Book // what the agents wrote that a browser opens
-	limits          *limits.Book   // usage limits the tools report (limits.go)
-	limitsKeep      *limits.Keeper // writes them to limits.json
+	// The artifacts page, kept ready: swept in the background off the tick
+	// rather than while somebody waits for the page (kept.go).
+	madeOnce sync.Once
+	madeList *kept[[]artifacts.Made]
+	// When the person opened one from the deck itself, which no transcript
+	// records.
+	wentMu     sync.Mutex
+	went       map[string]time.Time
+	limits     *limits.Book   // usage limits the tools report (limits.go)
+	limitsKeep *limits.Keeper // writes them to limits.json
 
 	// Tasks is where the tasks mined from a session's prompts go. The serve
 	// command sets it once the store is open; a demo leaves it nil and
@@ -116,6 +124,8 @@ func (d *Daemon) Run() {
 			d.lastMine = time.Now()
 			d.mineTasks()
 		}
+		// The artifacts page, swept again when it is due (artifacts.go).
+		d.freshenArtifacts()
 		d.tick(n)
 		// What became of the tasks the deck sent: a working one is done once
 		// its agent has stopped working (mine.go).
