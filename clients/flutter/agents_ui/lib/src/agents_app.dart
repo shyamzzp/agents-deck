@@ -174,6 +174,7 @@ class _AgentsAppState extends State<AgentsApp> {
   Rect? _speakingAt;
   bool _speakingDone = false;
   Timer? _listenTimer;
+  Timer? _emptyTimer;
   final _speakKeys = <String, GlobalKey>{};
 
   String? _heldId;
@@ -209,6 +210,8 @@ class _AgentsAppState extends State<AgentsApp> {
   @override
   void dispose() {
     widget.visible?.removeListener(_syncClocks);
+    _listenTimer?.cancel();
+    _emptyTimer?.cancel();
     _pager.dispose();
     _gridClock.dispose();
     _cardClock.dispose();
@@ -396,13 +399,30 @@ class _AgentsAppState extends State<AgentsApp> {
     _listenTimer = null;
   }
 
+  /// How long a bubble with nothing in it waits before closing itself. The
+  /// recogniser can land the last word just after the microphone closes, so
+  /// a hold that has heard nothing yet is given that long before the deck
+  /// decides nothing was said.
+  static const _emptyGrace = Duration(milliseconds: 600);
+
   /// The finger is lifted: the microphone closes and the two answers appear.
   /// Nothing goes anywhere until one of them is tapped.
+  ///
+  /// A hold that heard nothing closes itself instead: there is nothing to
+  /// send, and a tick over an empty bubble is a question with one answer.
   void _stopListening() {
     _disarmListen();
     if (_speakingTo == null || _speakingDone) return;
     setState(() => _speakingDone = true);
     unawaited(widget.ear?.stop());
+    _emptyTimer?.cancel();
+    _emptyTimer = Timer(_emptyGrace, () {
+      final ear = widget.ear;
+      if (!mounted || ear == null || _speakingTo == null) return;
+      if (ear.problem.value == null && ear.heard.value.trim().isEmpty) {
+        _closeCallout();
+      }
+    });
   }
 
   /// The tick: what was said goes to the agent's terminal, as a prompt typed
@@ -417,6 +437,8 @@ class _AgentsAppState extends State<AgentsApp> {
 
   void _closeCallout() {
     _disarmListen();
+    _emptyTimer?.cancel();
+    _emptyTimer = null;
     unawaited(widget.ear?.cancel());
     if (mounted) {
       setState(() {
@@ -436,11 +458,15 @@ class _AgentsAppState extends State<AgentsApp> {
       builder: (context, problem, _) => ValueListenableBuilder<String>(
         valueListenable: ear.heard,
         builder: (context, heard, _) {
+          // Nothing to send, nothing to decide: an empty bubble shows no
+          // buttons while it waits out its last word.
+          final deciding =
+              _speakingDone && (problem != null || heard.trim().isNotEmpty);
           final (at, side, size) = calloutLayout(
             tile,
             MediaQuery.sizeOf(context),
             problem ?? heard,
-            deciding: _speakingDone,
+            deciding: deciding,
           );
           return Positioned(
             left: at.dx,
@@ -451,7 +477,7 @@ class _AgentsAppState extends State<AgentsApp> {
               problem: problem,
               side: side,
               size: size,
-              deciding: _speakingDone,
+              deciding: deciding,
               onSend: () => unawaited(_sendSpoken(a, heard)),
               onDiscard: _closeCallout,
             ),
