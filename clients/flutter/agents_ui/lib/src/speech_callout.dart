@@ -39,12 +39,35 @@ abstract class DeckEar {
   ValueListenable<String?> get problem;
 }
 
-/// How wide a bubble may be drawn, and how far it keeps from the edges.
-const _bubbleMax = 320.0;
-const _bubbleMin = 160.0;
-const _edge = 10.0;
-const _gap = 10.0; // between the tile and the bubble
-const _pad = EdgeInsets.fromLTRB(12, 10, 12, 10);
+/// How far the bubble keeps from the edges and from its tile.
+const _edge = 8.0;
+const _gap = 8.0; // between the tile and the bubble
+const _pad = EdgeInsets.fromLTRB(9, 7, 9, 7);
+
+/// The bubble is measured in cells of the grid it sits on: two wide and at
+/// most two tall, whatever the screen is set to. On the 4 x 4 "Needs you"
+/// grid of a phone that is a bubble the size of four tiles, which leaves the
+/// board readable behind it; on a tablet's 10 x 7 the cells are smaller and
+/// so is the bubble, which is the point of measuring it this way.
+const _cellsWide = 2;
+const _cellsTall = 2;
+
+/// Whatever the cells say, a bubble narrower than this cannot hold words and
+/// one wider than this is a page, not a bubble.
+const _bubbleMin = 150.0;
+const _bubbleMax = 300.0;
+
+/// The words in it. Smaller than the deck's own text: a bubble the size of
+/// four tiles has to hold a sentence.
+const _saidSize = 12.0;
+const _saidHeight = 1.3;
+
+/// The room the two answers need along the bottom.
+const _answersHeight = 34.0;
+
+/// However tall the cells are, the bubble takes no more of the screen than
+/// this.
+const _screenShare = 0.34;
 
 /// Which way the bubble's tail points, which is also which side of the tile
 /// it sits on.
@@ -68,9 +91,19 @@ CalloutLayout calloutLayout(
   String text, {
   required bool deciding,
 }) {
+  // One cell is the tile that was held, so the bubble is the same size
+  // whatever grid the deck is drawn in.
+  final want = (tile.width * _cellsWide + _gap).clamp(_bubbleMin, _bubbleMax);
+  // Two cells tall, but never more than a third of the screen: a 4 x 4 board
+  // on a phone has cells nearly 200 points high, and a bubble that took two
+  // of them would be half the deck.
+  final tall = (tile.height * _cellsTall + _gap).clamp(
+    0.0,
+    screen.height * _screenShare,
+  );
   final roomRight = screen.width - tile.right - _gap - _edge;
   final roomLeft = tile.left - _gap - _edge;
-  final full = (screen.width - 2 * _edge).clamp(_bubbleMin, _bubbleMax);
+  final full = (screen.width - 2 * _edge).clamp(_bubbleMin, want);
   double top(Size size) => (tile.center.dy - size.height / 2).clamp(
     _edge,
     (screen.height - size.height - _edge).clamp(_edge, double.infinity),
@@ -81,14 +114,14 @@ CalloutLayout calloutLayout(
       : [(CalloutSide.right, roomRight), (CalloutSide.left, roomLeft)];
   for (final (side, room) in sides) {
     if (room < _bubbleMin) continue;
-    final size = _measure(text, room.clamp(_bubbleMin, _bubbleMax), deciding);
+    final size = _measure(text, room.clamp(_bubbleMin, want), deciding, tall);
     final at = side == CalloutSide.right
         ? Offset(tile.right + _gap, top(size))
         : Offset(tile.left - _gap - size.width, top(size));
     return (at, side, size);
   }
   // Neither side holds it: under the tile, or over it when the tile is low.
-  final size = _measure(text, full, deciding);
+  final size = _measure(text, full, deciding, tall);
   final left = (tile.center.dx - size.width / 2).clamp(
     _edge,
     (screen.width - size.width - _edge).clamp(_edge, double.infinity),
@@ -109,23 +142,29 @@ CalloutLayout calloutLayout(
   );
 }
 
-/// How much room [text] takes in a bubble at most [room] wide.
-Size _measure(String text, double room, bool deciding) {
-  final style = DeckHud.rm(15, DeckHud.ink).copyWith(height: 1.35);
+/// How much room [text] takes in a bubble at most [room] wide and [tall]
+/// high: it grows with the words until it is two cells tall, and from there
+/// the bubble stays put and the words scroll inside it.
+Size _measure(String text, double room, bool deciding, double tall) {
+  final style = DeckHud.rm(
+    _saidSize,
+    DeckHud.ink,
+  ).copyWith(height: _saidHeight);
   final painter = TextPainter(
     text: TextSpan(text: text.isEmpty ? 'listening\u2026' : text, style: style),
     textDirection: TextDirection.ltr,
-    maxLines: 12,
   )..layout(maxWidth: room - _pad.horizontal);
+  final answers = deciding ? _answersHeight : 0.0;
+  final high = painter.height + _pad.vertical + answers;
   return Size(
     (painter.width + _pad.horizontal).clamp(_bubbleMin, room),
-    painter.height + _pad.vertical + (deciding ? 40 : 0),
+    high.clamp(0, tall.clamp(_pad.vertical + answers + 24, double.infinity)),
   );
 }
 
 /// The bubble itself: the words so far, and, once the finger is lifted, a
 /// tick and a cross in its bottom corner.
-class SpeechCallout extends StatelessWidget {
+class SpeechCallout extends StatefulWidget {
   const SpeechCallout({
     super.key,
     required this.text,
@@ -151,7 +190,38 @@ class SpeechCallout extends StatelessWidget {
   final String? problem;
 
   @override
+  State<SpeechCallout> createState() => _SpeechCalloutState();
+}
+
+class _SpeechCalloutState extends State<SpeechCallout> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(SpeechCallout old) {
+    super.didUpdateWidget(old);
+    // The bubble stops growing at two cells; from there the newest words are
+    // the ones worth seeing, so it keeps its bottom edge in view.
+    // Also when the answers appear: they take room off the bottom, and the
+    // last thing said has to stay above them.
+    if (old.text != widget.text || old.deciding != widget.deciding) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scroll.hasClients) {
+          _scroll.jumpTo(_scroll.position.maxScrollExtent);
+        }
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final text = widget.text, problem = widget.problem;
+    final size = widget.size, side = widget.side;
     final said = problem ?? (text.isEmpty ? 'listening…' : text);
     final dim = problem != null || text.isEmpty;
     return SizedBox(
@@ -167,16 +237,25 @@ class SpeechCallout extends StatelessWidget {
               ),
               child: Padding(
                 padding: _pad,
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: Text(
-                    said,
-                    maxLines: 12,
-                    overflow: TextOverflow.ellipsis,
-                    style: DeckHud.rm(
-                      15,
-                      dim ? DeckHud.dim : DeckHud.ink,
-                    ).copyWith(height: 1.35),
+                child: SingleChildScrollView(
+                  controller: _scroll,
+                  // Read, not dragged: the finger is busy holding a tile.
+                  physics: const ClampingScrollPhysics(),
+                  child: Padding(
+                    // Room under the words for the two answers, which sit
+                    // over the bottom corner.
+                    padding: EdgeInsets.only(
+                      // The answers sit over the bottom corner, so the last
+                      // line must not end up behind them.
+                      bottom: widget.deciding ? _answersHeight : 0,
+                    ),
+                    child: Text(
+                      said,
+                      style: DeckHud.rm(
+                        _saidSize,
+                        dim ? DeckHud.dim : DeckHud.ink,
+                      ).copyWith(height: _saidHeight),
+                    ),
                   ),
                 ),
               ),
@@ -208,10 +287,10 @@ class SpeechCallout extends StatelessWidget {
               ),
             ),
           ),
-          if (deciding)
+          if (widget.deciding)
             Positioned(
-              right: 8,
-              bottom: 8,
+              right: 6,
+              bottom: 6,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -219,14 +298,14 @@ class SpeechCallout extends StatelessWidget {
                     key: const Key('callout-discard'),
                     glyph: _Glyph.cross,
                     color: DeckHud.bad,
-                    onTap: onDiscard,
+                    onTap: widget.onDiscard,
                   ),
                   const SizedBox(width: 8),
                   _CalloutButton(
                     key: const Key('callout-send'),
                     glyph: _Glyph.tick,
                     color: DeckHud.ok,
-                    onTap: onSend,
+                    onTap: widget.onSend,
                   ),
                 ],
               ),
