@@ -25,6 +25,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'deck_ear.dart';
 import 'dictate_sheet.dart';
 
 void main() {
@@ -325,6 +326,10 @@ class _DeckAppState extends State<DeckApp> {
   /// The agent being spoken to, while the dictation sheet is open.
   Agent? _dictating;
 
+  /// The phone's ear, for speaking to an agent from the "Needs you" screen.
+  /// One for the app: only one callout is open at a time.
+  final _ear = PhoneEar();
+
   /// Whether this device has anything to buzz with. An iPad has no Taptic
   /// Engine of any kind, so a page of haptics switches there is a page of
   /// promises nothing keeps: the settings leave the section out, and nothing
@@ -467,7 +472,10 @@ class _DeckAppState extends State<DeckApp> {
                   // Held on the "Needs you" screen: speak the answer. The sheet
                   // opens over the deck rather than as a route, since this app
                   // has no navigator of its own.
-                  onHoldAttention: (a) => setState(() => _dictating = a),
+                  // Holding an agent there speaks into a callout beside its
+                  // tile (the deck draws it); the sheet is only for a task
+                  // spoken into a card's empty cell.
+                  ear: _ear,
                   // Holding an empty cell of a card's quick list: the phone
                   // listens, and the card keeps what was said as a task in
                   // that cell, named by the service in its own short way.
