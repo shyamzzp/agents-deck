@@ -20,7 +20,7 @@ import 'widgets.dart';
 
 /// The kinds an artifact can be, in the order the filters offer them. "" is
 /// all of them.
-const artifactKinds = ['', 'page', 'document', 'image', 'sheet'];
+const artifactKinds = ['', 'link', 'page', 'document', 'image', 'sheet'];
 
 /// The grid the artifacts are drawn in. Seven across on a tablet, which has
 /// the width for it; four on a phone, where seven tiles to a row leaves each
@@ -163,7 +163,8 @@ class _ArtifactsPageState extends State<ArtifactsPage> {
             const SizedBox(height: 6),
             Text(n, style: DeckHud.mono(size: 11, color: DeckHud.accent)),
           ],
-          const SizedBox(height: 8),
+          // Air between the row of kinds and the grid under it.
+          const SizedBox(height: 16),
           Expanded(
             child: ValueListenableBuilder<AgentsSnapshot>(
               valueListenable: widget.source.snapshot,
@@ -264,7 +265,7 @@ class _ArtifactTile extends StatelessWidget {
             // A tile of the design grid, scaled to whatever cell it lands in,
             // so a 7 x 7 page and a 4 x 4 one read the same.
             width: 120,
-            height: 172,
+            height: 150,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -292,32 +293,36 @@ class _ArtifactTile extends StatelessWidget {
                   ],
                 ),
                 const Spacer(),
-                // Its maker, drawn as the deck draws it.
-                if (by case final agent?)
-                  agentMascot(
-                    agent,
-                    pose: CritterPose.idle,
-                    width: 44,
-                    body: on ? DeckHud.bg : DeckHud.ink,
-                    cut: on ? DeckHud.ink : DeckHud.panel,
-                    showBubble: false,
-                  ),
-                if (by != null) const SizedBox(height: 4),
+                // Its maker, at the size the deck draws its agents: the
+                // mascot is what the eye lands on, here as on the board. A
+                // published Artifact nobody on the deck still owns gets the
+                // reading critter instead.
+                Center(
+                  child: by == null
+                      ? CritterSprite(
+                          pose: CritterPose.read,
+                          width: 86,
+                          centerBody: true,
+                          showBubble: false,
+                          body: on ? DeckHud.bg : DeckHud.dim,
+                          cut: on ? DeckHud.ink : DeckHud.panel,
+                        )
+                      : agentMascot(
+                          by!,
+                          pose: CritterPose.idle,
+                          width: 86,
+                          centerBody: true,
+                          showBubble: false,
+                          body: on ? DeckHud.bg : DeckHud.ink,
+                          cut: on ? DeckHud.ink : DeckHud.panel,
+                        ),
+                ),
+                const Spacer(),
                 Text(
                   opening ? 'opening…' : made.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: DeckHud.mono(size: 16, color: ink),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  made.title.isEmpty ? made.folder : made.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: DeckHud.mono(
-                    size: 12,
-                    color: on ? DeckHud.bg : DeckHud.dim,
-                  ),
+                  style: DeckHud.mono(size: 14, color: ink),
                 ),
               ],
             ),
