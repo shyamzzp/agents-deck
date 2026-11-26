@@ -107,28 +107,25 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('holding an ask opens what can be done with it', (tester) async {
+  testWidgets('holding an ask sends it to the terminal', (tester) async {
     final source = await card(tester);
     await scrollToAsks(tester);
-    // A tap does nothing: it used to send the prompt the instant it landed.
-    await tester.tap(find.byKey(const Key('ask-0')));
-    await tester.pump();
-    expect(source.calls.where((c) => c.$1 == 'prompt'), isEmpty);
 
-    await tester.longPress(find.byKey(const Key('ask-0')));
+    // Holding still fills the ring, and the end of it is the task going to
+    // the agent's terminal: focused first, then typed in.
+    final hold = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('ask-0'))),
+    );
+    await tester.pump(const Duration(milliseconds: 900));
+    await hold.up();
     await tester.pump();
-    expect(find.byKey(const Key('task-dialog')), findsOneWidget);
-
-    // Sending focuses the terminal first, then types it in.
-    await tester.tap(find.byKey(const Key('task-send')));
-    await tester.pump();
+    expect(find.byKey(const Key('task-drawer')), findsNothing);
     expect(source.calls.where((c) => c.$1 == 'focus'), hasLength(1));
 
     final sent = source.calls.where((c) => c.$1 == 'prompt').toList();
     expect(sent, hasLength(1));
     expect(sent.single.$2, 'k3f9a2');
     expect(sent.single.$3?['text'], agentAsks.first.text);
-    // Queued, so asking while it works does not cut the turn short.
     // "now": typed in and entered, not queued behind the current turn.
     expect(sent.single.$3?['mode'], 'now');
     // The tile says "sent" for a moment, then goes back to its name.
@@ -139,14 +136,19 @@ void main() {
     expect(find.text(agentAsks.first.label), findsOneWidget);
   });
 
-  testWidgets('a held ask can be closed without sending', (tester) async {
+  testWidgets('a tap opens the task and sends nothing', (tester) async {
     final source = await card(tester);
     await scrollToAsks(tester);
-    await tester.longPress(find.byKey(const Key('ask-0')));
+    await tester.tap(find.byKey(const Key('ask-0')));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byKey(const Key('task-drawer')), findsOneWidget);
+    expect(source.calls.where((c) => c.$1 == 'prompt'), isEmpty);
+
+    // The name is shown under the rule it is kept by, and closing sends
+    // nothing either.
+    await tester.tap(find.byKey(const Key('task-drawer-close')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('task-cancel')));
-    await tester.pump();
-    expect(find.byKey(const Key('task-dialog')), findsNothing);
+    expect(find.byKey(const Key('task-drawer')), findsNothing);
     expect(source.calls.where((c) => c.$1 == 'prompt'), isEmpty);
     await tester.pumpAndSettle();
   });

@@ -347,6 +347,15 @@ func (s *Server) api() *http.ServeMux {
 	mux.HandleFunc("POST /v1/agents/{id}/tasks/{taskId}/remove", s.removeTask)
 	mux.HandleFunc("POST /v1/agents/{id}/tasks/{taskId}/move", s.moveTask)
 	mux.HandleFunc("POST /v1/agents/{id}/tasks/{taskId}/pin", s.pinTask)
+	// Editing goes by the task's name rather than by an id: the name is what
+	// the screen shows and what a person types, and a task is the one called
+	// that. A built-in task has no id at all, and this way it can still be
+	// made into one of the agent's own.
+	mux.HandleFunc("POST /v1/agents/{id}/tasks/{name}/edit", s.editTask)
+	// The order the quick list was left in, by name: the built-in eight and
+	// the agent's own are one line of tiles on the screen, so they are
+	// dragged past each other rather than each within its own band.
+	mux.HandleFunc("POST /v1/agents/{id}/tasks-order", s.orderTasks)
 	mux.HandleFunc("POST /v1/agents/{id}/queue/{qid}/cancel", s.cancelQueued)
 	mux.HandleFunc("POST /v1/agents/{id}/focus", func(w http.ResponseWriter, r *http.Request) {
 		s.act(w, s.Ctl.Focus(r.PathValue("id")))

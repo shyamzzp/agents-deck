@@ -56,6 +56,13 @@ type Task = model.Task
 // ErrEmpty is a task with nothing to send.
 var ErrEmpty = errors.New("a task needs some text")
 
+// ErrNoName is a name with nothing in it once the rule has had its say:
+// punctuation alone is not a name.
+var ErrNoName = errors.New("a task needs a name of letters or digits")
+
+// ErrTakenName is a rename onto a name this agent already uses.
+var ErrTakenName = errors.New("there is already a task called that")
+
 // ErrFull is an agent already keeping as many tasks as it may.
 var ErrFull = errors.New("this agent keeps all the tasks it can; remove one first")
 
@@ -76,6 +83,12 @@ type Store struct {
 	// away is never mined again for that agent, and it says what a request
 	// that is not worth keeping looks like on this deck.
 	thrown map[string][]string
+
+	// The built-in tasks each agent has dropped, by name.
+	hidden map[string][]string
+
+	// The order each agent's quick list is drawn in, by name.
+	order map[string][]string
 
 	// run is the task each agent last sent to its terminal, and what became
 	// of it. Only one can be working at a time: an agent runs one turn. Held
@@ -99,6 +112,15 @@ type diskFile struct {
 	Tasks   map[string][]Task   `json:"tasks"`
 	Checked map[string]int      `json:"checked,omitempty"`
 	Thrown  map[string][]string `json:"thrown,omitempty"`
+	// Order is the order an agent's quick list is drawn in, by name: the
+	// built-in eight and the agent's own in one line, as they were last
+	// dragged. Absent, the built-ins come first in their usual order and the
+	// agent's own follow.
+	Order map[string][]string `json:"order,omitempty"`
+	// Hidden is the built-in tasks an agent has been told to drop, by name.
+	// Those eight are drawn by the screen rather than kept here, so taking
+	// one away is remembering that it is gone.
+	Hidden map[string][]string `json:"hidden,omitempty"`
 }
 
 func Open(path string) *Store {
@@ -116,6 +138,8 @@ func (s *Store) load() {
 	s.loaded = true
 	s.byID, s.checked = map[string][]Task{}, map[string]int{}
 	s.thrown = map[string][]string{}
+	s.hidden = map[string][]string{}
+	s.order = map[string][]string{}
 	if s.run == nil {
 		s.run = map[string]ran{}
 	}
@@ -132,6 +156,12 @@ func (s *Store) load() {
 		if f.Thrown != nil {
 			s.thrown = f.Thrown
 		}
+		if f.Hidden != nil {
+			s.hidden = f.Hidden
+		}
+		if f.Order != nil {
+			s.order = f.Order
+		}
 	} else {
 		// The older shape: agent id -> tasks, with nothing else in it.
 		_ = json.Unmarshal(b, &s.byID)
@@ -145,7 +175,13 @@ func (s *Store) save() {
 	if s.Path == "" {
 		return
 	}
-	b, err := json.MarshalIndent(diskFile{Tasks: s.byID, Checked: s.checked, Thrown: s.thrown}, "", "  ")
+	b, err := json.MarshalIndent(diskFile{
+		Tasks:   s.byID,
+		Checked: s.checked,
+		Thrown:  s.thrown,
+		Hidden:  s.hidden,
+		Order:   s.order,
+	}, "", "  ")
 	if err != nil {
 		return
 	}
@@ -357,6 +393,66 @@ func (s *Store) Add(agent, name, text, source string, slot int) (Task, error) {
 	return t, nil
 }
 
+// Edit renames a task and rewrites what it says. The name is the key: a task
+// is the one called that, and what comes back is the name it ended up with
+// after the rule ([CleanName]) had its say.
+//
+// A built-in task has no entry of its own until somebody edits it, so saving
+// one keeps it as a task of this agent's own under that name.
+func (s *Store) Edit(agent, name, newName, text string) (Task, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return Task{}, ErrEmpty
+	}
+	if r := []rune(text); len(r) > TextMax {
+		text = string(r[:TextMax])
+	}
+	was, now := CleanName(name), CleanName(newName)
+	if now == "" {
+		now = was
+	}
+	if now == "" {
+		return Task{}, ErrNoName
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	at := -1
+	for i, t := range s.byID[agent] {
+		switch CleanName(t.Name) {
+		case was:
+			at = i
+		case now:
+			// Renaming onto a task that is already there would leave two
+			// tasks answering to one key, and the next edit could not say
+			// which it meant.
+			if CleanName(t.Name) != was {
+				return Task{}, ErrTakenName
+			}
+		}
+	}
+	if at < 0 {
+		// A built-in task, or one this agent never had: it becomes its own,
+		// in the custom band where anything a person made belongs.
+		if len(s.byID[agent]) >= Max && s.droppable(agent) == "" {
+			return Task{}, ErrFull
+		}
+		t := Task{
+			ID: id(), Name: now, Text: text, Source: model.TaskCustom,
+			Added: time.Now().UTC(), Rank: 1 << 20,
+		}
+		s.byID[agent] = ordered(append(s.byID[agent], t))
+		s.rotate(agent)
+		s.save()
+		return t, nil
+	}
+	s.byID[agent][at].Name = now
+	s.byID[agent][at].Text = text
+	s.save()
+	return s.byID[agent][at], nil
+}
+
 // droppable names the task that rotation would drop next: the oldest mined one
 // that is not pinned, or "" when every task is custom or pinned.
 func (s *Store) droppable(agent string) string {
@@ -530,6 +626,90 @@ func (s *Store) labels() (standing, oneOff []string) {
 	return standing, oneOff
 }
 
+// Order is the order this agent's quick list is drawn in, by name (empty:
+// the usual one).
+func (s *Store) Order(agent string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	return append([]string(nil), s.order[agent]...)
+}
+
+// SetOrder keeps the order a drag left the quick list in. The names are the
+// tiles as the screen draws them, the built-in eight among them, so the two
+// kinds can be dragged past each other rather than each within its own band.
+func (s *Store) SetOrder(agent string, names []string) {
+	clean := make([]string, 0, len(names))
+	seen := map[string]bool{}
+	for _, n := range names {
+		n = CleanName(n)
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		clean = append(clean, n)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	if s.order == nil {
+		s.order = map[string][]string{}
+	}
+	if len(clean) == 0 {
+		delete(s.order, agent)
+	} else {
+		s.order[agent] = clean
+	}
+	s.save()
+}
+
+// Hidden is the built-in tasks this agent has dropped, by name.
+func (s *Store) Hidden(agent string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	return append([]string(nil), s.hidden[agent]...)
+}
+
+// Hide drops one of the built-in tasks from this agent's list. They are the
+// screen's own and have nothing kept here, so dropping one is remembering
+// that it is gone; an agent's own task of that name goes with it, since the
+// two are one tile on the screen.
+func (s *Store) Hide(agent, name string) bool {
+	name = CleanName(name)
+	if name == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	if s.hidden == nil {
+		s.hidden = map[string][]string{}
+	}
+	for _, had := range s.hidden[agent] {
+		if had == name {
+			// Already gone, and saying so again is still a yes.
+			s.removeNamedLocked(agent, name)
+			return true
+		}
+	}
+	s.hidden[agent] = append(s.hidden[agent], name)
+	s.removeNamedLocked(agent, name)
+	s.save()
+	return true
+}
+
+// removeNamedLocked takes away the agent's own task of that name, if it has
+// one. The caller holds the lock.
+func (s *Store) removeNamedLocked(agent, name string) {
+	for _, t := range s.byID[agent] {
+		if CleanName(t.Name) == name {
+			s.removeLocked(agent, t.ID)
+			return
+		}
+	}
+}
+
 // Forget drops every task of an agent that is no longer on the deck.
 func (s *Store) Forget(agent string) {
 	s.mu.Lock()
@@ -537,12 +717,16 @@ func (s *Store) Forget(agent string) {
 	s.load()
 	_, hasTasks := s.byID[agent]
 	_, hasThrown := s.thrown[agent]
-	if !hasTasks && !hasThrown {
+	_, hasHidden := s.hidden[agent]
+	_, hasOrder := s.order[agent]
+	if !hasTasks && !hasThrown && !hasHidden && !hasOrder {
 		return
 	}
 	delete(s.byID, agent)
 	delete(s.checked, agent)
 	delete(s.thrown, agent)
+	delete(s.hidden, agent)
+	delete(s.order, agent)
 	delete(s.run, agent)
 	s.save()
 }
@@ -606,6 +790,26 @@ func ShortName(text string) string {
 		}
 	}
 	return clip(strings.Join(words, "-"), NameMax)
+}
+
+// CleanName is the name rule, kept in one place because the screen types it
+// and the service stores it, and what you saw had better be what was kept: a
+// space is a hyphen, everything is small, and only letters and digits stay.
+// Runs of hyphens fall to one and the ends carry none.
+func CleanName(name string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == ' ' || r == '-' || r == '_' || r == '\t':
+			// One hyphen, however many spaces were typed.
+			if t := b.String(); t != "" && !strings.HasSuffix(t, "-") {
+				b.WriteRune('-')
+			}
+		}
+	}
+	return clip(strings.Trim(b.String(), "-"), NameMax)
 }
 
 // keepLetters is one word of a name: letters and digits, nothing else. A
