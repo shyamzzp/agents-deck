@@ -1295,6 +1295,8 @@ func serve(args []string) error {
 	// for it (clients/words). Without one it judges on the words alone.
 	srv.Tasks.Sense = &words.Sense{}
 	st.TaskList = srv.Tasks.All
+	st.HiddenAsks = srv.Tasks.Hidden
+	st.AskOrder = srv.Tasks.Order
 	if dmn != nil {
 		dmn.Tasks = srv.Tasks // what the miner writes the found tasks to
 		srv.Artifacts = dmn   // what the agents made, and opening one here

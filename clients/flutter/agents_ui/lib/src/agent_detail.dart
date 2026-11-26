@@ -49,6 +49,7 @@ class AgentDetail extends StatefulWidget {
     this.onSpeakTask,
     this.ringWidth = ContextRingPainter.defaultStroke,
     this.menuBar = false,
+    this.headerActions = false,
   });
 
   final AgentsSource source;
@@ -58,6 +59,12 @@ class AgentDetail extends StatefulWidget {
   /// Mounted (true) / unmounted (false) — the grid pauses its critters
   /// while the card covers it.
   final ValueChanged<bool>? onVisible;
+
+  /// On a screen wide enough for it (a tablet): the terminal and remove
+  /// buttons sit on the title's own row rather than at the foot of the card,
+  /// where a tablet leaves them a long way from the eye. A phone keeps them
+  /// at the bottom, under the thumb.
+  final bool headerActions;
 
   /// A back button left of the mascot, for hosts without an edge swipe
   /// (the menu bar app). The desk panel closes cards with its swipe.
@@ -322,7 +329,12 @@ class _AgentDetailState extends State<AgentDetail> {
         : 'stop';
   }
 
-  Widget _removeButton(Agent a, (Color, Color)? flash, {bool square = false}) {
+  Widget _removeButton(
+    Agent a,
+    (Color, Color)? flash, {
+    bool square = false,
+    bool short = false,
+  }) {
     final exited = a.status == AgentStatus.exited;
     final armed = _confirmStop && !exited;
     return AgentButton(
@@ -344,8 +356,18 @@ class _AgentDetailState extends State<AgentDetail> {
       pressedFill: DeckHud.accent,
       pressedInk: DeckHud.bg,
       square: square,
-      height: square ? 64 : 68,
-      fontSize: square ? 18 : 19,
+      // Beside the name it is one line of a header rather than a landing
+      // strip for a thumb.
+      height: short
+          ? 48
+          : square
+          ? 64
+          : 68,
+      fontSize: short
+          ? 15
+          : square
+          ? 18
+          : 19,
     );
   }
 
@@ -467,14 +489,16 @@ class _AgentDetailState extends State<AgentDetail> {
                         : const EdgeInsets.fromLTRB(36, 34, 36, 30),
                     child: child,
                   ),
-                  if (_taskAt case final i?)
+                  if (_editAt case final i?)
                     Positioned.fill(
-                      child: _TaskDialog(
-                        key: const Key('task-dialog'),
+                      child: _TaskDrawer(
+                        key: const Key('task-drawer'),
                         ask: _taskOf(i),
                         tight: tight,
                         busy: _busy,
-                        onClose: () => setState(() => _taskAt = null),
+                        onClose: () => setState(() => _editAt = null),
+                        onSave: (name, text) =>
+                            unawaited(_saveTaskAt(i, name, text)),
                         onSend: () => unawaited(_sendTask(i)),
                         onRemove: () => unawaited(_removeTaskAt(i)),
                         onPin: () => unawaited(_pinTaskAt(i)),
@@ -535,17 +559,40 @@ class _AgentDetailState extends State<AgentDetail> {
   Future<void> _sendTask(int i) async {
     final a = _shown?.$2;
     if (a == null) return;
-    setState(() => _taskAt = null);
+    setState(() => _editAt = null);
     await widget.source.focus(a.id);
     await _ask(a, i);
   }
 
-  /// Pins the task the dialog is open on, or lets it rotate again.
+  /// Saves the name and the instruction the drawer was given. A task is
+  /// addressed by the name it had, which is the key the service keeps it
+  /// under.
+  Future<void> _saveTaskAt(int i, String name, String text) async {
+    final a = _shown?.$2;
+    if (a == null) return;
+    final was = _taskOf(i).label;
+    setState(() => _busy = true);
+    final r = await widget.source.editTask(
+      a.id,
+      was,
+      newName: name,
+      text: text,
+    );
+    if (!mounted) return;
+    Haptics.fire(r.isOk ? HapticWhen.tap : HapticWhen.problem);
+    setState(() {
+      _busy = false;
+      _note = r.isOk ? null : (r.message ?? 'could not save it');
+      if (r.isOk) _editAt = null;
+    });
+  }
+
+  /// Pins the task the drawer is open on, or lets it rotate again.
   Future<void> _pinTaskAt(int i) async {
     final a = _shown?.$2;
     final ask = _taskOf(i);
     if (a == null || ask.id == null) return;
-    setState(() => _taskAt = null);
+    setState(() => _editAt = null);
     final r = await widget.source.pinTask(a.id, ask.id!, !ask.pinned);
     if (!mounted) return;
     Haptics.fire(r.isOk ? HapticWhen.tap : HapticWhen.problem);
@@ -555,10 +602,12 @@ class _AgentDetailState extends State<AgentDetail> {
   /// Takes one of the agent's own tasks off the board, from the dialog.
   Future<void> _removeTaskAt(int i) async {
     final a = _shown?.$2;
-    final id = _taskOf(i).id;
-    if (a == null || id == null) return;
-    setState(() => _taskAt = null);
-    await _dropTask(a, id);
+    if (a == null) return;
+    final ask = _taskOf(i);
+    setState(() => _editAt = null);
+    // One of the agent's own goes by its id; one of the built-in eight has
+    // none, so it goes by its name and the service remembers it is gone.
+    await _dropTask(a, ask.id ?? deckTaskName(ask.label));
   }
 
   Future<void> _ask(Agent a, int i) async {
@@ -606,7 +655,12 @@ class _AgentDetailState extends State<AgentDetail> {
   bool _history = false;
 
   /// Which task is held open in the dialog; null for none.
-  int? _taskAt;
+  /// The task whose drawer is open, by cell.
+  int? _editAt;
+
+  /// The order a drag has just left the quick list in, drawn until the
+  /// service's own answer carries it ([Agent.askOrder]).
+  List<String>? _order;
 
   /// Takes one of the agent's own tasks off its grid (held, not tapped).
   Future<void> _dropTask(Agent a, String taskId) async {
@@ -706,37 +760,79 @@ class _AgentDetailState extends State<AgentDetail> {
   /// is empty, and an empty cell can be spoken into.
   List<AgentAsk?> _cellsFor(Agent a, int cells) {
     final out = List<AgentAsk?>.filled(cells, null);
-    for (final (i, ask) in agentAsks.indexed) {
-      if (i < cells) out[i] = ask;
+    // A task of the agent's own under a built-in's name is that built-in,
+    // changed: one tile, not two. Editing one of the eight is how it gets an
+    // entry of its own in the first place, and it has to land back in the
+    // cell it was edited in.
+    final own = {for (final t in a.tasks) deckTaskName(t.name): t};
+    final dropped = a.hiddenAsks.map(deckTaskName).toSet();
+    final tiles = <String, AgentAsk>{};
+    final usual = <String>[];
+    for (final ask in agentAsks) {
+      final name = deckTaskName(ask.label);
+      if (dropped.contains(name)) continue;
+      usual.add(name);
+      tiles[name] = own[name] == null ? ask : _askOf(own[name]!, ask.pose);
     }
-    var at = agentAsks.length;
     for (final t in a.tasks) {
-      if (at >= cells) break;
-      out[at] = AgentAsk(
-        t.name.isEmpty ? 'task' : t.name,
-        t.text,
-        // A task made from a prompt is a prompt: the critter is thinking.
-        CritterPose.think,
-        id: t.id,
-        slot: t.slot,
-        rank: t.rank,
-        mined: t.mined,
-        pinned: t.pinned,
-        state: t.state,
-        ran: t.ran,
-      );
-      at++;
+      final name = deckTaskName(t.name);
+      if (tiles.containsKey(name) || dropped.contains(name)) continue;
+      usual.add(name);
+      // A task made from a prompt is a prompt: the critter is thinking.
+      tiles[name] = _askOf(t, CritterPose.think);
+    }
+
+    // The order a drag left it in, where there is one: the one just made on
+    // this screen first, then the one the service keeps. Anything it does
+    // not name keeps its usual place at the end.
+    final kept = a.askOrder.map(deckTaskName).toList();
+    // Once the service answers with the order this screen just made, the
+    // local copy has done its job: anything that comes after is somebody
+    // else's drag, on another screen, and should be drawn.
+    if (_order case final mine? when mine.join(',') == kept.join(',')) {
+      _order = null;
+    }
+    final asked = _order ?? kept;
+    final order = <String>[
+      for (final n in asked)
+        if (tiles.containsKey(n)) n,
+    ];
+    for (final n in usual) {
+      if (!order.contains(n)) order.add(n);
+    }
+    for (var i = 0; i < order.length && i < cells; i++) {
+      out[i] = tiles[order[i]];
     }
     return out;
   }
+
+  /// One of the agent's own tasks, as the quick list draws it.
+  AgentAsk _askOf(AgentTask t, CritterPose pose) => AgentAsk(
+    t.name.isEmpty ? 'task' : t.name,
+    t.text,
+    pose,
+    id: t.id,
+    slot: t.slot,
+    rank: t.rank,
+    mined: t.mined,
+    pinned: t.pinned,
+    state: t.state,
+    ran: t.ran,
+  );
 
   /// How many cells the board draws: whole rows, enough for the eight
   /// built-in tasks, every task of the agent's own, and one spare row to
   /// speak a new one into.
   int _boardCells(Agent a, int columns) {
-    final most = agentAsks.length + a.tasks.length;
+    final dropped = a.hiddenAsks.map(deckTaskName).toSet();
+    final names = <String>{
+      for (final ask in agentAsks)
+        if (!dropped.contains(deckTaskName(ask.label))) deckTaskName(ask.label),
+      for (final t in a.tasks)
+        if (!dropped.contains(deckTaskName(t.name))) deckTaskName(t.name),
+    };
     // One spare row beyond what is filled, to speak a new task into.
-    final rows = (most + columns - 1) ~/ columns + 1;
+    final rows = (names.length + columns - 1) ~/ columns + 1;
     return rows * columns;
   }
 
@@ -792,10 +888,11 @@ class _AgentDetailState extends State<AgentDetail> {
                       child: _carryCell(
                         cell: r * columns + c,
                         held: cells[r * columns + c] != null && !_busy,
-                        // Only a task of the agent's own can be carried: the
-                        // built-in eight keep their cells on every card, so
-                        // the same task is always in the same place.
-                        own: cells[r * columns + c]?.id != null && !_busy,
+                        // Every tile can be carried, the eight the deck
+                        // comes with as much as the agent's own: the list is
+                        // one line of tiles and the order it is left in is
+                        // kept by the service.
+                        own: cells[r * columns + c] != null && !_busy,
                         child: switch (cells[r * columns + c]) {
                           final AgentAsk ask => _AskTile(
                             key: Key('ask-${r * columns + c}'),
@@ -830,11 +927,28 @@ class _AgentDetailState extends State<AgentDetail> {
   // ---- carrying a task to another cell ---------------------------------------
 
   /// How long a finger has to stay down before the task comes up in it.
-  static const _carryDelay = Duration(milliseconds: 220);
+  /// How long a finger has to sit still before the card stops being a
+  /// scroller under it and the hold starts counting. A flick to scroll the
+  /// card is past this before it has travelled anywhere.
+  static const _settleDelay = Duration(milliseconds: 120);
+
+  /// How long the ring takes to fill. At the end of it the task is sent, and
+  /// sending cannot be taken back once it is in the terminal, so it is long
+  /// enough to let go of.
+  static const _ringFill = Duration(milliseconds: 600);
+
+  /// How often the ring is redrawn while it fills.
+  static const _ringStep = Duration(milliseconds: 16);
 
   final _cellKeys = <int, GlobalKey>{};
   Timer? _carryTimer;
   Timer? _edgeTimer;
+
+  /// The cell whose ring is filling, and how far round it has gone (0 to 1).
+  /// A hold that reaches the end sends the task to the agent's terminal.
+  int? _fillCell;
+  double _fill = 0;
+  Timer? _ringTimer;
 
   /// Which way the card is scrolling itself while a task is held at an edge.
   double _edgeStep = 0;
@@ -849,7 +963,6 @@ class _AgentDetailState extends State<AgentDetail> {
   /// it, so the card never answers a scroll with a dialog.
   int? _armedCell;
   bool _armedOwn = false;
-  bool _armedLong = false;
 
   /// Whether the finger travelled after it picked the task up. A hold that
   /// stays put is the task's dialog, as a hold has always been; a hold that
@@ -903,30 +1016,83 @@ class _AgentDetailState extends State<AgentDetail> {
                 ),
               ),
             ),
+          // The hold, drawn as an outline going round the tile. Full circle
+          // and the task is on its way to the terminal.
+          if (_fillCell == cell && _fill > 0)
+            IgnorePointer(
+              child: CustomPaint(painter: _HoldRing(_fill, widget.ringWidth)),
+            ),
         ],
       ),
     );
   }
 
-  /// Picks the task up after [_carryDelay], moved or not, when it is one the
-  /// agent owns; a built-in one only becomes a hold worth answering.
+  /// A finger goes down on a task. Nothing happens for [_settleDelay]: a
+  /// flick to scroll the card is gone by then and the card scrolls as it
+  /// always did. A finger still there afterwards means business, so the card
+  /// stops scrolling under it and the ring starts to fill.
   void _armCarry(int cell, bool own, PointerDownEvent e) {
     _carryTimer?.cancel();
+    _stopRing();
     _pointer = e.position;
     _wentDown = e.position;
     _carriedIt = false;
     _armedCell = cell;
     _armedOwn = own;
-    _armedLong = false;
     _scrollAtDown = _scroll.hasClients ? _scroll.offset : 0;
     final box = _cellKeys[cell]?.currentContext?.findRenderObject();
     if (box is RenderBox && box.hasSize) _heldSize = box.size;
-    _carryTimer = Timer(_carryDelay, () {
-      if (!mounted || _armedCell != cell) return;
-      _armedLong = true;
-      if (!own) return;
-      _pickUp(cell);
+    _carryTimer = Timer(_settleDelay, () {
+      if (!mounted || _armedCell != cell || _heldCell != null) return;
+      _startRing(cell);
     });
+  }
+
+  /// The ring fills round the tile. Reaching the end sends the task to the
+  /// agent's terminal; a finger that moves first cancels it ([_stopRing]) and
+  /// carries the task instead.
+  void _startRing(int cell) {
+    // Counted in ticks rather than off the clock: the ring is drawn a frame
+    // at a time anyway, and a count moves with the frames wherever this runs.
+    final steps = _ringFill.inMilliseconds / _ringStep.inMilliseconds;
+    var ticks = 0;
+    Haptics.fire(HapticWhen.hold);
+    setState(() {
+      _fillCell = cell;
+      _fill = 0;
+    });
+    _ringTimer = Timer.periodic(_ringStep, (t) {
+      if (!mounted || _fillCell != cell) {
+        t.cancel();
+        return;
+      }
+      ticks++;
+      if (ticks < steps) {
+        setState(() => _fill = ticks / steps);
+        return;
+      }
+      t.cancel();
+      _ringTimer = null;
+      setState(() {
+        _fillCell = null;
+        _fill = 0;
+      });
+      // Held all the way round: this is the task going to the terminal.
+      _armedCell = null;
+      unawaited(_sendTask(cell));
+    });
+  }
+
+  /// The ring goes away without sending: the finger moved, or let go early.
+  void _stopRing() {
+    _ringTimer?.cancel();
+    _ringTimer = null;
+    if (_fillCell != null) {
+      setState(() {
+        _fillCell = null;
+        _fill = 0;
+      });
+    }
   }
 
   /// The task comes up in the finger.
@@ -943,38 +1109,40 @@ class _AgentDetailState extends State<AgentDetail> {
     _carryTimer?.cancel();
     _carryTimer = null;
     _armedCell = null;
-    _armedLong = false;
   }
 
   void _carryMoved(PointerMoveEvent e) {
     final travelled = (e.position - _wentDown).distance > kTouchSlop;
     if (_heldCell == null) {
-      // Held down, nothing picked up yet. A finger that moves is not reason
-      // enough to give up on the hold: a thumb setting off to carry a tile
-      // starts moving at once, and giving up on it meant the carry never
-      // started unless someone held perfectly still for a fifth of a second.
       final armed = _armedCell;
       if (armed == null) return;
       if (_scroll.hasClients && (_scroll.offset - _scrollAtDown).abs() > 4) {
         // The card moved under the finger: that was a scroll, and what it
-        // scrolled past must not be picked up or opened.
+        // scrolled past must not be picked up, sent or opened.
+        _stopRing();
         _disarm();
         return;
       }
-      final d = e.position - _wentDown;
-      if (_armedOwn &&
-          d.dx.abs() > kTouchSlop &&
-          d.dx.abs() > d.dy.abs() * 1.5) {
-        // Sideways on a tile can only mean carrying it: the card scrolls up
-        // and down, so there is nothing else a sideways drag could be. It
-        // comes up at once, without waiting the hold out.
-        _armedLong = true;
-        _pickUp(armed);
-        setState(() {
-          _pointer = e.position;
-          _carriedIt = true;
-        });
+      if (!travelled) return;
+      if (!_armedOwn) {
+        // A built-in task cannot be carried, so a finger dragging across one
+        // is on its way somewhere else: the hold is off.
+        _stopRing();
+        _disarm();
+        return;
       }
+      // A drag during the hold is a carry, whichever way it goes: the ring
+      // stops where it is and nothing is sent.
+      _stopRing();
+      _pickUp(armed);
+      setState(() {
+        _pointer = e.position;
+        _carriedIt = true;
+        // Where the finger already is, not where it started: by the time a
+        // drag is a drag it has travelled, and one long move has to land
+        // the task where it ends rather than where it was lifted.
+        _overCell = _cellUnder(e.position) ?? armed;
+      });
       return;
     }
     final cell = _cellUnder(e.position);
@@ -1022,17 +1190,17 @@ class _AgentDetailState extends State<AgentDetail> {
     _edgeTimer?.cancel();
     _edgeTimer = null;
     _edgeStep = 0;
+    // Let go before the ring came round: nothing is sent.
+    _stopRing();
     final from = _heldCell, to = _overCell;
     final armed = _armedCell;
-    final long = _armedLong && _armedCell != null;
     _armedCell = null;
-    _armedLong = false;
     if (from == null) {
-      // Nothing was picked up. A long enough hold on a built-in task still
-      // opens what can be done with it, as a hold has always done.
-      if (long && !_armedOwn && armed != null) {
-        Haptics.fire(HapticWhen.hold);
-        setState(() => _taskAt = armed);
+      // Nothing was picked up and nothing was sent, so this was a tap: the
+      // task opens to be read and changed.
+      if (armed != null && !_carriedIt) {
+        Haptics.fire(HapticWhen.tap);
+        setState(() => _editAt = armed);
       }
       return;
     }
@@ -1041,8 +1209,8 @@ class _AgentDetailState extends State<AgentDetail> {
       _overCell = null;
     });
     if (!_carriedIt) {
-      // Held and let go where it was: what can be done with the task.
-      setState(() => _taskAt = from);
+      // Picked up and put straight back down where it was.
+      setState(() => _editAt = from);
       return;
     }
     if (to == null || to == from) return;
@@ -1071,25 +1239,33 @@ class _AgentDetailState extends State<AgentDetail> {
   Future<void> _carryTo(int from, int to) async {
     final a = _shown?.$2;
     if (a == null) return;
-    final base = agentAsks.length;
-    final at = from - base, onto = to - base;
-    // The built-in cells are not places to drop one.
-    if (at < 0 || at >= a.tasks.length || onto < 0) return;
-    final moving = a.tasks[at];
-    // Where the others of its band sit now, in the order they are drawn.
-    final others = [
-      for (final (i, t) in a.tasks.indexed)
-        if (i != at && t.mined == moving.mined) i,
+    final cells = _cells(a, _askColumns(context));
+    if (from < 0 || from >= cells.length) return;
+    final moving = cells[from];
+    if (moving == null) return;
+
+    // The list as it is drawn now, with the one in hand taken out and put
+    // back where it was dropped. An empty cell past the end is the end.
+    final names = [
+      for (final c in cells)
+        if (c != null) deckTaskName(c.label),
     ];
-    var rank = others.length; // an empty cell past the end: last of its band
-    if (onto < a.tasks.length) {
-      rank = 0;
-      for (final i in others) {
-        if (onto > at ? i <= onto : i < onto) rank++;
-      }
-    }
-    if (rank == moving.rank) return;
-    final r = await widget.source.moveTask(a.id, moving.id, rank);
+    final name = deckTaskName(moving.label);
+    final was = names.indexOf(name);
+    if (was < 0) return;
+    var onto = to >= cells.length || cells[to] == null
+        ? names.length - 1
+        : names.indexOf(deckTaskName(cells[to]!.label));
+    if (onto < 0) onto = names.length - 1;
+    if (onto == was) return;
+    names
+      ..removeAt(was)
+      ..insert(onto, name);
+
+    // Drawn where it was dropped at once; the service is told, and the next
+    // state puts it there for good.
+    setState(() => _order = names);
+    final r = await widget.source.orderTasks(a.id, names);
     if (!mounted) return;
     Haptics.fire(r.isOk ? HapticWhen.tap : HapticWhen.problem);
     setState(() => _note = r.isOk ? null : (r.message ?? 'could not move it'));
@@ -1318,6 +1494,7 @@ class _AgentDetailState extends State<AgentDetail> {
     required Color pillInk,
     required Color body,
     required Color cut,
+    List<Widget> actions = const [],
   }) {
     // The clock, which sits against the mascot: the pose says which state
     // this is, the number says the deck is still hearing from it.
@@ -1398,16 +1575,26 @@ class _AgentDetailState extends State<AgentDetail> {
         // and not on the card or the header because anything with a tap of
         // its own underneath a double tap -- a button, the mascot -- has to
         // wait out the double-tap timeout before it answers.
-        GestureDetector(
-          key: const Key('agent-title'),
-          behavior: HitTestBehavior.opaque,
-          onDoubleTap: _openAsks,
-          child: Text(
-            a.title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: DeckHud.rm(25, ink, weight: 700, spacing: -0.3),
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: GestureDetector(
+                key: const Key('agent-title'),
+                behavior: HitTestBehavior.opaque,
+                onDoubleTap: _openAsks,
+                child: Text(
+                  a.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: DeckHud.rm(25, ink, weight: 700, spacing: -0.3),
+                ),
+              ),
+            ),
+            // What the card does, where there is room for it beside the
+            // name instead of at the far end of the card.
+            for (final w in actions) ...[const SizedBox(width: 12), w],
+          ],
         ),
       ],
     );
@@ -1432,6 +1619,12 @@ class _AgentDetailState extends State<AgentDetail> {
       const SizedBox(width: 14),
     ],
   ];
+
+  /// Whether the two actions ride on the title's row: asked for by the host
+  /// and only where the screen is a tablet's, since a phone has no width to
+  /// spare beside a two-line name.
+  bool _actionsOnTitle(BuildContext context) =>
+      widget.headerActions && MediaQuery.sizeOf(context).shortestSide >= 600;
 
   /// A button in the card's bottom row, given room in proportion to the text
   /// it holds: "review in terminal" is eighteen characters and "stop" four,
@@ -1541,376 +1734,431 @@ class _AgentDetailState extends State<AgentDetail> {
         : 'resume';
     return _card(
       fill: DeckHud.bg,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _topBar(
-            state,
-            a,
-            ink: DeckHud.ink,
-            pillFill: pillFill,
-            pillInk: pillInk,
-            body: body,
-            cut: DeckHud.bg,
-          ),
-          const SizedBox(height: 14),
-          // Everything between the mascot and the buttons scrolls as one:
-          // what it is doing, its numbers, the last prompt and the tasks.
-          // The title above and the two actions below stay where they are,
-          // since those are what a glance and a thumb want.
-          Expanded(
-            child: KeyedSubtree(
-              key: _scrollKey,
-              child: SingleChildScrollView(
-                key: const Key('agent-scroll'),
-                controller: _scroll,
-                // Frozen while a task is in hand: the carry owns the finger,
-                // and the card scrolls only when one is held at an edge.
-                physics: _heldCell == null
-                    ? null
-                    : const NeverScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Doing now, and how many subagents work for it on the right.
-                    Row(
-                      children: [
-                        Expanded(child: _label(nowLabel, DeckHud.dim)),
-                        if (a.subagents.isNotEmpty)
-                          Text(
-                            subagentCount(a.subagents.length),
-                            key: const Key('agent-subagent-count'),
-                            style: DeckHud.mono(size: 12, color: DeckHud.dim),
+      child: Builder(
+        builder: (context) {
+          // A tablet puts the terminal and the remove beside the name; a
+          // phone leaves them at the foot of the card, where the thumb is.
+          final onTitle = _actionsOnTitle(context);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _topBar(
+                state,
+                a,
+                ink: DeckHud.ink,
+                pillFill: pillFill,
+                pillInk: pillInk,
+                body: body,
+                cut: DeckHud.bg,
+                actions: !onTitle
+                    ? const []
+                    : [
+                        if (!exited)
+                          AgentButton(
+                            key: const Key('agent-focus-top'),
+                            label: focusLabel,
+                            onTap: _busy ? null : () => _focus(a),
+                            fill: focusFlash?.$1 ?? DeckHud.ink,
+                            ink: focusFlash?.$2 ?? DeckHud.bg,
+                            outline: focusFlash?.$1 ?? DeckHud.ink,
+                            pressedFill: DeckHud.accent,
+                            pressedInk: DeckHud.bg,
+                            height: 48,
+                            fontSize: 15,
+                            padX: 14,
                           ),
+                        _removeButton(a, rmFlash, short: true),
                       ],
-                    ),
-                    const SizedBox(height: 6),
-                    nowValue,
-                    if (_nowAside(state, a) case final aside?) ...[
-                      const SizedBox(height: 6),
-                      aside,
-                    ],
-                    // The working subagents, one to a row, like the boards draw them.
-                    if (a.subagents.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      SubagentRows(
-                        subagents: a.subagents,
-                        body: body,
-                        cut: DeckHud.bg,
-                        // The other account's row below takes the room of two.
-                        maxRows: others.isEmpty ? 4 : 2,
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
+              ),
+              const SizedBox(height: 14),
+              // Everything between the mascot and the buttons scrolls as one:
+              // what it is doing, its numbers, the last prompt and the tasks.
+              // The title above and the two actions below stay where they are,
+              // since those are what a glance and a thumb want.
+              Expanded(
+                child: KeyedSubtree(
+                  key: _scrollKey,
+                  child: SingleChildScrollView(
+                    key: const Key('agent-scroll'),
+                    controller: _scroll,
+                    // Frozen while a task is in hand: the carry owns the finger,
+                    // and the card scrolls only when one is held at an edge.
+                    physics: _heldCell == null && _fillCell == null
+                        ? null
+                        : const NeverScrollableScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          'context',
-                          style: DeckHud.rm(19, DeckHud.ink, weight: 700),
-                        ),
-                        const SizedBox(width: 12),
-                        // Flexible, since "410k / 1m" beside "context" and a
-                        // percentage is wider than a phone at its narrowest.
-                        Flexible(
-                          child: Text(
-                            a.contextWindow > 0
-                                ? '${compactCount(a.contextUsed)} / ${compactCount(a.contextWindow)}'
-                                : '--',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: DeckHud.mono(size: 12, color: DeckHud.dim),
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          a.contextWindow > 0 ? '${a.contextPercent}%' : '--',
-                          style: DeckHud.rm(19, DeckHud.ink, weight: 700),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    TickBar(value: a.contextFraction, color: DeckHud.ink),
-                    const SizedBox(height: 16),
-                    // Four figures as a table: one hairline round the lot and one
-                    // between each pair, so a column is a cell rather than a gap. Half
-                    // a point and a third of the dim ink: a rule has to be found rather
-                    // than seen, or it reads as heavier than the figures it holds.
-                    DecoratedBox(
-                      key: const Key('agent-figures'),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: _rule, width: 0.5),
-                      ),
-                      child: IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                        // Doing now, and how many subagents work for it on the right.
+                        Row(
                           children: [
-                            for (final (i, (label, value)) in [
-                              ('tokens out', compactCount(a.tokensOutput)),
-                              ('cache read', compactCount(a.cacheRead)),
-                              (
-                                'cost · est',
-                                a.codexThread
-                                    ? '—'
-                                    : '\$${a.costUsd.toStringAsFixed(2)}',
-                              ),
-                              ('turns', '${a.turns}'),
-                            ].indexed)
-                              Expanded(
-                                child: GestureDetector(
-                                  // The turn count is a door: behind it are the
-                                  // prompts it counts.
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: label == 'turns' && a.turns > 0
-                                      ? () => setState(() => _history = true)
-                                      : null,
-                                  child: Container(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      8,
-                                      7,
-                                      8,
-                                      8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      border: i == 0
-                                          ? null
-                                          : Border(
-                                              left: BorderSide(
-                                                color: _rule,
-                                                width: 0.5,
-                                              ),
-                                            ),
-                                    ),
-                                    child: Column(
-                                      // Centred in the cell, not pushed to its left edge:
-                                      // "turns" holds the shortest figure of the four, so
-                                      // left-aligned it looked as though its cell had been
-                                      // given all its room on the right.
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
-                                      // The label at the top of the cell and the figure on
-                                      // its floor: a cell whose label wraps to two lines
-                                      // would otherwise lift its figure above the rest.
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        _label(label, DeckHud.dim),
-                                        const SizedBox(height: 6),
-                                        // 18, not 22: four of these across a phone was
-                                        // the widest thing on the card, and "3.1m" does
-                                        // not need to be read from across the desk.
-                                        Text(
-                                          value,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: DeckHud.rm(
-                                            16,
-                                            DeckHud.ink,
-                                            weight: 600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                            Expanded(child: _label(nowLabel, DeckHud.dim)),
+                            if (a.subagents.isNotEmpty)
+                              Text(
+                                subagentCount(a.subagents.length),
+                                key: const Key('agent-subagent-count'),
+                                style: DeckHud.mono(
+                                  size: 12,
+                                  color: DeckHud.dim,
                                 ),
                               ),
                           ],
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if ((a.showsAnswer
-                            ? state.answeredText(a)
-                            : state.lastActiveText(a))
-                        case final active when active.isNotEmpty)
-                      Row(
-                        children: [
+                        const SizedBox(height: 6),
+                        nowValue,
+                        if (_nowAside(state, a) case final aside?) ...[
+                          const SizedBox(height: 6),
+                          aside,
+                        ],
+                        // The working subagents, one to a row, like the boards draw them.
+                        if (a.subagents.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          SubagentRows(
+                            subagents: a.subagents,
+                            body: body,
+                            cut: DeckHud.bg,
+                            // The other account's row below takes the room of two.
+                            maxRows: others.isEmpty ? 4 : 2,
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text(
+                              'context',
+                              style: DeckHud.rm(19, DeckHud.ink, weight: 700),
+                            ),
+                            const SizedBox(width: 12),
+                            // Flexible, since "410k / 1m" beside "context" and a
+                            // percentage is wider than a phone at its narrowest.
+                            Flexible(
+                              child: Text(
+                                a.contextWindow > 0
+                                    ? '${compactCount(a.contextUsed)} / ${compactCount(a.contextWindow)}'
+                                    : '--',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: DeckHud.mono(
+                                  size: 12,
+                                  color: DeckHud.dim,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              a.contextWindow > 0
+                                  ? '${a.contextPercent}%'
+                                  : '--',
+                              style: DeckHud.rm(19, DeckHud.ink, weight: 700),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        TickBar(value: a.contextFraction, color: DeckHud.ink),
+                        const SizedBox(height: 16),
+                        // Four figures as a table: one hairline round the lot and one
+                        // between each pair, so a column is a cell rather than a gap. Half
+                        // a point and a third of the dim ink: a rule has to be found rather
+                        // than seen, or it reads as heavier than the figures it holds.
+                        DecoratedBox(
+                          key: const Key('agent-figures'),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: _rule, width: 0.5),
+                          ),
+                          child: IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                for (final (i, (label, value)) in [
+                                  ('tokens out', compactCount(a.tokensOutput)),
+                                  ('cache read', compactCount(a.cacheRead)),
+                                  (
+                                    'cost · est',
+                                    a.codexThread
+                                        ? '—'
+                                        : '\$${a.costUsd.toStringAsFixed(2)}',
+                                  ),
+                                  ('turns', '${a.turns}'),
+                                ].indexed)
+                                  Expanded(
+                                    child: GestureDetector(
+                                      // The turn count is a door: behind it are the
+                                      // prompts it counts.
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: label == 'turns' && a.turns > 0
+                                          ? () =>
+                                                setState(() => _history = true)
+                                          : null,
+                                      child: Container(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          8,
+                                          7,
+                                          8,
+                                          8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          border: i == 0
+                                              ? null
+                                              : Border(
+                                                  left: BorderSide(
+                                                    color: _rule,
+                                                    width: 0.5,
+                                                  ),
+                                                ),
+                                        ),
+                                        child: Column(
+                                          // Centred in the cell, not pushed to its left edge:
+                                          // "turns" holds the shortest figure of the four, so
+                                          // left-aligned it looked as though its cell had been
+                                          // given all its room on the right.
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          // The label at the top of the cell and the figure on
+                                          // its floor: a cell whose label wraps to two lines
+                                          // would otherwise lift its figure above the rest.
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            _label(label, DeckHud.dim),
+                                            const SizedBox(height: 6),
+                                            // 18, not 22: four of these across a phone was
+                                            // the widest thing on the card, and "3.1m" does
+                                            // not need to be read from across the desk.
+                                            Text(
+                                              value,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: DeckHud.rm(
+                                                16,
+                                                DeckHud.ink,
+                                                weight: 600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        if ((a.showsAnswer
+                                ? state.answeredText(a)
+                                : state.lastActiveText(a))
+                            case final active when active.isNotEmpty)
+                          Row(
+                            children: [
+                              _label(
+                                a.queuedNext.isEmpty
+                                    ? lastLabel
+                                    : 'queued next',
+                                DeckHud.dim,
+                              ),
+                              const Spacer(),
+                              Text(
+                                active,
+                                key: const Key('agent-last-active'),
+                                style: DeckHud.mono(
+                                  size: 12,
+                                  color: DeckHud.dim,
+                                ),
+                              ),
+                            ],
+                          )
+                        else
                           _label(
                             a.queuedNext.isEmpty ? lastLabel : 'queued next',
                             DeckHud.dim,
                           ),
-                          const Spacer(),
-                          Text(
-                            active,
-                            key: const Key('agent-last-active'),
-                            style: DeckHud.mono(size: 12, color: DeckHud.dim),
+                        const SizedBox(height: 8),
+                        // A prompt the deck has queued is shown instead of the last one: it
+                        // is what goes in next, and it is the thing someone looking at the
+                        // card wants to see arrive. Four lines of it, now that the card
+                        // scrolls: there is no leftover height left to measure.
+                        Text(
+                          a.queuedNext.isNotEmpty
+                              ? a.queuedNext
+                              : a.showsAnswer
+                              ? a.lastAnswer
+                              : (a.lastPrompt.isEmpty ? '—' : a.lastPrompt),
+                          key: Key(
+                            a.queuedNext.isEmpty && a.showsAnswer
+                                ? 'agent-last-answer'
+                                : 'agent-last-prompt',
                           ),
-                        ],
-                      )
-                    else
-                      _label(
-                        a.queuedNext.isEmpty ? lastLabel : 'queued next',
-                        DeckHud.dim,
-                      ),
-                    const SizedBox(height: 8),
-                    // A prompt the deck has queued is shown instead of the last one: it
-                    // is what goes in next, and it is the thing someone looking at the
-                    // card wants to see arrive. Four lines of it, now that the card
-                    // scrolls: there is no leftover height left to measure.
-                    Text(
-                      a.queuedNext.isNotEmpty
-                          ? a.queuedNext
-                          : a.showsAnswer
-                          ? a.lastAnswer
-                          : (a.lastPrompt.isEmpty ? '—' : a.lastPrompt),
-                      key: Key(
-                        a.queuedNext.isEmpty && a.showsAnswer
-                            ? 'agent-last-answer'
-                            : 'agent-last-prompt',
-                      ),
-                      // Five lines at 13: it is the longest thing on the card,
-                      // and smaller text shows more of it in less room.
-                      maxLines: 5,
+                          // Five lines at 13: it is the longest thing on the card,
+                          // and smaller text shows more of it in less room.
+                          maxLines: 5,
+                          overflow: TextOverflow.ellipsis,
+                          style: DeckHud.rm(
+                            12,
+                            a.queuedNext.isNotEmpty
+                                ? DeckHud.accent
+                                : DeckHud.ink,
+                          ).merge(const TextStyle(height: 1.45)),
+                        ),
+                        // The tasks, in the cells of the page this agent was picked from.
+                        const SizedBox(height: 18),
+                        _label('ask it to\u2026', DeckHud.dim),
+                        const SizedBox(height: 8),
+                        Padding(
+                          key: _asksKey,
+                          padding: EdgeInsets.zero,
+                          child: _askBoard(tight, a),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _note ?? footer,
+                      key: _note == null ? null : const Key('agent-note'),
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: DeckHud.rm(
-                        12,
-                        a.queuedNext.isNotEmpty ? DeckHud.accent : DeckHud.ink,
-                      ).merge(const TextStyle(height: 1.45)),
-                    ),
-                    // The tasks, in the cells of the page this agent was picked from.
-                    const SizedBox(height: 18),
-                    _label('ask it to\u2026', DeckHud.dim),
-                    const SizedBox(height: 8),
-                    Padding(
-                      key: _asksKey,
-                      padding: EdgeInsets.zero,
-                      child: _askBoard(tight, a),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _note ?? footer,
-                  key: _note == null ? null : const Key('agent-note'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: DeckHud.mono(
-                    size: 14,
-                    color: _note == null ? DeckHud.dim : DeckHud.accent,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Text(
-                state.server.name,
-                style: DeckHud.mono(size: 12, color: DeckHud.dim),
-              ),
-            ],
-          ),
-          // Another Claude account (when this one runs out of usage).
-          if (others.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _handoffNote(a, (armed ?? others.first).name),
-                    key: const Key('agent-handoff-note'),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: DeckHud.mono(
-                      size: 14,
-                      color: armed == null ? DeckHud.dim : DeckHud.accent,
+                      style: DeckHud.mono(
+                        size: 14,
+                        color: _note == null ? DeckHud.dim : DeckHud.accent,
+                      ),
                     ),
                   ),
-                ),
-                for (final to in others) ...[
-                  const SizedBox(width: 14),
-                  Builder(
-                    builder: (context) => DeckCompact.of(context)
-                        ? Expanded(child: _handoffButton(a, to))
-                        : SizedBox(width: 240, child: _handoffButton(a, to)),
+                  const SizedBox(width: 16),
+                  Text(
+                    state.server.name,
+                    style: DeckHud.mono(size: 12, color: DeckHud.dim),
                   ),
                 ],
-              ],
-            ),
-          ],
-          const SizedBox(height: 14),
-          // Built here, not above: DeckCompact is put in the tree by _card,
-          // which is below this method, so a flag read in _overview itself is
-          // always false -- which is how this row kept the desk panel's fixed
-          // widths on a phone.
-          Builder(
-            builder: (context) => Row(
-              children: [
-                ..._back(
-                  ink: DeckHud.ink,
-                  outline: DeckHud.dim,
-                  pressedFill: DeckHud.ink,
-                  pressedInk: DeckHud.bg,
-                ),
-                if (!exited)
-                  _share(
-                    context,
-                    focusLabel,
-                    main: true,
-                    AgentButton(
-                      key: const Key('agent-focus'),
-                      label: focusLabel,
-                      onTap: _busy ? null : () => _focus(a),
-                      fill: focusFlash?.$1 ?? DeckHud.ink,
-                      ink: focusFlash?.$2 ?? DeckHud.bg,
-                      outline: focusFlash?.$1 ?? DeckHud.ink,
-                      pressedFill: DeckHud.accent,
-                      pressedInk: DeckHud.bg,
+              ),
+              // Another Claude account (when this one runs out of usage).
+              if (others.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _handoffNote(a, (armed ?? others.first).name),
+                        key: const Key('agent-handoff-note'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: DeckHud.mono(
+                          size: 14,
+                          color: armed == null ? DeckHud.dim : DeckHud.accent,
+                        ),
+                      ),
                     ),
-                  ),
-                if (running && (!a.external || a.inApp)) ...[
-                  const SizedBox(width: 14),
-                  _share(
-                    context,
-                    interruptLabel,
-                    AgentButton(
-                      key: const Key('agent-interrupt'),
-                      label: interruptLabel,
-                      onTap: _busy ? null : () => _interrupt(a),
-                      fill: intFlash?.$1 ?? const Color(0x00000000),
-                      ink: intFlash?.$2 ?? DeckHud.ink,
-                      outline: intFlash?.$1 ?? DeckHud.dim,
+                    for (final to in others) ...[
+                      const SizedBox(width: 14),
+                      Builder(
+                        builder: (context) => DeckCompact.of(context)
+                            ? Expanded(child: _handoffButton(a, to))
+                            : SizedBox(
+                                width: 240,
+                                child: _handoffButton(a, to),
+                              ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+              const SizedBox(height: 14),
+              // Built here, not above: DeckCompact is put in the tree by _card,
+              // which is below this method, so a flag read in _overview itself is
+              // always false -- which is how this row kept the desk panel's fixed
+              // widths on a phone.
+              Builder(
+                builder: (context) => Row(
+                  children: [
+                    ..._back(
+                      ink: DeckHud.ink,
+                      outline: DeckHud.dim,
                       pressedFill: DeckHud.ink,
                       pressedInk: DeckHud.bg,
                     ),
-                  ),
-                ] else if (exited && a.resumable) ...[
-                  _share(
-                    context,
-                    resumeLabel,
-                    main: true,
-                    AgentButton(
-                      key: const Key('agent-resume'),
-                      label: resumeLabel,
-                      onTap: _busy ? null : () => _resume(a),
-                      fill: resumeFlash?.$1 ?? DeckHud.ink,
-                      ink: resumeFlash?.$2 ?? DeckHud.bg,
-                      outline: resumeFlash?.$1 ?? DeckHud.ink,
-                      pressedFill: DeckHud.accent,
-                      pressedInk: DeckHud.bg,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  _share(context, _removeLabel(a), _removeButton(a, rmFlash)),
-                ] else if (exited)
-                  _share(
-                    context,
-                    _removeLabel(a),
-                    main: true,
-                    _removeButton(a, rmFlash),
-                  )
-                else ...[
-                  const SizedBox(width: 14),
-                  _share(context, _removeLabel(a), _removeButton(a, rmFlash)),
-                ],
-              ],
-            ),
-          ),
-        ],
+                    if (!exited && !onTitle)
+                      _share(
+                        context,
+                        focusLabel,
+                        main: true,
+                        AgentButton(
+                          key: const Key('agent-focus'),
+                          label: focusLabel,
+                          onTap: _busy ? null : () => _focus(a),
+                          fill: focusFlash?.$1 ?? DeckHud.ink,
+                          ink: focusFlash?.$2 ?? DeckHud.bg,
+                          outline: focusFlash?.$1 ?? DeckHud.ink,
+                          pressedFill: DeckHud.accent,
+                          pressedInk: DeckHud.bg,
+                        ),
+                      ),
+                    if (running && (!a.external || a.inApp)) ...[
+                      const SizedBox(width: 14),
+                      _share(
+                        context,
+                        interruptLabel,
+                        AgentButton(
+                          key: const Key('agent-interrupt'),
+                          label: interruptLabel,
+                          onTap: _busy ? null : () => _interrupt(a),
+                          fill: intFlash?.$1 ?? const Color(0x00000000),
+                          ink: intFlash?.$2 ?? DeckHud.ink,
+                          outline: intFlash?.$1 ?? DeckHud.dim,
+                          pressedFill: DeckHud.ink,
+                          pressedInk: DeckHud.bg,
+                        ),
+                      ),
+                    ] else if (exited && a.resumable) ...[
+                      _share(
+                        context,
+                        resumeLabel,
+                        main: true,
+                        AgentButton(
+                          key: const Key('agent-resume'),
+                          label: resumeLabel,
+                          onTap: _busy ? null : () => _resume(a),
+                          fill: resumeFlash?.$1 ?? DeckHud.ink,
+                          ink: resumeFlash?.$2 ?? DeckHud.bg,
+                          outline: resumeFlash?.$1 ?? DeckHud.ink,
+                          pressedFill: DeckHud.accent,
+                          pressedInk: DeckHud.bg,
+                        ),
+                      ),
+                      if (!onTitle) ...[
+                        const SizedBox(width: 14),
+                        _share(
+                          context,
+                          _removeLabel(a),
+                          _removeButton(a, rmFlash),
+                        ),
+                      ],
+                    ] else if (exited && !onTitle)
+                      _share(
+                        context,
+                        _removeLabel(a),
+                        main: true,
+                        _removeButton(a, rmFlash),
+                      )
+                    else if (!onTitle) ...[
+                      const SizedBox(width: 14),
+                      _share(
+                        context,
+                        _removeLabel(a),
+                        _removeButton(a, rmFlash),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -2710,134 +2958,6 @@ class CardBackButton extends StatelessWidget {
 ///
 /// A tile used to send the moment it was tapped, which is a lot to do by
 /// accident on a board of them; holding one asks first.
-class _TaskDialog extends StatelessWidget {
-  const _TaskDialog({
-    super.key,
-    required this.ask,
-    required this.tight,
-    required this.busy,
-    required this.onClose,
-    required this.onSend,
-    required this.onRemove,
-    required this.onPin,
-  });
-
-  final AgentAsk ask;
-  final bool tight;
-  final bool busy;
-  final VoidCallback onClose;
-  final VoidCallback onSend;
-  final VoidCallback onRemove;
-
-  /// Pins it against the rotation, or lets it rotate again.
-  final VoidCallback onPin;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: GestureDetector(
-            key: const Key('task-dialog-scrim'),
-            behavior: HitTestBehavior.opaque,
-            onTap: onClose,
-            child: ColoredBox(color: DeckHud.bg.withValues(alpha: 0.76)),
-          ),
-        ),
-        Center(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: tight ? 18 : 60),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {},
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 460),
-                padding: EdgeInsets.all(tight ? 16 : 22),
-                decoration: BoxDecoration(
-                  color: DeckHud.panel,
-                  border: Border.all(color: _rule, width: 0.5),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      ask.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: DeckHud.rm(
-                        tight ? 20 : 24,
-                        DeckHud.ink,
-                        weight: 700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      ask.text,
-                      maxLines: 6,
-                      overflow: TextOverflow.ellipsis,
-                      style: DeckHud.mono(size: 13, color: DeckHud.dim),
-                    ),
-                    const SizedBox(height: 16),
-                    AgentButton(
-                      key: const Key('task-send'),
-                      label: 'send to terminal',
-                      onTap: busy ? null : onSend,
-                      fill: DeckHud.ink,
-                      ink: DeckHud.bg,
-                      outline: DeckHud.ink,
-                      pressedFill: DeckHud.accent,
-                      pressedInk: DeckHud.bg,
-                    ),
-                    if (ask.id != null) ...[
-                      const SizedBox(height: 10),
-                      AgentButton(
-                        key: const Key('task-pin'),
-                        label: ask.pinned ? 'let it rotate' : 'pin it here',
-                        onTap: busy ? null : onPin,
-                        fill: const Color(0x00000000),
-                        ink: ask.pinned ? DeckHud.accent : DeckHud.ink,
-                        outline: ask.pinned ? DeckHud.accent : DeckHud.dim,
-                        pressedFill: DeckHud.ink,
-                        pressedInk: DeckHud.bg,
-                      ),
-                      const SizedBox(height: 10),
-                      AgentButton(
-                        key: const Key('task-remove'),
-                        label: 'remove this task',
-                        onTap: busy ? null : onRemove,
-                        fill: const Color(0x00000000),
-                        ink: DeckHud.ink,
-                        outline: DeckHud.dim,
-                        pressedFill: DeckHud.ink,
-                        pressedInk: DeckHud.bg,
-                      ),
-                    ],
-                    const SizedBox(height: 10),
-                    AgentButton(
-                      key: const Key('task-cancel'),
-                      label: 'cancel',
-                      onTap: onClose,
-                      fill: const Color(0x00000000),
-                      ink: DeckHud.dim,
-                      outline: DeckHud.dim,
-                      pressedFill: DeckHud.ink,
-                      pressedInk: DeckHud.bg,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// An empty cell of the quick list. Held, it asks the host to listen and a
-/// new task is made of whatever was said; where the host has no microphone it
-/// is the deck's plain empty cell and does nothing.
 class _EmptyAskCell extends StatelessWidget {
   const _EmptyAskCell({super.key, required this.onSpeak});
 
@@ -2873,17 +2993,326 @@ class _EmptyAskCell extends StatelessWidget {
   }
 }
 
-/// A table's hairlines: the dim ink at a third, so the rules hold the cells
-/// apart without drawing the eye themselves. The figures on the card and the
-/// prompts in the drawer are ruled with the same line.
+/// The faint line the card draws between its parts.
 Color get _rule => DeckHud.dim.withValues(alpha: 0.35);
 
-/// Every prompt of the session, behind the turn count that counts them.
+/// The task, opened to be read and changed: a drawer from the right with its
+/// name, the instruction under it, and what else can be done with it.
 ///
-/// It comes in from the left over the card and takes part of its width, so
-/// the agent it belongs to is still there behind it. A row carries what was
-/// asked; its three actions send it again, keep it as a task on the agent's
-/// grid, or copy it.
+/// The name is the key the service keeps the task under, so it is typed under
+/// the same rule the service stores it by ([deckTaskName]): a space is a
+/// hyphen, everything is small, and only letters and digits stay. The field
+/// shows what will be saved rather than what was typed, so nothing is a
+/// surprise afterwards.
+class _TaskDrawer extends StatefulWidget {
+  const _TaskDrawer({
+    super.key,
+    required this.ask,
+    required this.tight,
+    required this.busy,
+    required this.onClose,
+    required this.onSave,
+    required this.onSend,
+    required this.onRemove,
+    required this.onPin,
+  });
+
+  final AgentAsk ask;
+  final bool tight;
+  final bool busy;
+  final VoidCallback onClose;
+  final void Function(String name, String text) onSave;
+  final VoidCallback onSend;
+  final VoidCallback onRemove;
+
+  /// Pins it against the rotation, or lets it rotate again.
+  final VoidCallback onPin;
+
+  @override
+  State<_TaskDrawer> createState() => _TaskDrawerState();
+}
+
+class _TaskDrawerState extends State<_TaskDrawer> {
+  late final _name = TextEditingController(text: widget.ask.label)
+    ..addListener(_tidy)
+    ..addListener(_redraw);
+  late final _text = TextEditingController(text: widget.ask.text)
+    ..addListener(_redraw);
+  final _nameFocus = FocusNode();
+  final _textFocus = FocusNode();
+
+  /// Keeps the field to the name rule as it is typed: what is on the screen
+  /// is what the service will keep.
+  void _tidy() {
+    final clean = deckTaskName(_name.text);
+    if (clean == _name.text) return;
+    _name.value = TextEditingValue(
+      text: clean,
+      selection: TextSelection.collapsed(offset: clean.length),
+    );
+  }
+
+  /// Typing in either field decides whether there is anything to save.
+  void _redraw() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _name
+      ..removeListener(_tidy)
+      ..removeListener(_redraw)
+      ..dispose();
+    _text
+      ..removeListener(_redraw)
+      ..dispose();
+    _nameFocus.dispose();
+    _textFocus.dispose();
+    super.dispose();
+  }
+
+  bool get _changed =>
+      _name.text != widget.ask.label || _text.text != widget.ask.text;
+
+  @override
+  Widget build(BuildContext context) {
+    final tight = widget.tight;
+    final pad = tight ? 14.0 : 20.0;
+    return Stack(
+      children: [
+        // The rest of the card closes it.
+        Positioned.fill(
+          child: GestureDetector(
+            key: const Key('task-drawer-scrim'),
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onClose,
+            child: ColoredBox(color: DeckHud.bg.withValues(alpha: 0.72)),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FractionallySizedBox(
+            // Part of the card, not all of it: the agent stays in sight.
+            widthFactor: tight ? 0.86 : 0.46,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {},
+              onHorizontalDragEnd: (d) {
+                if ((d.primaryVelocity ?? 0) > 240) widget.onClose();
+              },
+              child: Container(
+                color: DeckHud.panel,
+                padding: EdgeInsets.fromLTRB(pad, pad, pad, pad * 0.8),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'task',
+                              style: DeckHud.rm(
+                                tight ? 18 : 22,
+                                DeckHud.ink,
+                                weight: 700,
+                              ),
+                            ),
+                          ),
+                          Pressable(
+                            key: const Key('task-drawer-close'),
+                            onTap: widget.onClose,
+                            builder: (context, pressed) => Text(
+                              'close',
+                              style: DeckHud.mono(
+                                size: 12,
+                                color: pressed ? DeckHud.accent : DeckHud.dim,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: tight ? 12 : 16),
+                      _label('name'),
+                      _Edit(
+                        key: const Key('task-name-field'),
+                        controller: _name,
+                        focus: _nameFocus,
+                        lines: 1,
+                        size: 15,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'small letters, digits and hyphens',
+                        style: DeckHud.mono(size: 10, color: DeckHud.dim),
+                      ),
+                      SizedBox(height: tight ? 12 : 16),
+                      _label('instruction'),
+                      _Edit(
+                        key: const Key('task-text-field'),
+                        controller: _text,
+                        focus: _textFocus,
+                        lines: tight ? 6 : 9,
+                        size: 13,
+                      ),
+                      SizedBox(height: tight ? 14 : 18),
+                      // Nothing changed yet: the button says so by going
+                      // quiet rather than by looking ready and doing nothing.
+                      AgentButton(
+                        key: const Key('task-save'),
+                        label: 'save',
+                        onTap: widget.busy || !_changed
+                            ? null
+                            : () => widget.onSave(
+                                deckTaskName(_name.text),
+                                _text.text,
+                              ),
+                        fill: _changed ? DeckHud.ink : const Color(0x00000000),
+                        ink: _changed ? DeckHud.bg : DeckHud.dim,
+                        outline: _changed ? DeckHud.ink : _rule,
+                        pressedFill: DeckHud.accent,
+                        pressedInk: DeckHud.bg,
+                      ),
+                      const SizedBox(height: 10),
+                      AgentButton(
+                        key: const Key('task-send'),
+                        label: 'send to terminal',
+                        onTap: widget.busy ? null : widget.onSend,
+                        fill: const Color(0x00000000),
+                        ink: DeckHud.ink,
+                        outline: DeckHud.ink,
+                        pressedFill: DeckHud.ink,
+                        pressedInk: DeckHud.bg,
+                      ),
+                      if (widget.ask.id != null) ...[
+                        const SizedBox(height: 10),
+                        AgentButton(
+                          key: const Key('task-pin'),
+                          label: widget.ask.pinned
+                              ? 'let it rotate'
+                              : 'pin it here',
+                          onTap: widget.busy ? null : widget.onPin,
+                          fill: const Color(0x00000000),
+                          ink: DeckHud.dim,
+                          outline: _rule,
+                          pressedFill: DeckHud.dim,
+                          pressedInk: DeckHud.bg,
+                        ),
+                      ],
+                      // Every task can be taken away, the eight the deck
+                      // comes with as much as the ones made here: one that
+                      // the service does not keep is remembered as dropped.
+                      const SizedBox(height: 10),
+                      AgentButton(
+                        key: const Key('task-remove'),
+                        label: 'remove',
+                        onTap: widget.busy ? null : widget.onRemove,
+                        fill: const Color(0x00000000),
+                        ink: DeckHud.dim,
+                        outline: _rule,
+                        pressedFill: DeckHud.accent,
+                        pressedInk: DeckHud.bg,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _label(String s) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(s, style: DeckHud.mono(size: 11, color: DeckHud.dim)),
+  );
+}
+
+/// One field of the drawer: the deck has no text boxes of its own, so this is
+/// the plain editable with the deck's own frame round it.
+class _Edit extends StatelessWidget {
+  const _Edit({
+    super.key,
+    required this.controller,
+    required this.focus,
+    required this.lines,
+    required this.size,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focus;
+  final int lines;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+    decoration: BoxDecoration(
+      color: DeckHud.bg,
+      border: Border.all(color: _rule, width: 1),
+    ),
+    child: EditableText(
+      controller: controller,
+      focusNode: focus,
+      style: DeckHud.mono(size: size, color: DeckHud.ink),
+      cursorColor: DeckHud.accent,
+      backgroundCursorColor: DeckHud.dim,
+      maxLines: lines,
+      minLines: lines,
+      autocorrect: false,
+      enableSuggestions: false,
+      selectionColor: DeckHud.accent.withValues(alpha: 0.35),
+    ),
+  );
+}
+
+/// The hold, going round the tile as it fills. All the way round and the
+/// task is sent to the agent's terminal.
+class _HoldRing extends CustomPainter {
+  const _HoldRing(this.gone, this.width);
+
+  /// 0 to 1.
+  final double gone;
+  final double width;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final inset = width / 2;
+    final r = Rect.fromLTWH(
+      inset,
+      inset,
+      size.width - width,
+      size.height - width,
+    );
+    final line = Paint()
+      ..color = DeckHud.accent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width
+      ..strokeCap = StrokeCap.butt
+      ..strokeJoin = StrokeJoin.miter;
+    // Round the four sides from the top left, the way a page is read.
+    final edges = [
+      (Offset(r.left, r.top), Offset(r.right, r.top)),
+      (Offset(r.right, r.top), Offset(r.right, r.bottom)),
+      (Offset(r.right, r.bottom), Offset(r.left, r.bottom)),
+      (Offset(r.left, r.bottom), Offset(r.left, r.top)),
+    ];
+    var left = (gone.clamp(0.0, 1.0)) * (r.width * 2 + r.height * 2);
+    for (final (from, to) in edges) {
+      final len = (to - from).distance;
+      if (left <= 0) break;
+      final part = left >= len ? 1.0 : left / len;
+      canvas.drawLine(from, Offset.lerp(from, to, part)!, line);
+      left -= len;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HoldRing old) => old.gone != gone || old.width != width;
+}
+
 class _PromptDrawer extends StatefulWidget {
   const _PromptDrawer({
     super.key,

@@ -225,6 +225,12 @@ type Store struct {
 	// TaskList is each agent's own tasks (nil: the deck keeps none).
 	TaskList func() map[string][]model.Task
 
+	// HiddenAsks is the built-in tasks each agent has dropped, by name.
+	HiddenAsks func(agent string) []string
+
+	// AskOrder is the order each agent's quick list is drawn in, by name.
+	AskOrder func(agent string) []string
+
 	// QueuedText is the text of each agent's next queued prompt (nil: none).
 	QueuedText func() map[string]string
 
@@ -517,6 +523,7 @@ func (s *Store) Snapshot() model.State {
 	}
 	hat, account, project := s.Hat, s.Account, s.Project
 	groups, queued, queuedText, taskList := s.Groups, s.Queued, s.QueuedText, s.TaskList
+	hiddenAsks, askOrder := s.HiddenAsks, s.AskOrder
 	slow, pet, lims := s.Slow, s.Pet, s.Limits
 	s.mu.Unlock()
 	var counts map[string]int
@@ -545,6 +552,12 @@ func (s *Store) Snapshot() model.State {
 		agents[i].Queued = counts[agents[i].ID]
 		agents[i].QueuedNext = next[agents[i].ID]
 		agents[i].Tasks = own[agents[i].ID]
+		if hiddenAsks != nil {
+			agents[i].HiddenAsks = hiddenAsks(agents[i].ID)
+		}
+		if askOrder != nil {
+			agents[i].AskOrder = askOrder(agents[i].ID)
+		}
 		by := slowedBy[agents[i].ID]
 		agents[i].Slowed, agents[i].SlowedByYou, agents[i].CPU = by != "", by == "you", cpu[agents[i].ID]
 		if hat != nil {

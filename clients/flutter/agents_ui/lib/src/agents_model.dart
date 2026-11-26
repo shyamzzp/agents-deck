@@ -572,6 +572,8 @@ class Agent {
     this.queued = 0,
     this.queuedNext = '',
     this.tasks = const [],
+    this.hiddenAsks = const [],
+    this.askOrder = const [],
     this.hat,
     this.account,
     this.pet,
@@ -659,6 +661,15 @@ class Agent {
   /// Tasks kept for this agent, drawn in the quick list beside the built-in
   /// ones (oldest first, as they were made).
   final List<AgentTask> tasks;
+
+  /// The built-in tasks this agent has been told to drop, by name. Those
+  /// eight are the screen's own, so dropping one is the service remembering
+  /// that it is gone.
+  final List<String> hiddenAsks;
+
+  /// The order this agent's quick list is drawn in, by name, as a drag last
+  /// left it. Empty: the built-ins first, then its own.
+  final List<String> askOrder;
 
   /// The pixel hat for its working folder; null = none.
   final AgentHat? hat;
@@ -766,6 +777,16 @@ class Agent {
       tasks: [
         if (j['tasks'] case final List l)
           for (final x in l) ?AgentTask.fromJson(x),
+      ],
+      hiddenAsks: [
+        if (j['hiddenAsks'] case final List l)
+          for (final x in l)
+            if (x is String) x,
+      ],
+      askOrder: [
+        if (j['askOrder'] case final List l)
+          for (final x in l)
+            if (x is String) x,
       ],
       startedAt: _time(j['startedAt']),
       updatedAt: _time(j['updatedAt']),
@@ -1311,6 +1332,42 @@ class AgentTask {
 /// These are the things asked of a coding agent again and again, so they are
 /// worth a tap rather than a keyboard: the text is what the local dashboard's
 /// message box would send.
+/// A task's name as the deck keeps it. The name is the key the service
+/// stores a task under, so the screen types it under the same rule the
+/// service saves it by: a space is a hyphen, everything is small, and only
+/// letters and digits stay. Runs of hyphens fall to one, and the ends carry
+/// none.
+///
+/// The service applies this again on save, so what the screen shows is what
+/// is kept and nothing arrives by another road that the rule never saw.
+String deckTaskName(String name) {
+  final out = StringBuffer();
+  for (final r in name.trim().toLowerCase().codeUnits) {
+    final c = String.fromCharCode(r);
+    if (RegExp(r'[a-z0-9]').hasMatch(c)) {
+      out.write(c);
+    } else if (c == ' ' || c == '-' || c == '_' || c == '\t') {
+      final had = out.toString();
+      if (had.isNotEmpty && !had.endsWith('-')) out.write('-');
+    }
+  }
+  var clean = out.toString();
+  while (clean.startsWith('-')) {
+    clean = clean.substring(1);
+  }
+  while (clean.endsWith('-')) {
+    clean = clean.substring(0, clean.length - 1);
+  }
+  // The service keeps names to 28 runes ([tasks.NameMax]).
+  if (clean.length > 28) {
+    clean = clean.substring(0, 28);
+    while (clean.endsWith('-')) {
+      clean = clean.substring(0, clean.length - 1);
+    }
+  }
+  return clean;
+}
+
 class AgentAsk {
   const AgentAsk(
     this.label,

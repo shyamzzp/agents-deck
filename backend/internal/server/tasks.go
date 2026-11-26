@@ -60,6 +60,69 @@ func (s *Server) addTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, t)
 }
 
+// orderTasks keeps the order a drag left the quick list in.
+func (s *Server) orderTasks(w http.ResponseWriter, r *http.Request) {
+	if s.Tasks == nil {
+		writeErr(w, http.StatusNotFound, "this deck keeps no tasks")
+		return
+	}
+	id := r.PathValue("id")
+	if _, ok := s.Store.Get(id); !ok {
+		writeErr(w, http.StatusNotFound, ErrNotFound.Error())
+		return
+	}
+	var in struct {
+		Names []string `json:"names"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in); err != nil {
+		writeErr(w, http.StatusBadRequest, "body must be {\"names\"}")
+		return
+	}
+	s.Tasks.SetOrder(id, in.Names)
+	s.Store.Touch()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// removeNamed takes away a task the screen draws but the service does not
+// keep: one of the built-in eight. It is remembered as dropped, and the
+// agent's own task of that name, if it has one, goes with it.
+func (s *Server) removeNamed(w http.ResponseWriter, r *http.Request, agent, name string) {
+	if !s.Tasks.Hide(agent, name) {
+		writeErr(w, http.StatusNotFound, "no such task")
+		return
+	}
+	s.Store.Touch()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// editTask renames a task and rewrites what it says, by name.
+func (s *Server) editTask(w http.ResponseWriter, r *http.Request) {
+	if s.Tasks == nil {
+		writeErr(w, http.StatusNotFound, "this deck keeps no tasks")
+		return
+	}
+	id := r.PathValue("id")
+	if _, ok := s.Store.Get(id); !ok {
+		writeErr(w, http.StatusNotFound, ErrNotFound.Error())
+		return
+	}
+	var in struct {
+		Name string `json:"name"`
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in); err != nil {
+		writeErr(w, http.StatusBadRequest, "body must be {\"name\", \"text\"}")
+		return
+	}
+	t, err := s.Tasks.Edit(id, r.PathValue("name"), in.Name, in.Text)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.Store.Touch() // the clients redraw under the name it ended up with
+	writeJSON(w, http.StatusOK, t)
+}
+
 // moveTask puts a task at a rank within its own band: the tasks someone made
 // hold the front of the list and the mined ones follow, so a drag rearranges
 // one among its own kind rather than across the two.
@@ -106,10 +169,17 @@ func (s *Server) pinTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) removeTask(w http.ResponseWriter, r *http.Request) {
-	if s.Tasks == nil || !s.Tasks.Remove(r.PathValue("id"), r.PathValue("taskId")) {
-		writeErr(w, http.StatusNotFound, "no such task")
+	if s.Tasks == nil {
+		writeErr(w, http.StatusNotFound, "this deck keeps no tasks")
 		return
 	}
-	s.Store.Touch()
-	w.WriteHeader(http.StatusNoContent)
+	agent, which := r.PathValue("id"), r.PathValue("taskId")
+	if s.Tasks.Remove(agent, which) {
+		s.Store.Touch()
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	// Not an id: one of the built-in eight, which the screen draws and the
+	// service does not keep, addressed by its name like an edit.
+	s.removeNamed(w, r, agent, which)
 }

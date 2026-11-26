@@ -152,6 +152,24 @@ abstract class AgentsSource {
   /// through every rotation, or lets it rotate again.
   Future<AgentsResult> pinTask(String agentId, String taskId, bool pinned);
 
+  /// `POST /v1/agents/{id}/tasks/{name}/edit {"name", "text"}` — renames a
+  /// task and rewrites what it says. A task is addressed by its name rather
+  /// than by an id: the name is what the screen shows and what a person
+  /// types, and a built-in task has no id to address it by. Saving a
+  /// built-in one keeps it as a task of the agent's own.
+  Future<AgentsResult> editTask(
+    String agentId,
+    String name, {
+    required String newName,
+    required String text,
+  });
+
+  /// `POST /v1/agents/{id}/tasks-order {"names"}` — the order a drag left
+  /// the quick list in, by name. The built-in eight and the agent's own are
+  /// one line of tiles on the screen, so they are dragged past each other
+  /// rather than each within its own band.
+  Future<AgentsResult> orderTasks(String agentId, List<String> names);
+
   /// `GET /v1/live` — Claude sessions started by hand in other terminals.
   Future<List<LiveSession>> liveSessions();
 
@@ -719,6 +737,28 @@ class HttpAgentsClient implements AgentsSource {
       _postPath(
         ['v1', 'agents', agentId, 'tasks', taskId, 'pin'],
         {'pinned': pinned},
+        false,
+        const Duration(seconds: 10),
+      );
+
+  @override
+  Future<AgentsResult> editTask(
+    String agentId,
+    String name, {
+    required String newName,
+    required String text,
+  }) => _postPath(
+    ['v1', 'agents', agentId, 'tasks', name, 'edit'],
+    {'name': newName, 'text': text},
+    false,
+    const Duration(seconds: 10),
+  );
+
+  @override
+  Future<AgentsResult> orderTasks(String agentId, List<String> names) =>
+      _postPath(
+        ['v1', 'agents', agentId, 'tasks-order'],
+        {'names': names},
         false,
         const Duration(seconds: 10),
       );

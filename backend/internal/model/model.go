@@ -125,27 +125,34 @@ type Agent struct {
 	Turns         int        `json:"turns"`
 	Focused       bool       `json:"focused"`
 	Attached      bool       `json:"attached"`
-	Resumable     bool       `json:"resumable"`               // exited Claude agent that POST /resume can bring back
-	Lost          bool       `json:"lost,omitempty"`          // ended with the tmux server, not by itself: POST /v1/restore brings it back
-	Unseen        bool       `json:"unseen"`                  // finished a turn you haven't looked at yet ("hungry")
-	External      bool       `json:"external"`                // owned by another app (Codex): view and focus only
-	App           string     `json:"app,omitempty"`           // the app it runs in when not agentctl's: "orca", "herdr", "cmux" (answer, interrupt and focus work there)
-	Subagents     []Subagent `json:"subagents,omitempty"`     // subagents still working, oldest first
-	Queued        int        `json:"queued"`                  // prompts waiting to be typed in once its turn ends ("mode": "queue")
-	QueuedNext    string     `json:"queuedNext,omitempty"`    // the text of the next of those, for the card to show
-	Tasks         []Task     `json:"tasks,omitempty"`         // tasks kept for this agent, beside the deck's built-in ones
-	Slowed        bool       `json:"slowed"`                  // in background mode while the computer is busy (the CPU guard; macOS)
-	SlowedByYou   bool       `json:"slowedByYou"`             // slowed with Slow it, not by the guard's own pick
-	CPU           float64    `json:"cpu,omitempty"`           // percent of the whole computer, only while it is busy
-	Hat           *Hat       `json:"hat,omitempty"`           // the pixel hat for its working folder (nil: none)
-	Account       *Account   `json:"account,omitempty"`       // the Claude account it runs in (nil: only one account is set up)
-	Project       *Project   `json:"project,omitempty"`       // the project its working folder is in (nil: none)
-	ProjectFolder string     `json:"projectFolder,omitempty"` // the project folder it matched, in full ("" = no project)
-	Pet           *Pet       `json:"pet,omitempty"`           // its pet (nil: Agent pets is off)
-	StartedAt     time.Time  `json:"startedAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
-	LastActive    time.Time  `json:"lastActive,omitzero"` // its latest message sent or received (zero: not known yet)
-	OutUntil      time.Time  `json:"outUntil,omitzero"`   // its account (or its model) is out of usage until then (zero: not out)
+	Resumable     bool       `json:"resumable"`            // exited Claude agent that POST /resume can bring back
+	Lost          bool       `json:"lost,omitempty"`       // ended with the tmux server, not by itself: POST /v1/restore brings it back
+	Unseen        bool       `json:"unseen"`               // finished a turn you haven't looked at yet ("hungry")
+	External      bool       `json:"external"`             // owned by another app (Codex): view and focus only
+	App           string     `json:"app,omitempty"`        // the app it runs in when not agentctl's: "orca", "herdr", "cmux" (answer, interrupt and focus work there)
+	Subagents     []Subagent `json:"subagents,omitempty"`  // subagents still working, oldest first
+	Queued        int        `json:"queued"`               // prompts waiting to be typed in once its turn ends ("mode": "queue")
+	QueuedNext    string     `json:"queuedNext,omitempty"` // the text of the next of those, for the card to show
+	Tasks         []Task     `json:"tasks,omitempty"`      // tasks kept for this agent, beside the deck's built-in ones
+	// HiddenAsks are the built-in tasks this agent has been told to drop, by
+	// name. The eight are drawn by the screen rather than kept in the
+	// service, so taking one away is remembering that it is gone.
+	HiddenAsks []string `json:"hiddenAsks,omitempty"`
+	// AskOrder is the order this agent's quick list is drawn in, by name, as
+	// a drag last left it. Empty: the built-ins first, then its own.
+	AskOrder      []string  `json:"askOrder,omitempty"`
+	Slowed        bool      `json:"slowed"`                  // in background mode while the computer is busy (the CPU guard; macOS)
+	SlowedByYou   bool      `json:"slowedByYou"`             // slowed with Slow it, not by the guard's own pick
+	CPU           float64   `json:"cpu,omitempty"`           // percent of the whole computer, only while it is busy
+	Hat           *Hat      `json:"hat,omitempty"`           // the pixel hat for its working folder (nil: none)
+	Account       *Account  `json:"account,omitempty"`       // the Claude account it runs in (nil: only one account is set up)
+	Project       *Project  `json:"project,omitempty"`       // the project its working folder is in (nil: none)
+	ProjectFolder string    `json:"projectFolder,omitempty"` // the project folder it matched, in full ("" = no project)
+	Pet           *Pet      `json:"pet,omitempty"`           // its pet (nil: Agent pets is off)
+	StartedAt     time.Time `json:"startedAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	LastActive    time.Time `json:"lastActive,omitzero"` // its latest message sent or received (zero: not known yet)
+	OutUntil      time.Time `json:"outUntil,omitzero"`   // its account (or its model) is out of usage until then (zero: not out)
 }
 
 // Hat is the pixel hat an agent wears, picked by its working folder: shape

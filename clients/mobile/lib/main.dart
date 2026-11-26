@@ -389,10 +389,17 @@ class _DeckAppState extends State<DeckApp> {
     }
     if (!mounted) return;
     setState(() => _canBuzz = can);
-    if (!can) {
-      // Nothing to feel: whatever the file says, this device stays quiet.
-      Haptics.settings = Haptics.settings.copyWith(on: false);
-    }
+    _applyHaptics();
+  }
+
+  /// Puts the kept haptics into the package, which starts off silent: the
+  /// file is read at launch and nothing was telling [Haptics] about it, so
+  /// the deck stayed quiet until the switch was turned off and on again.
+  ///
+  /// A device with no Taptic Engine stays quiet whatever the file says.
+  void _applyHaptics() {
+    final kept = _layout.haptics;
+    Haptics.settings = kept.copyWith(on: kept.on && (_canBuzz ?? true));
   }
 
   /// Reads the bundle before connecting, so an unpaired app shows the pairing
@@ -406,6 +413,10 @@ class _DeckAppState extends State<DeckApp> {
     DeckHud.apply(await deckTheme(layout.theme));
     final (cfg, why) = AgentsConfig.load(env: const {}, paths: [path]);
     if (!mounted) return;
+    // What the deck feels like, as it was left: before the first frame, so
+    // the first tap of the session buzzes like every one after it.
+    _layout = layout;
+    _applyHaptics();
     setState(() {
       _docs = docs;
       _path = path;
@@ -453,7 +464,8 @@ class _DeckAppState extends State<DeckApp> {
   /// Sets what the deck feels like, and lets it be felt at once rather than
   /// after the next launch.
   Future<void> _setHaptics(HapticSettings h) async {
-    Haptics.settings = h;
+    // Felt at once, kept after: a switch answers now, not on the next launch.
+    Haptics.settings = h.copyWith(on: h.on && (_canBuzz ?? true));
     await _store(_layout.withHaptics(h));
   }
 
@@ -501,6 +513,9 @@ class _DeckAppState extends State<DeckApp> {
                   // every Claude session": turning that off clears it from
                   // the phone too, not only from Claude's own settings.
                   usageFollowsSetting: true,
+                  // On the tablet the card's two actions ride beside the
+                  // agent's name rather than at the foot of a tall card.
+                  headerActions: true,
                   pageShapes: _layout.pageShapes,
                   attentionShape: _layout.attentionShape,
                   contextRingWidth: _layout.ring,

@@ -318,7 +318,9 @@ func TestHatEndpoints(t *testing.T) {
 	s, _ := newTestServer()
 	dir := t.TempDir()
 	s.Hats = &hats.Book{Path: filepath.Join(dir, "config.json")}
-	s.Store.Hat = s.Hats.For
+	s.Store.Hat = func(a model.Agent) *model.Hat {
+		return s.Hats.ForAgent(a.Cwd, a.ID)
+	}
 	s.Store.Update("a1", func(e *store.Entry) bool { e.A.Cwd = "/Users/sam/dev/app"; return true })
 	h := s.DeviceHandler()
 	auth := map[string]string{"Device": "panel"}
