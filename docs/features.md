@@ -74,7 +74,14 @@ knows about, kept while that file does not change. Code and configuration are le
 anything Claude Code keeps for itself under `~/.claude`. Only a file an agent actually wrote can be
 opened, so the deck cannot be asked to open anything else.
 
-On the phone and the tablet it is the page before "Needs you": swipe right from the deck.
+Opening one brings the tab it is already in to the front rather than opening it twice: the deck looks
+through the tabs of Chrome, Safari, Arc, Brave, Edge, Vivaldi, Opera and Chromium for the file, and
+only opens a new tab when none of them has it. macOS asks once whether agents deck may drive your
+browser; until it is allowed, every open is simply a new tab.
+
+On the phone and the tablet it is the last page of the deck: swipe past the agents. The grid is
+7 x 7, and the row of kinds above it (all, page, document, image, sheet) is remembered on the device,
+so it opens showing what it showed last time.
 
 ## Where it shows up
 

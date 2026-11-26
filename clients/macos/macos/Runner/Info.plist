@@ -32,6 +32,8 @@
 	</dict>
 	<!-- The Bluetooth helper (Contents/MacOS/deck-ble) sits inside this bundle, so macOS reads this
 	     Info.plist for it, not the one built into deck-ble. Without this key it ends the helper. -->
+	<key>NSAppleEventsUsageDescription</key>
+	<string>agents deck brings your terminal to the front when you focus an agent, and brings a tab forward when you open something an agent made rather than opening it twice.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>agents deck connects to your Deck Link boards over Bluetooth, so a board next to this computer works without Wi-Fi or a cable.</string>
 	<key>LSUIElement</key>

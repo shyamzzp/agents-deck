@@ -8,10 +8,14 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
+	"net/url"
 	"os/exec"
 	"runtime"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/shyamzzp/agents-deck/backend/internal/artifacts"
 	"github.com/shyamzzp/agents-deck/backend/internal/server"
@@ -69,6 +73,11 @@ func (d *Daemon) OpenArtifact(path string) error {
 	if !artifacts.Openable(path) {
 		return missing(path + " is not there any more")
 	}
+	// Already open somewhere: bring that tab forward rather than opening the
+	// same page again. Only if it is not there does a new tab open.
+	if focusTab(path) {
+		return nil
+	}
 	return openInBrowser(path)
 }
 
@@ -79,6 +88,78 @@ type missing string
 func (m missing) Error() string { return string(m) }
 
 func (m missing) Is(target error) bool { return target == server.ErrNotFound }
+
+// focusScript looks through the browsers' tabs for one already showing the
+// file and brings it to the front. JavaScript rather than AppleScript, so an
+// app's name can be a variable: AppleScript needs its terminology at compile
+// time and a dynamic `tell application name` loses it.
+//
+// A browser the person has not allowed the deck to drive throws, which is
+// caught: then it is as though the tab was not there, and the file opens in a
+// new one.
+const focusScript = `
+function run(argv) {
+  var target = argv[0], plain = decodeURI(target);
+  var same = function (u) { return u === target || decodeURI(u) === plain; };
+  var running = [];
+  try {
+    running = Application('System Events').applicationProcesses.name();
+  } catch (e) { return 'none'; }
+  var chromium = ['Google Chrome', 'Brave Browser', 'Microsoft Edge', 'Arc',
+                  'Chromium', 'Vivaldi', 'Opera'];
+  for (var i = 0; i < chromium.length; i++) {
+    if (running.indexOf(chromium[i]) < 0) continue;
+    try {
+      var app = Application(chromium[i]);
+      for (var w = 0; w < app.windows.length; w++) {
+        var win = app.windows[w];
+        for (var t = 0; t < win.tabs.length; t++) {
+          if (!same(win.tabs[t].url())) continue;
+          win.activeTabIndex = t + 1;
+          win.index = 1;
+          app.activate();
+          return 'focused';
+        }
+      }
+    } catch (e) {}
+  }
+  if (running.indexOf('Safari') >= 0) {
+    try {
+      var safari = Application('Safari');
+      for (var w2 = 0; w2 < safari.windows.length; w2++) {
+        var sw = safari.windows[w2];
+        for (var t2 = 0; t2 < sw.tabs.length; t2++) {
+          if (!same(sw.tabs[t2].url())) continue;
+          sw.currentTab = sw.tabs[t2];
+          sw.index = 1;
+          safari.activate();
+          return 'focused';
+        }
+      }
+    } catch (e) {}
+  }
+  return 'none';
+}
+`
+
+// fileURL is the path as a browser writes it in its address bar.
+func fileURL(path string) string {
+	return (&url.URL{Scheme: "file", Path: path}).String()
+}
+
+// focusTab brings the tab already showing this file to the front, and says
+// whether it found one. macOS only: elsewhere a file simply opens.
+func focusTab(path string) bool {
+	if runtime.GOOS != "darwin" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "/usr/bin/osascript", "-l", "JavaScript",
+		"-e", focusScript, fileURL(path))
+	out, err := cmd.Output()
+	return err == nil && strings.Contains(string(out), "focused")
+}
 
 // openInBrowser hands the file to whatever the computer opens it with.
 func openInBrowser(path string) error {
