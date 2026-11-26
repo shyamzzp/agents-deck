@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -32,6 +33,24 @@ type Made struct {
 	Kind   string    `json:"kind"`             // page | document | image | sheet
 	At     time.Time `json:"at"`               // when it was last written
 }
+
+// link is a published Artifact: a page on claude.ai that the deck can open
+// like any other, and the one most worth listing. They show up in the
+// Artifact tool's own answers, as a title and a link:
+//
+//   - (mine) Family Book Register — https://claude.ai/artifact/DjMW… — favicon 📖 — updated 2026-11-18
+//
+// so the title before the link is taken where there is one.
+// The id is 22 characters; a shorter match is a link the text cut short with
+// an ellipsis, which would open nothing.
+var link = regexp.MustCompile(`https://claude\.ai/artifact/[A-Za-z0-9]{20,24}\b`)
+
+// titled is that listing line, for the name to go with the link.
+var titled = regexp.MustCompile(`(?:\(mine\)|\(shared\)|^|\n)\s*([^\n*—]{2,70}?)\s+—\s+(https://claude\.ai/artifact/[A-Za-z0-9]{20,24})`)
+
+// named is the same thing as the tool writes it in JSON, where the title and
+// the link are fields rather than a sentence.
+var named = regexp.MustCompile(`"(?:title|name)":\s*"([^"]{2,70})"[^{}]{0,200}?"(?:type_)?url":\s*"(https://claude\.ai/artifact/[A-Za-z0-9]{20,24})"`)
 
 // What a browser is worth opening for, by extension. Code and configuration
 // are left out: this is a page of things to look at.
@@ -116,6 +135,7 @@ func Scan(path string) []Made {
 	}
 	defer f.Close()
 	latest := map[string]Made{}
+	links := map[string]Made{}
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1<<20), 64<<20)
 	for sc.Scan() {
@@ -127,8 +147,18 @@ func Scan(path string) []Made {
 				Content json.RawMessage `json:"content"`
 			} `json:"message"`
 		}
-		if json.Unmarshal(sc.Bytes(), &l) != nil || l.Type != "assistant" ||
-			l.Message == nil || l.Sidechain {
+		if json.Unmarshal(sc.Bytes(), &l) != nil || l.Message == nil || l.Sidechain {
+			continue
+		}
+		// Published Artifacts come back in the tool's own answers, which are
+		// user-role lines, so those are read as well as what Claude wrote.
+		if link.Match(sc.Bytes()) {
+			at, _ := time.Parse(time.RFC3339Nano, l.Timestamp)
+			for url, name := range found(string(l.Message.Content)) {
+				links[url] = Made{Path: url, Name: name, Kind: "link", At: at}
+			}
+		}
+		if l.Type != "assistant" {
 			continue
 		}
 		var blocks []struct {
@@ -159,8 +189,11 @@ func Scan(path string) []Made {
 			}
 		}
 	}
-	out := make([]Made, 0, len(latest))
+	out := make([]Made, 0, len(latest)+len(links))
 	for _, m := range latest {
+		out = append(out, m)
+	}
+	for _, m := range links {
 		out = append(out, m)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -182,6 +215,45 @@ func worth(path string) bool {
 	return !strings.Contains(path, string(filepath.Separator)+".claude"+string(filepath.Separator))
 }
 
+// found is every published Artifact in one message, by link, with the title
+// beside it where the text gives one.
+func found(text string) map[string]string {
+	// The line is read as it sits in the file, where it is a JSON string: the
+	// dash between a title and its link is \u2014 there, not the character
+	// the patterns look for.
+	text = strings.NewReplacer(
+		`\u2014`, "\u2014", `\u00b7`, "\u00b7", `\n`, "\n", `\"`, `"`,
+	).Replace(text)
+	out := map[string]string{}
+	for _, m := range link.FindAllString(text, -1) {
+		out[m] = ""
+	}
+	for _, m := range named.FindAllStringSubmatch(text, -1) {
+		if name := strings.TrimSpace(m[1]); name != "" {
+			out[m[2]] = name
+		}
+	}
+	for _, m := range titled.FindAllStringSubmatch(text, -1) {
+		name := strings.TrimSpace(strings.Trim(m[1], `"\'- :`))
+		for _, tag := range []string{"(mine)", "(shared)"} {
+			name = strings.TrimSpace(strings.TrimPrefix(name, tag))
+		}
+		// A name made of escapes or punctuation is no name at all.
+		if name != "" && !strings.Contains(name, `\u`) && len(name) < 70 {
+			out[m[2]] = name
+		}
+	}
+	// A link with no title beside it was mentioned in passing rather than
+	// made or listed: "artifact 5M7UeX" on a tile says nothing, and a page
+	// of those buries the ones worth opening.
+	for url, name := range out {
+		if name == "" {
+			delete(out, url)
+		}
+	}
+	return out
+}
+
 // short writes a folder the way a person says it: ~ for home.
 func short(dir string) string {
 	home, err := os.UserHomeDir()
@@ -197,9 +269,12 @@ func short(dir string) string {
 	return dir
 }
 
-// Openable says whether the deck would open this path in a browser: it has to
-// be one of the kinds listed, and it has to be there.
+// Openable says whether the deck would open this in a browser: a published
+// Artifact's link, or a file of one of the kinds listed that is still there.
 func Openable(path string) bool {
+	if link.MatchString(path) {
+		return true
+	}
 	if _, ok := kinds[strings.ToLower(filepath.Ext(path))]; !ok {
 		return false
 	}

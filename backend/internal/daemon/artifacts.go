@@ -41,6 +41,18 @@ func (d *Daemon) Artifacts() []artifacts.Made {
 		}
 		return out[i].Path < out[j].Path
 	})
+	// A published Artifact is often mentioned in several sessions; the deck
+	// lists the thing once, under whichever saw it last.
+	seen := map[string]bool{}
+	kept := out[:0]
+	for _, m := range out {
+		if seen[m.Path] {
+			continue
+		}
+		seen[m.Path] = true
+		kept = append(kept, m)
+	}
+	out = kept
 	if len(out) > artifactsMax {
 		out = out[:artifactsMax]
 	}

@@ -68,6 +68,10 @@ PDF, a diagram, a chart, a sheet. The deck has a page of them, newest first, eac
 and where it sits (`GET /v1/artifacts`). Tapping one opens it in the browser on the Mac the deck runs
 on, which is where the file is.
 
+The Artifacts Claude published are listed too, by the name they were given, and open on claude.ai like
+anything else here. A link mentioned in passing is left out: only one the deck saw named, as the
+Artifact tool's own answers name them, is worth a tile.
+
 They are read out of each session's own transcript, where every file Claude wrote is recorded with
 its path, so nothing is indexed and nothing is watched: a scan is a read of a file the deck already
 knows about, kept while that file does not change. Code and configuration are left out, as is
