@@ -80,6 +80,13 @@ type Watcher interface {
 	AddLive(sessionID string, slot int) error
 }
 
+// Shower lists what the agents made and opens one in the computer's browser
+// (the daemon; GET /v1/artifacts, POST /v1/artifacts/open).
+type Shower interface {
+	ArtifactsJSON() any
+	OpenArtifact(path string) error
+}
+
 // Local-only extras (unix socket).
 type LocalController interface {
 	Controller
@@ -145,6 +152,10 @@ type Server struct {
 	// Queue holds prompts sent with "mode": "queue" until their agent is
 	// idle (queue.go; RunQueue types them in). nil: queueing is off.
 	Queue *queue.Queue
+
+	// Artifacts lists what the agents made that a browser can open, and
+	// opens one on the computer the deck runs on. nil: no such page.
+	Artifacts Shower
 
 	// Tasks holds the tasks an agent has been given of its own, beside the
 	// deck's built-in ones. nil: an agent keeps none.
@@ -305,6 +316,32 @@ func (s *Server) api() *http.ServeMux {
 	})
 	mux.HandleFunc("GET /v1/agents/{id}/queue", s.getQueue)
 	mux.HandleFunc("GET /v1/agents/{id}/prompts", s.getPrompts)
+	mux.HandleFunc("GET /v1/artifacts", func(w http.ResponseWriter, r *http.Request) {
+		if s.Artifacts == nil {
+			writeJSON(w, http.StatusOK, map[string]any{"artifacts": []any{}})
+			return
+		}
+		writeJSON(w, http.StatusOK, s.Artifacts.ArtifactsJSON())
+	})
+	mux.HandleFunc("POST /v1/artifacts/open", func(w http.ResponseWriter, r *http.Request) {
+		if s.Artifacts == nil {
+			writeErr(w, http.StatusNotImplemented, "nothing here can open a file")
+			return
+		}
+		var body struct {
+			Path string `json:"path"`
+		}
+		if json.NewDecoder(io.LimitReader(r.Body, 8192)).Decode(&body) != nil ||
+			body.Path == "" {
+			writeErr(w, http.StatusBadRequest, `body must be {"path": "…"}`)
+			return
+		}
+		if err := s.Artifacts.OpenArtifact(body.Path); err != nil {
+			s.act(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("GET /v1/agents/{id}/tasks", s.getTasks)
 	mux.HandleFunc("POST /v1/agents/{id}/tasks", s.addTask)
 	mux.HandleFunc("POST /v1/agents/{id}/tasks/{taskId}/remove", s.removeTask)

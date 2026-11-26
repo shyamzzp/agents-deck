@@ -47,6 +47,7 @@ class AgentsApp extends StatefulWidget {
     this.attentionShape,
     this.contextRingWidth = ContextRingPainter.defaultStroke,
     this.leadingPage,
+    this.leadingPages = const [],
     this.pageTitles = const {},
     this.onRenamePage,
     this.onHoldAttention,
@@ -86,6 +87,11 @@ class AgentsApp extends StatefulWidget {
   /// put settings on a device that has no menu bar to hang them off. Null
   /// leaves the deck as it was, opening on its first page.
   final Widget? leadingPage;
+
+  /// More pages of the host's own, between [leadingPage] and "Needs you":
+  /// what the agents made, and whatever else a host wants to hang there.
+  /// They are swiped through like any other page of the deck.
+  final List<Widget> leadingPages;
 
   /// The shape of each page in turn; the last one repeats for any page beyond
   /// it, so a single entry shapes the whole deck. 4 x 4 is what the desk panel
@@ -183,7 +189,10 @@ class _AgentsAppState extends State<AgentsApp> {
   Offset _pointer = Offset.zero;
   Size _heldSize = const Size(120, 120);
 
-  int get _lead => widget.leadingPage == null ? 0 : 1;
+  /// The host's own pages, in the order they are swiped through.
+  List<Widget> get _leading => [?widget.leadingPage, ...widget.leadingPages];
+
+  int get _lead => _leading.length;
 
   /// How many deck pages the last build drew.
   int _pages = 1;
@@ -776,7 +785,7 @@ class _AgentsAppState extends State<AgentsApp> {
                       setState(() => _view = v);
                     },
                     itemBuilder: (context, v) => v < _lead
-                        ? widget.leadingPage!
+                        ? _leading[v]
                         : v == _lead
                         ? AttentionScreen(
                             needsYou: needsYou,

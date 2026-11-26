@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/shyamzzp/agents-deck/backend/internal/accounts"
+	"github.com/shyamzzp/agents-deck/backend/internal/artifacts"
 	"github.com/shyamzzp/agents-deck/backend/internal/claude"
 	"github.com/shyamzzp/agents-deck/backend/internal/header"
 	"github.com/shyamzzp/agents-deck/backend/internal/limits"
@@ -72,6 +73,7 @@ type Daemon struct {
 	lastAutoRestore time.Time
 	live            liveWatch
 	lastMine        time.Time
+	made            artifacts.Book // what the agents wrote that a browser opens
 	limits          *limits.Book   // usage limits the tools report (limits.go)
 	limitsKeep      *limits.Keeper // writes them to limits.json
 

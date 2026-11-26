@@ -654,6 +654,26 @@ class FakeAgentsSource implements AgentsSource {
   }
 
   @override
+  Future<List<AgentArtifact>> artifacts() async => [
+    for (final a in _agents.take(3))
+      AgentArtifact(
+        path: '/tmp/${a['id']}/page.html',
+        name: '${a['folder'] ?? 'page'}.html',
+        agent: '${a['id']}',
+        title: '${a['title'] ?? ''}',
+        folder: '~/dev/${a['folder'] ?? 'somewhere'}',
+        kind: 'page',
+        at: DateTime.now().subtract(Duration(minutes: _agents.indexOf(a) * 7)),
+      ),
+  ];
+
+  @override
+  Future<AgentsResult> openArtifact(String path) async {
+    calls.add(('openArtifact', path, null));
+    return AgentsResult.ok;
+  }
+
+  @override
   Future<AgentsResult> move(String agentId, int slot) async {
     calls.add(('move', agentId, {'slot': slot}));
     final a = _agent(agentId);

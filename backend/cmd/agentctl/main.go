@@ -1297,6 +1297,7 @@ func serve(args []string) error {
 	st.TaskList = srv.Tasks.All
 	if dmn != nil {
 		dmn.Tasks = srv.Tasks // what the miner writes the found tasks to
+		srv.Artifacts = dmn   // what the agents made, and opening one here
 	}
 	go srv.RunQueue(context.Background())
 	errc := make(chan error, 4)

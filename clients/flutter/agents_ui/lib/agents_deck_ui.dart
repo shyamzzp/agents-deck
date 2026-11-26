@@ -13,6 +13,7 @@ export 'src/agents_style.dart';
 export 'src/attention.dart';
 export 'src/attention_screen.dart';
 export 'src/critter.dart';
+export 'src/artifacts_page.dart';
 export 'src/critter_look.dart';
 export 'src/speech_callout.dart';
 export 'src/haptics.dart';

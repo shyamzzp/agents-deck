@@ -121,6 +121,14 @@ abstract class AgentsSource {
   /// first, as the card lists them behind its turn count.
   Future<List<AgentPrompted>> prompts(String agentId);
 
+  /// `GET /v1/artifacts` — what the agents made that a browser can open,
+  /// newest first.
+  Future<List<AgentArtifact>> artifacts();
+
+  /// `POST /v1/artifacts/open {"path"}` — opens one in the browser on the
+  /// computer the deck runs on. Only a file an agent wrote can be opened.
+  Future<AgentsResult> openArtifact(String path);
+
   /// `POST /v1/agents/{id}/tasks {"text", "name", "slot"}` — keeps a prompt as
   /// one of the agent's own tasks, which the quick list draws beside the
   /// built-in ones. An empty name is taken from the text, in the service's own
@@ -669,6 +677,16 @@ class HttpAgentsClient implements AgentsSource {
     ], 'prompts'))
       AgentPrompted.fromJson(x),
   ];
+
+  @override
+  Future<List<AgentArtifact>> artifacts() async => [
+    for (final x in await _getList(['v1', 'artifacts'], 'artifacts'))
+      ?AgentArtifact.fromJson(x),
+  ];
+
+  @override
+  Future<AgentsResult> openArtifact(String path) =>
+      _postPath(['v1', 'artifacts', 'open'], {'path': path});
 
   @override
   Future<AgentsResult> addTask(

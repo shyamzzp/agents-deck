@@ -489,6 +489,9 @@ class _DeckAppState extends State<DeckApp> {
                   },
                   // A phone has no menu bar to hang settings off, so they get a
                   // page of their own at the far left. The deck still opens.
+                  // After the settings and before "Needs you": what the
+                  // agents made, which opens on the Mac when tapped.
+                  leadingPages: [ArtifactsPage(source: s)],
                   leadingPage: ConfigPage(
                     layout: _layout,
                     onPage: _setPage,

@@ -211,6 +211,54 @@ const critterLooks = [
   'legend',
 ];
 
+/// One thing an agent made that a browser can open: a page, a document, an
+/// image, a sheet. Read out of the session's own transcript by the service.
+class AgentArtifact {
+  const AgentArtifact({
+    required this.path,
+    required this.name,
+    this.agent = '',
+    this.title = '',
+    this.folder = '',
+    this.kind = 'page',
+    this.at,
+  });
+
+  /// Where it is on the computer the deck runs on, in full: what the deck
+  /// sends back to open it.
+  final String path;
+  final String name;
+
+  /// The agent that made it, and what the deck calls that agent.
+  final String agent;
+  final String title;
+
+  /// The folder it sits in, as a person says it (~ for home).
+  final String folder;
+
+  /// page | document | image | sheet.
+  final String kind;
+
+  /// When it was last written.
+  final DateTime? at;
+
+  static AgentArtifact? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final m = j.cast<String, dynamic>();
+    final path = _str(m['path']);
+    if (path.isEmpty) return null;
+    return AgentArtifact(
+      path: path,
+      name: _str(m['name']),
+      agent: _str(m['agent']),
+      title: _str(m['title']),
+      folder: _str(m['folder']),
+      kind: _str(m['kind']).isEmpty ? 'page' : _str(m['kind']),
+      at: _time(m['at']),
+    );
+  }
+}
+
 /// Every hat shape, in the daemon's order.
 const hatShapes = [
   'hard hat',
