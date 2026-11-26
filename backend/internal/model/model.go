@@ -26,6 +26,12 @@ type State struct {
 	// Limits is how much of each account's usage is gone, as Claude Code
 	// and Codex last reported it (absent: nothing reported yet).
 	Limits []Limits `json:"limits,omitempty"`
+	// UsageEverySession is the setting of the same name ("Report usage from
+	// every Claude session"). A screen that only wants to show usage while
+	// the person has asked for it reads this: the phone and the tablet hide
+	// the usage line when it is off, however much the deck's own agents go
+	// on reporting.
+	UsageEverySession bool `json:"usageEverySession,omitempty"`
 }
 
 // Limits is one account's usage limits in one tool: Claude Code per account

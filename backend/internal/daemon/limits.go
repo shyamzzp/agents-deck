@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -26,7 +27,21 @@ func (d *Daemon) startLimits() {
 		log.Printf("limits: %s ignored: %v", paths.Limits(), err)
 	}
 	d.Store.Limits = d.LimitsState
+	d.Store.UsageAsked = UsageAsked
 	claude.LimitHit = d.limitHit
+}
+
+// UsageAsked reads "Report usage from every Claude session" out of
+// config.json (off by default). The screens that only draw usage when it was
+// asked for read it off the state.
+func UsageAsked() bool {
+	var c struct {
+		On bool `json:"usageEverySession"`
+	}
+	if b, err := os.ReadFile(paths.Config()); err == nil {
+		_ = json.Unmarshal(b, &c)
+	}
+	return c.On
 }
 
 // LimitsState is every account's limits, named as the deck names accounts.

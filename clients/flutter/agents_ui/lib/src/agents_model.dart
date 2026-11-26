@@ -946,6 +946,7 @@ class AgentsState {
     required List<Agent> agents,
     this.magic,
     this.limits = const [],
+    this.usageAsked = false,
     DateTime? receivedAt,
   }) : agents = List.unmodifiable(
          [...agents]..sort((a, b) => a.slot.compareTo(b.slot)),
@@ -955,6 +956,11 @@ class AgentsState {
   /// Each account's usage limits (empty: nothing reported yet, or an older
   /// service). Only the sets with something to show.
   final List<AgentLimits> limits;
+
+  /// "Report usage from every Claude session" on the Mac. The deck's own
+  /// agents report their usage whatever it says, so a screen that is meant
+  /// to follow the setting rather than the data reads this.
+  final bool usageAsked;
 
   /// The limits of [a]'s account in its tool, if any were reported.
   AgentLimits? limitsOf(Agent a) {
@@ -1013,6 +1019,7 @@ class AgentsState {
     final s = _map(j['server']) ?? const {};
     final m = _map(j['magic']);
     return AgentsState(
+      usageAsked: j['usageEverySession'] == true,
       limits: [
         if (j['limits'] case final List l)
           for (final x in l)

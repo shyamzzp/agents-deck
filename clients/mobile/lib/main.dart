@@ -497,6 +497,10 @@ class _DeckAppState extends State<DeckApp> {
                 (final AgentsSource s, _) => AgentsApp(
                   source: s,
                   backButton: false,
+                  // The usage line follows the Mac's "Report usage from
+                  // every Claude session": turning that off clears it from
+                  // the phone too, not only from Claude's own settings.
+                  usageFollowsSetting: true,
                   pageShapes: _layout.pageShapes,
                   attentionShape: _layout.attentionShape,
                   contextRingWidth: _layout.ring,

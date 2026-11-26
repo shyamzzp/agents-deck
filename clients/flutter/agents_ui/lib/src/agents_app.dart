@@ -55,6 +55,7 @@ class AgentsApp extends StatefulWidget {
     this.ear,
     this.onSpeakTask,
     this.menuBar = false,
+    this.usageFollowsSetting = false,
   }) : assert(pageShapes.length > 0, 'the deck needs a shape'),
        assert(
          (openCard == null) == (cardHost == null),
@@ -135,6 +136,11 @@ class AgentsApp extends StatefulWidget {
   /// In the menu bar app: an agent's page has no clock and no text under
   /// 16 design pixels (the deck is shown at 0.61 there).
   final bool menuBar;
+
+  /// On a phone or a tablet: the usage line is drawn only while "Report
+  /// usage from every Claude session" is on, so turning that off clears it
+  /// from the screen in your hand as well as from Claude's own settings.
+  final bool usageFollowsSetting;
 
   /// Whether anyone can see the board (a menu bar window that hides): the
   /// critters stop animating while false. Null = always visible.
@@ -768,7 +774,9 @@ class _AgentsAppState extends State<AgentsApp> {
               children: [
                 // Each account's week, on the panel (the menu bar says it in
                 // its status line).
-                if (!widget.menuBar && state.limits.isNotEmpty)
+                if (!widget.menuBar &&
+                    state.limits.isNotEmpty &&
+                    (!widget.usageFollowsSetting || state.usageAsked))
                   SizedBox(
                     height: 26,
                     child: Padding(
