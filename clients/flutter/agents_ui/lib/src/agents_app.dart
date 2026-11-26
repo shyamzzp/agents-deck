@@ -47,6 +47,8 @@ class AgentsApp extends StatefulWidget {
     this.attentionShape,
     this.contextRingWidth = ContextRingPainter.defaultStroke,
     this.leadingPage,
+    this.leadingPages = const [],
+    this.trailingPages = const [],
     this.pageTitles = const {},
     this.onRenamePage,
     this.onHoldAttention,
@@ -86,6 +88,14 @@ class AgentsApp extends StatefulWidget {
   /// put settings on a device that has no menu bar to hang them off. Null
   /// leaves the deck as it was, opening on its first page.
   final Widget? leadingPage;
+
+  /// More pages of the host's own, between [leadingPage] and "Needs you".
+  /// They are swiped through like any other page of the deck.
+  final List<Widget> leadingPages;
+
+  /// Pages of the host's own after the deck's own: the artifacts page lives
+  /// here, at the far end, so the agents keep the pages in front.
+  final List<Widget> trailingPages;
 
   /// The shape of each page in turn; the last one repeats for any page beyond
   /// it, so a single entry shapes the whole deck. 4 x 4 is what the desk panel
@@ -183,7 +193,10 @@ class _AgentsAppState extends State<AgentsApp> {
   Offset _pointer = Offset.zero;
   Size _heldSize = const Size(120, 120);
 
-  int get _lead => widget.leadingPage == null ? 0 : 1;
+  /// The host's own pages, in the order they are swiped through.
+  List<Widget> get _leading => [?widget.leadingPage, ...widget.leadingPages];
+
+  int get _lead => _leading.length;
 
   /// How many deck pages the last build drew.
   int _pages = 1;
@@ -713,7 +726,10 @@ class _AgentsAppState extends State<AgentsApp> {
     final pages =
         _pageCount(state.agents.map((a) => a.slot)) + (_heldId == null ? 0 : 1);
     _pages = pages;
-    if (_view > pages + _lead) _view = pages + _lead;
+    // The host's own pages sit past the deck's, so the view may legitimately
+    // be beyond the last deck page.
+    final last = pages + _lead + widget.trailingPages.length;
+    if (_view > last) _view = last;
     final hot = {
       for (final a in state.agents)
         if (a.needsYou) _pageOf(a.slot),
@@ -770,13 +786,15 @@ class _AgentsAppState extends State<AgentsApp> {
                     physics: _dragging || _speakingTo != null
                         ? const NeverScrollableScrollPhysics()
                         : null,
-                    itemCount: pages + 1 + _lead,
+                    itemCount: pages + 1 + _lead + widget.trailingPages.length,
                     onPageChanged: (v) {
                       Haptics.fire(HapticWhen.page);
                       setState(() => _view = v);
                     },
                     itemBuilder: (context, v) => v < _lead
-                        ? widget.leadingPage!
+                        ? _leading[v]
+                        : v >= pages + 1 + _lead
+                        ? widget.trailingPages[v - pages - 1 - _lead]
                         : v == _lead
                         ? AttentionScreen(
                             needsYou: needsYou,

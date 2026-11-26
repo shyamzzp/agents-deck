@@ -82,6 +82,7 @@ class DeckLayout {
     this.theme,
     this.titles = const {},
     this.haptics = const HapticSettings(on: true),
+    this.artifactKind = '',
   });
 
   /// Every page that has not been given its own shape.
@@ -109,6 +110,10 @@ class DeckLayout {
   /// has a taptic engine and the deck is prodded without looking at it.
   final HapticSettings haptics;
 
+  /// Which kind the artifacts page is showing: one of [artifactKinds], "" for
+  /// all of them. Kept here so the page opens on the same one next time.
+  final String artifactKind;
+
   DeckShape shapeOf(int page) => perPage[page] ?? fallback;
 
   /// The "Needs you" screen, which is a page you swipe to like any other even
@@ -123,6 +128,7 @@ class DeckLayout {
     theme: theme,
     titles: titles,
     haptics: haptics,
+    artifactKind: artifactKind,
   );
 
   DeckLayout withRing(double width) => DeckLayout(
@@ -133,6 +139,7 @@ class DeckLayout {
     theme: theme,
     titles: titles,
     haptics: haptics,
+    artifactKind: artifactKind,
   );
 
   /// With a page set to [shape], or back to the default when they are equal.
@@ -151,6 +158,7 @@ class DeckLayout {
       theme: theme,
       titles: titles,
       haptics: haptics,
+      artifactKind: artifactKind,
     );
   }
 
@@ -167,6 +175,7 @@ class DeckLayout {
     theme: theme,
     titles: titles,
     haptics: haptics,
+    artifactKind: artifactKind,
   );
 
   /// With the deck painted in the scheme called [name]; null is the stock
@@ -179,6 +188,19 @@ class DeckLayout {
     theme: name == stockThemeName ? null : name,
     titles: titles,
     haptics: haptics,
+    artifactKind: artifactKind,
+  );
+
+  /// With the artifacts page looking at one kind of thing.
+  DeckLayout withArtifactKind(String kind) => DeckLayout(
+    fallback: fallback,
+    perPage: perPage,
+    attention: attention,
+    ring: ring,
+    theme: theme,
+    titles: titles,
+    haptics: haptics,
+    artifactKind: artifactKinds.contains(kind) ? kind : '',
   );
 
   /// With the haptics set as they have been changed.
@@ -208,6 +230,7 @@ class DeckLayout {
       theme: theme,
       titles: next,
       haptics: haptics,
+      artifactKind: artifactKind,
     );
   }
 
@@ -223,6 +246,7 @@ class DeckLayout {
     'default': [fallback.columns, fallback.rows],
     if (attention case final a?) 'needsYou': [a.columns, a.rows],
     'ring': ring,
+    if (artifactKind.isNotEmpty) 'artifacts': artifactKind,
     'theme': ?theme,
     if (titles.isNotEmpty)
       'titles': {for (final e in titles.entries) '${e.key}': e.value},
@@ -284,6 +308,10 @@ class DeckLayout {
       haptics: j['haptics'] == null
           ? const HapticSettings(on: true)
           : HapticSettings.fromJson(j['haptics']),
+      artifactKind:
+          j['artifacts'] is String && artifactKinds.contains(j['artifacts'])
+          ? j['artifacts'] as String
+          : '',
     );
   }
 }
@@ -413,6 +441,11 @@ class _DeckAppState extends State<DeckApp> {
     await _store(_layout.withTheme(theme?.name));
   }
 
+  /// Which kind of thing the artifacts page is showing. Kept on this device,
+  /// so it opens on the same one next time.
+  Future<void> _setArtifactKind(String kind) =>
+      _store(_layout.withArtifactKind(kind));
+
   /// Renames the page shown, from the footer.
   Future<void> _setTitle(int page, String name) =>
       _store(_layout.withTitle(page, name));
@@ -489,6 +522,15 @@ class _DeckAppState extends State<DeckApp> {
                   },
                   // A phone has no menu bar to hang settings off, so they get a
                   // page of their own at the far left. The deck still opens.
+                  // Past the deck's own pages, at the far end: what the
+                  // agents made, which opens on the Mac when tapped.
+                  trailingPages: [
+                    ArtifactsPage(
+                      source: s,
+                      kind: _layout.artifactKind,
+                      onKind: _setArtifactKind,
+                    ),
+                  ],
                   leadingPage: ConfigPage(
                     layout: _layout,
                     onPage: _setPage,

@@ -61,6 +61,28 @@ Tap a tile for its card (in the browser, the agent's own page, with a box to sen
 
 <p align="center"><img src="images/web-permission-v4.png" alt="answering a permission prompt from the web" width="80%"></p>
 
+## What the agents made
+
+A session leaves things behind that are meant to be looked at rather than read as code: a page, a
+PDF, a diagram, a chart, a sheet. The deck has a page of them, newest first, each saying what made it
+and where it sits (`GET /v1/artifacts`). Tapping one opens it in the browser on the Mac the deck runs
+on, which is where the file is.
+
+They are read out of each session's own transcript, where every file Claude wrote is recorded with
+its path, so nothing is indexed and nothing is watched: a scan is a read of a file the deck already
+knows about, kept while that file does not change. Code and configuration are left out, as is
+anything Claude Code keeps for itself under `~/.claude`. Only a file an agent actually wrote can be
+opened, so the deck cannot be asked to open anything else.
+
+Opening one brings the tab it is already in to the front rather than opening it twice: the deck looks
+through the tabs of Chrome, Safari, Arc, Brave, Edge, Vivaldi, Opera and Chromium for the file, and
+only opens a new tab when none of them has it. macOS asks once whether agents deck may drive your
+browser; until it is allowed, every open is simply a new tab.
+
+On the phone and the tablet it is the last page of the deck: swipe past the agents. The grid is
+7 x 7, and the row of kinds above it (all, page, document, image, sheet) is remembered on the device,
+so it opens showing what it showed last time.
+
 ## Where it shows up
 
 | | |
