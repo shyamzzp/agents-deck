@@ -311,6 +311,11 @@ class _AgentsAppState extends State<AgentsApp> {
   }
 
   void _open(BuildContext tileContext, GlobalKey tileKey, Agent a) {
+    // A hold that spoke ends with the finger lifting off the tile, which is
+    // also a tap: without this, the agent's card opened over the words the
+    // moment they were finished, and the tick and the cross went with it.
+    // Nothing opens a card while a bubble is up; the cross closes it.
+    if (_speakingTo != null) return;
     final p = a.status == AgentStatus.waiting ? a.waiting : null;
     (widget.openCard ?? CardMorph.open)(
       tileContext,
