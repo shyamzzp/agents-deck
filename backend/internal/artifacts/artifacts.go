@@ -14,6 +14,7 @@ package artifacts
 import (
 	"bufio"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -48,6 +49,26 @@ var link = regexp.MustCompile(`https://claude\.ai/artifact/[A-Za-z0-9]{20,24}\b`
 // titled is that listing line, for the name to go with the link.
 var titled = regexp.MustCompile(`(?:\(mine\)|\(shared\)|^|\n)\s*([^\n*—]{2,70}?)\s+—\s+(https://claude\.ai/artifact/[A-Za-z0-9]{20,24})`)
 
+// updated is the date the listing gives each Artifact ("… — updated
+// 2026-11-18"). Without it every link in one listing carries the moment the
+// listing was read, so fifteen of them read "44h" together and the time says
+// nothing about the thing itself.
+var updated = regexp.MustCompile(`(https://claude\.ai/artifact/[A-Za-z0-9]{20,24})[^\n]{0,80}?updated (\d{4}-\d{2}-\d{2})`)
+
+// opened is how many Artifacts one tool call may name before it stops being
+// a visit to any of them: a call carrying one or two links went to those,
+// while a listing that comes back with thirty is a shelf being read, not a
+// thing being opened.
+const opened = 3
+
+// visits are the tools that go to an Artifact rather than mention one: a
+// grep through the transcripts names a link without ever opening it, and the
+// tile would read as though somebody had been there.
+var visits = map[string]bool{
+	"Artifact": true, "ArtifactComments": true, "ArtifactData": true,
+	"WebFetch": true,
+}
+
 // named is the same thing as the tool writes it in JSON, where the title and
 // the link are fields rather than a sentence.
 var named = regexp.MustCompile(`"(?:title|name)":\s*"([^"]{2,70})"[^{}]{0,200}?"(?:type_)?url":\s*"(https://claude\.ai/artifact/[A-Za-z0-9]{20,24})"`)
@@ -74,6 +95,21 @@ const Max = 60
 type Book struct {
 	mu   sync.Mutex
 	seen map[string]scan // transcript path -> what it held
+	went map[string]trip // transcript path -> the Artifacts it opened
+}
+
+// trip is one transcript's visits, kept while the file stays as it was.
+type trip struct {
+	size int64
+	mod  time.Time
+	at   map[string]Seen
+}
+
+// Seen is what a sweep learned about one published Artifact: when it was last
+// gone to, and what it is called.
+type Seen struct {
+	At   time.Time
+	Name string
 }
 
 type scan struct {
@@ -136,6 +172,8 @@ func Scan(path string) []Made {
 	defer f.Close()
 	latest := map[string]Made{}
 	links := map[string]Made{}
+	// When each Artifact was last gone to, as opposed to merely listed.
+	visit := map[string]time.Time{}
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1<<20), 64<<20)
 	for sc.Scan() {
@@ -154,36 +192,67 @@ func Scan(path string) []Made {
 		// user-role lines, so those are read as well as what Claude wrote.
 		if link.Match(sc.Bytes()) {
 			at, _ := time.Parse(time.RFC3339Nano, l.Timestamp)
-			for url, name := range found(string(l.Message.Content)) {
-				links[url] = Made{Path: url, Name: name, Kind: "link", At: at}
+			text := unescape(string(l.Message.Content))
+			when := dated(text)
+			for url, name := range found(text) {
+				// Its own date where the listing gives one; the moment the
+				// deck read the listing only as a last resort.
+				seen := at
+				if d, ok := when[url]; ok {
+					seen = d
+				}
+				links[url] = Made{Path: url, Name: name, Kind: "link", At: seen}
 			}
 		}
 		if l.Type != "assistant" {
 			continue
 		}
 		var blocks []struct {
-			Type  string `json:"type"`
-			Name  string `json:"name"`
-			Input struct {
-				Path string `json:"file_path"`
-			} `json:"input"`
+			Type  string          `json:"type"`
+			Name  string          `json:"name"`
+			Input json.RawMessage `json:"input"`
 		}
 		if json.Unmarshal(l.Message.Content, &blocks) != nil {
 			continue
 		}
 		at, _ := time.Parse(time.RFC3339Nano, l.Timestamp)
 		for _, bl := range blocks {
-			if bl.Type != "tool_use" || !writes[bl.Name] || bl.Input.Path == "" {
+			if bl.Type != "tool_use" {
 				continue
 			}
-			kind, ok := kinds[strings.ToLower(filepath.Ext(bl.Input.Path))]
-			if !ok || !worth(bl.Input.Path) {
+			// A call that names a handful of Artifacts went to them: read,
+			// published, commented on, fetched. That is the last time this
+			// one was opened, which is what its tile says.
+			if went := link.FindAllString(string(bl.Input), -1); visits[bl.Name] && len(went) <= opened {
+				for _, url := range went {
+					if at.After(visit[url]) {
+						visit[url] = at
+					}
+					// A session that opens an Artifact it never listed still
+					// knows when it went there. It is carried out nameless,
+					// for whichever session does know the name.
+					if _, ok := links[url]; !ok {
+						links[url] = Made{Path: url, Kind: "link"}
+					}
+				}
+			}
+			if !writes[bl.Name] {
 				continue
 			}
-			latest[bl.Input.Path] = Made{
-				Path:   bl.Input.Path,
-				Name:   filepath.Base(bl.Input.Path),
-				Folder: short(filepath.Dir(bl.Input.Path)),
+			var in struct {
+				Path string `json:"file_path"`
+			}
+			if json.Unmarshal(bl.Input, &in) != nil || in.Path == "" {
+				continue
+			}
+			kind, ok := kinds[strings.ToLower(filepath.Ext(in.Path))]
+			if !ok || !worth(in.Path) {
+				continue
+			}
+			latest[in.Path] = Made{
+				Path:   in.Path,
+				Name:   filepath.Base(in.Path),
+				Folder: short(filepath.Dir(in.Path)),
 				Kind:   kind,
 				At:     at,
 			}
@@ -193,7 +262,12 @@ func Scan(path string) []Made {
 	for _, m := range latest {
 		out = append(out, m)
 	}
-	for _, m := range links {
+	for url, m := range links {
+		// A link's time is when it was last opened. Only where nothing ever
+		// went to it does it fall back to the date the listing gave.
+		if when, ok := visit[url]; ok {
+			m.At = when
+		}
 		out = append(out, m)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -217,13 +291,27 @@ func worth(path string) bool {
 
 // found is every published Artifact in one message, by link, with the title
 // beside it where the text gives one.
-func found(text string) map[string]string {
-	// The line is read as it sits in the file, where it is a JSON string: the
-	// dash between a title and its link is \u2014 there, not the character
-	// the patterns look for.
-	text = strings.NewReplacer(
+// unescape turns a line as it sits in the file into the text it stands for,
+// as far as the patterns here care: it is a JSON string there, so the dash
+// between a title and its link is \u2014 rather than the character itself.
+func unescape(text string) string {
+	return strings.NewReplacer(
 		`\u2014`, "\u2014", `\u00b7`, "\u00b7", `\n`, "\n", `\"`, `"`,
 	).Replace(text)
+}
+
+// dated is the date each Artifact in a listing was last updated.
+func dated(text string) map[string]time.Time {
+	out := map[string]time.Time{}
+	for _, m := range updated.FindAllStringSubmatch(text, -1) {
+		if d, err := time.ParseInLocation("2006-01-02", m[2], time.Local); err == nil {
+			out[m[1]] = d
+		}
+	}
+	return out
+}
+
+func found(text string) map[string]string {
 	out := map[string]string{}
 	for _, m := range link.FindAllString(text, -1) {
 		out[m] = ""
@@ -280,4 +368,139 @@ func Openable(path string) bool {
 	}
 	st, err := os.Stat(path)
 	return err == nil && !st.IsDir()
+}
+
+// Visits is when each published Artifact was last gone to, across every
+// session on this Mac rather than only the ones still on the deck. A link is
+// often published in one session and opened again in another weeks later, and
+// the session that opened it has usually long since ended.
+//
+// A sweep reads every transcript under the given roots, which is a third of a
+// second over six hundred megabytes, and each file is remembered while it
+// stays as it was, so the sweep after that costs nothing.
+func (b *Book) Visits(roots []string) map[string]Seen {
+	out := map[string]Seen{}
+	done := map[string]bool{}
+	for _, root := range roots {
+		filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || filepath.Ext(p) != ".jsonl" || done[p] {
+				return nil
+			}
+			done[p] = true
+			for url, seen := range b.visits(p) {
+				was := out[url]
+				if seen.At.After(was.At) {
+					was.At = seen.At
+				}
+				if was.Name == "" {
+					was.Name = seen.Name
+				}
+				out[url] = was
+			}
+			return nil
+		})
+	}
+	return out
+}
+
+// visits is one transcript's, kept while the file has not changed.
+func (b *Book) visits(path string) map[string]Seen {
+	st, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+	b.mu.Lock()
+	if v, ok := b.went[path]; ok && v.size == st.Size() && v.mod.Equal(st.ModTime()) {
+		b.mu.Unlock()
+		return v.at
+	}
+	b.mu.Unlock()
+
+	at := visited(path)
+	b.mu.Lock()
+	if b.went == nil {
+		b.went = map[string]trip{}
+	}
+	b.went[path] = trip{size: st.Size(), mod: st.ModTime(), at: at}
+	b.mu.Unlock()
+	return at
+}
+
+// visited reads a transcript for the calls that went to an Artifact.
+func visited(path string) map[string]Seen {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	out := map[string]Seen{}
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 1<<20), 64<<20)
+	for sc.Scan() {
+		if !link.Match(sc.Bytes()) {
+			continue
+		}
+		var l struct {
+			Type      string `json:"type"`
+			Timestamp string `json:"timestamp"`
+			// A published Artifact is written down as it is published: the
+			// address, what it is called, and the file it was made from.
+			// This is the only place a published page says its own name, and
+			// it is not part of any message, so a scan of what Claude said
+			// walks straight past it.
+			FrameURL string `json:"frameUrl"`
+			Title    string `json:"title"`
+			Message  *struct {
+				Content json.RawMessage `json:"content"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(sc.Bytes(), &l) != nil {
+			continue
+		}
+		if l.Type == "frame-link" && l.FrameURL != "" {
+			if url := link.FindString(l.FrameURL); url != "" {
+				at, _ := time.Parse(time.RFC3339Nano, l.Timestamp)
+				was := out[url]
+				if at.After(was.At) {
+					was.At = at
+				}
+				if name := strings.TrimSpace(l.Title); name != "" {
+					was.Name = name
+				}
+				out[url] = was
+			}
+			continue
+		}
+		if l.Type != "assistant" || l.Message == nil {
+			continue
+		}
+		var blocks []struct {
+			Type  string          `json:"type"`
+			Name  string          `json:"name"`
+			Input json.RawMessage `json:"input"`
+		}
+		if json.Unmarshal(l.Message.Content, &blocks) != nil {
+			continue
+		}
+		at, err := time.Parse(time.RFC3339Nano, l.Timestamp)
+		if err != nil {
+			continue
+		}
+		for _, bl := range blocks {
+			if bl.Type != "tool_use" || !visits[bl.Name] {
+				continue
+			}
+			went := link.FindAllString(string(bl.Input), -1)
+			if len(went) > opened {
+				continue
+			}
+			for _, url := range went {
+				if was := out[url]; at.After(was.At) {
+					was.At = at
+					out[url] = was
+				}
+			}
+		}
+	}
+	return out
 }
