@@ -14,6 +14,7 @@ import 'attention.dart';
 import 'attention_screen.dart';
 import 'critter.dart';
 import 'critter_look.dart';
+import 'speech_callout.dart';
 import 'haptics.dart';
 import 'live_picker.dart';
 import 'pet_art.dart';
@@ -49,6 +50,7 @@ class AgentsApp extends StatefulWidget {
     this.pageTitles = const {},
     this.onRenamePage,
     this.onHoldAttention,
+    this.ear,
     this.onSpeakTask,
     this.menuBar = false,
   }) : assert(pageShapes.length > 0, 'the deck needs a shape'),
@@ -101,10 +103,16 @@ class AgentsApp extends StatefulWidget {
   /// in that cell. Null on a host with no microphone.
   final Future<String?> Function(Agent agent)? onSpeakTask;
 
-  /// Holding an agent on the "Needs you" screen. The phone speaks to it:
-  /// dictation, then the text goes to the agent's terminal. Null on a host
-  /// with nothing to dictate with, which leaves the hold alone.
+  /// Holding an agent on the "Needs you" screen, for a host that answers it
+  /// with a page of its own. Null leaves the hold to [ear], or to nothing.
   final void Function(Agent a)? onHoldAttention;
+
+  /// The phone's ear. With one, holding an agent on the "Needs you" screen
+  /// listens and the words are typed into a callout beside its tile; letting
+  /// go offers a tick to send them to its terminal and a cross to throw them
+  /// away. Null on a host that cannot listen: the hold then does whatever
+  /// [onHoldAttention] says, or nothing.
+  final DeckEar? ear;
 
   /// What each page is called, by page index; -1 is the "Needs you" screen.
   /// A page with no name of its own is called "page N".
@@ -158,6 +166,16 @@ class _AgentsAppState extends State<AgentsApp> {
   final _deckKey = GlobalKey();
   Timer? _holdTimer;
   Timer? _edgeTimer;
+
+  /// Speaking to an agent from the "Needs you" screen: whose tile is held,
+  /// where that tile is on the screen, what has been heard, and whether the
+  /// finger has been lifted (so the tick and the cross are shown).
+  Agent? _speakingTo;
+  Rect? _speakingAt;
+  bool _speakingDone = false;
+  Timer? _listenTimer;
+  final _speakKeys = <String, GlobalKey>{};
+
   String? _heldId;
   int? _heldSlot;
   int? _overSlot;
@@ -314,6 +332,126 @@ class _AgentsAppState extends State<AgentsApp> {
             menuBar: widget.menuBar,
           ),
         ),
+      ),
+    );
+  }
+
+  // ---- speaking to an agent from the "Needs you" screen ----------------------
+
+  /// How long a tile is held before the phone starts listening.
+  static const _listenDelay = Duration(milliseconds: 260);
+
+  /// One tile of the "Needs you" screen, with the hold that opens the ear.
+  ///
+  /// A Listener rather than a long-press recognizer, for the reason the deck's
+  /// carry is one: the pager either side of this screen takes a gesture that
+  /// travels, and what matters here is the moment the finger lands and the
+  /// moment it leaves, not what it did in between.
+  Widget _speakCell(Agent a, Widget child) {
+    if (widget.ear == null) return child;
+    final key = _speakKeys.putIfAbsent(a.id, GlobalKey.new);
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _armListen(a, key),
+      onPointerMove: (e) {
+        // A finger that wanders off the tile before the ear opens was going
+        // somewhere else: a page, or another agent.
+        if (_speakingTo != null || _listenTimer == null) return;
+        final box = key.currentContext?.findRenderObject();
+        if (box is RenderBox && box.hasSize) {
+          final r = box.localToGlobal(Offset.zero) & box.size;
+          if (!r.contains(e.position)) _disarmListen();
+        }
+      },
+      onPointerUp: (_) => _stopListening(),
+      onPointerCancel: (_) => _disarmListen(),
+      child: KeyedSubtree(key: key, child: child),
+    );
+  }
+
+  void _armListen(Agent a, GlobalKey key) {
+    if (_speakingTo != null) return; // one callout at a time
+    _listenTimer?.cancel();
+    _listenTimer = Timer(_listenDelay, () {
+      final ear = widget.ear;
+      final box = key.currentContext?.findRenderObject();
+      if (!mounted || ear == null || box is! RenderBox || !box.hasSize) return;
+      Haptics.fire(HapticWhen.hold);
+      setState(() {
+        _speakingTo = a;
+        _speakingAt = box.localToGlobal(Offset.zero) & box.size;
+        _speakingDone = false;
+      });
+      unawaited(ear.start());
+    });
+  }
+
+  void _disarmListen() {
+    _listenTimer?.cancel();
+    _listenTimer = null;
+  }
+
+  /// The finger is lifted: the microphone closes and the two answers appear.
+  /// Nothing goes anywhere until one of them is tapped.
+  void _stopListening() {
+    _disarmListen();
+    if (_speakingTo == null || _speakingDone) return;
+    setState(() => _speakingDone = true);
+    unawaited(widget.ear?.stop());
+  }
+
+  /// The tick: what was said goes to the agent's terminal, as a prompt typed
+  /// in now.
+  Future<void> _sendSpoken(Agent a, String text) async {
+    _closeCallout();
+    if (text.trim().isEmpty) return;
+    await widget.source.focus(a.id);
+    await widget.source.prompt(a.id, text.trim(), mode: 'now');
+    Haptics.fire(HapticWhen.sent);
+  }
+
+  void _closeCallout() {
+    _disarmListen();
+    unawaited(widget.ear?.cancel());
+    if (mounted) {
+      setState(() {
+        _speakingTo = null;
+        _speakingAt = null;
+        _speakingDone = false;
+      });
+    }
+  }
+
+  /// The callout itself, over the deck: placed beside the held tile, growing
+  /// with what is said, and never off the screen (speech_callout.dart).
+  Widget _speechCallout(Agent a, Rect tile) {
+    final ear = widget.ear!;
+    return ValueListenableBuilder<String?>(
+      valueListenable: ear.problem,
+      builder: (context, problem, _) => ValueListenableBuilder<String>(
+        valueListenable: ear.heard,
+        builder: (context, heard, _) {
+          final (at, side, size) = calloutLayout(
+            tile,
+            MediaQuery.sizeOf(context),
+            problem ?? heard,
+            deciding: _speakingDone,
+          );
+          return Positioned(
+            left: at.dx,
+            top: at.dy,
+            child: SpeechCallout(
+              key: const Key('speech-callout'),
+              text: heard,
+              problem: problem,
+              side: side,
+              size: size,
+              deciding: _speakingDone,
+              onSend: () => unawaited(_sendSpoken(a, heard)),
+              onDiscard: _closeCallout,
+            ),
+          );
+        },
       ),
     );
   }
@@ -595,7 +733,10 @@ class _AgentsAppState extends State<AgentsApp> {
                   child: PageView.builder(
                     key: const Key('agents-pages'),
                     controller: _pager,
-                    physics: _dragging
+                    // Still while a card is in hand, and still while someone
+                    // is speaking to an agent: a page turning under the
+                    // finger would take the tile the words are for away.
+                    physics: _dragging || _speakingTo != null
                         ? const NeverScrollableScrollPhysics()
                         : null,
                     itemCount: pages + 1 + _lead,
@@ -611,13 +752,21 @@ class _AgentsAppState extends State<AgentsApp> {
                             columns:
                                 (widget.attentionShape ?? _shape(0)).columns,
                             rows: (widget.attentionShape ?? _shape(0)).rows,
-                            tile: (a) => AgentTile(
-                              key: ValueKey('attention-tile-${a.id}'),
-                              agent: a,
-                              state: state,
-                              onOpen: _open,
-                              onHold: widget.onHoldAttention,
-                              ringWidth: widget.contextRingWidth,
+                            tile: (a) => _speakCell(
+                              a,
+                              AgentTile(
+                                key: ValueKey('attention-tile-${a.id}'),
+                                agent: a,
+                                state: state,
+                                onOpen: _open,
+                                // With an ear, the hold is the callout's
+                                // (below); without one it is the host's, if
+                                // the host wants it.
+                                onHold: widget.ear == null
+                                    ? widget.onHoldAttention
+                                    : null,
+                                ringWidth: widget.contextRingWidth,
+                              ),
                             ),
                           )
                         : DeckGrid(
@@ -646,6 +795,10 @@ class _AgentsAppState extends State<AgentsApp> {
             // The card in hand: the tile itself, following the finger. Not a
             // stand-in for it.
             if (_carried(state) case final a?) _carriedCard(a, state),
+            // Speaking to an agent on the "Needs you" screen: the words land
+            // in a bubble beside its tile rather than on a page of their own.
+            if (_speakingTo case final a?)
+              if (_speakingAt case final tile?) _speechCallout(a, tile),
           ],
         ),
       ),

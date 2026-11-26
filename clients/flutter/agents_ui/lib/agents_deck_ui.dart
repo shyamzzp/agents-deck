@@ -14,6 +14,7 @@ export 'src/attention.dart';
 export 'src/attention_screen.dart';
 export 'src/critter.dart';
 export 'src/critter_look.dart';
+export 'src/speech_callout.dart';
 export 'src/haptics.dart';
 export 'src/hats.dart';
 export 'src/live_picker.dart';
